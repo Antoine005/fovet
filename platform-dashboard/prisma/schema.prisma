@@ -1,0 +1,69 @@
+// Fovet Vigie — Prisma Schema
+// PostgreSQL + TimescaleDB (timescaledb extension activated in production)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -------------------------------------------------------------------------
+// Device — a Fovet Sentinelle node (ESP32-CAM or any MCU)
+// -------------------------------------------------------------------------
+model Device {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  location    String?
+  mqttClientId String   @unique  // e.g. "esp32-cam-001"
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  readings    Reading[]
+  alerts      Alert[]
+
+  @@map("devices")
+}
+
+// -------------------------------------------------------------------------
+// Reading — a single sensor sample from a device
+// Time-series table — will be converted to TimescaleDB hypertable in prod
+// -------------------------------------------------------------------------
+model Reading {
+  id        BigInt    @id @default(autoincrement())
+  deviceId  String
+  timestamp DateTime  @default(now())
+  value     Float                       // Raw sensor value
+  mean      Float                       // Running mean at time of reading
+  stddev    Float                       // Running stddev at time of reading
+  zScore    Float                       // |value - mean| / stddev
+  isAnomaly Boolean   @default(false)
+
+  device    Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, timestamp(sort: Desc)])
+  @@map("readings")
+}
+
+// -------------------------------------------------------------------------
+// Alert — an anomaly event persisted for notification and history
+// -------------------------------------------------------------------------
+model Alert {
+  id          String    @id @default(cuid())
+  deviceId    String
+  timestamp   DateTime  @default(now())
+  value       Float
+  zScore      Float
+  threshold   Float
+  acknowledged Boolean  @default(false)
+  acknowledgedAt DateTime?
+
+  device      Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, timestamp(sort: Desc)])
+  @@map("alerts")
+}
