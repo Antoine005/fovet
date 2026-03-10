@@ -36,6 +36,14 @@ app.post("/devices", async (c) => {
   if (!body.name || !body.mqttClientId) {
     return c.json({ error: "name and mqttClientId are required" }, 400);
   }
+  if (
+    typeof body.name !== "string" || body.name.length > 100 ||
+    typeof body.mqttClientId !== "string" || body.mqttClientId.length > 100 ||
+    (body.description !== undefined && (typeof body.description !== "string" || body.description.length > 500)) ||
+    (body.location !== undefined && (typeof body.location !== "string" || body.location.length > 200))
+  ) {
+    return c.json({ error: "Invalid input: check field types and lengths" }, 400);
+  }
 
   const device = await prisma.device.create({
     data: {
@@ -53,7 +61,8 @@ app.post("/devices", async (c) => {
 // -------------------------------------------------------------------------
 app.get("/devices/:id/readings", async (c) => {
   const { id } = c.req.param();
-  const limit = Math.min(Number(c.req.query("limit") ?? 100), 1000);
+  const rawLimit = parseInt(c.req.query("limit") ?? "100", 10);
+  const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 100, 1000);
 
   const readings = await prisma.reading.findMany({
     where: { deviceId: id },
