@@ -20,12 +20,16 @@ interface Props {
 
 export function AlertList({ deviceId }: Props) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchAlerts = useCallback(() => {
     apiFetch(`/api/devices/${deviceId}/alerts`)
-      .then((r) => r.json())
-      .then(setAlerts)
-      .catch(console.error);
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data: Alert[]) => { setAlerts(data); setError(null); })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Erreur réseau"));
   }, [deviceId]);
 
   useEffect(() => {
@@ -50,7 +54,9 @@ export function AlertList({ deviceId }: Props) {
         )}
       </div>
 
-      {alerts.length === 0 ? (
+      {error ? (
+        <p className="text-red-400 text-sm">{error}</p>
+      ) : alerts.length === 0 ? (
         <p className="text-gray-600 text-sm">Aucune alerte active.</p>
       ) : (
         <ul className="space-y-2">

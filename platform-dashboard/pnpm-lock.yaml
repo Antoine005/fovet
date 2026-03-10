@@ -38,6 +38,9 @@ dependencies:
   recharts:
     specifier: ^3.7.0
     version: 3.7.0(@types/react@19.2.14)(react-dom@19.2.3)(react-is@16.13.1)(react@19.2.3)(redux@5.0.1)
+  zod:
+    specifier: ^4.3.6
+    version: 4.3.6
 
 devDependencies:
   '@prisma/client':
@@ -4762,4 +4765,3 @@ packages:
 
   /zod@4.3.6:
     resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
-    dev: true

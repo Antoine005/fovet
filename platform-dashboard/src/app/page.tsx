@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!getToken()) {
@@ -26,12 +27,17 @@ export default function DashboardPage() {
       return;
     }
     apiFetch("/api/devices")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((data: Device[]) => {
         setDevices(data);
         if (data.length > 0) setSelectedId(data[0].id);
       })
-      .catch(console.error);
+      .catch((err: unknown) => {
+        setFetchError(err instanceof Error ? err.message : "Erreur réseau");
+      });
   }, [router]);
 
   return (
@@ -62,7 +68,9 @@ export default function DashboardPage() {
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
           Capteurs actifs
         </h2>
-        {devices.length === 0 ? (
+        {fetchError ? (
+          <p className="text-red-400 text-sm">Erreur chargement capteurs : {fetchError}</p>
+        ) : devices.length === 0 ? (
           <p className="text-gray-500 text-sm">
             Aucun capteur enregistré.{" "}
             <code className="text-blue-400">POST /api/devices</code> pour en ajouter un.

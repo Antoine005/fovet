@@ -31,12 +31,16 @@ interface Props {
 
 export function ReadingChart({ deviceId }: Props) {
   const [readings, setReadings] = useState<Reading[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchReadings = useCallback(() => {
     apiFetch(`/api/devices/${deviceId}/readings?limit=200`)
-      .then((r) => r.json())
-      .then(setReadings)
-      .catch(console.error);
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data: Reading[]) => { setReadings(data); setError(null); })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Erreur réseau"));
   }, [deviceId]);
 
   useEffect(() => {
@@ -61,7 +65,11 @@ export function ReadingChart({ deviceId }: Props) {
         </span>
       </div>
 
-      {readings.length === 0 ? (
+      {error ? (
+        <div className="h-48 flex items-center justify-center text-red-400 text-sm">
+          {error}
+        </div>
+      ) : readings.length === 0 ? (
         <div className="h-48 flex items-center justify-center text-gray-600 text-sm">
           En attente de données MQTT…
         </div>
