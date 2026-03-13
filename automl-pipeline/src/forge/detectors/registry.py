@@ -1,0 +1,24 @@
+"""
+Detector factory -- builds the list of detectors from pipeline config.
+"""
+
+from __future__ import annotations
+
+from forge.config import DetectorConfig, DetectorType
+from forge.detectors.base import Detector
+
+
+def build_detectors(configs: list[DetectorConfig]) -> list[Detector]:
+    """Instantiate detectors from a list of DetectorConfig objects."""
+    detectors: list[Detector] = []
+    for cfg in configs:
+        if cfg.type == DetectorType.zscore:
+            from forge.detectors.zscore import ZScoreDetector
+            detectors.append(ZScoreDetector(cfg))
+        elif cfg.type == DetectorType.isolation_forest:
+            raise NotImplementedError("IsolationForestDetector -- Forge-3b")
+        elif cfg.type == DetectorType.autoencoder:
+            raise NotImplementedError("AutoEncoderDetector -- Forge-4")
+        else:
+            raise ValueError(f"Unknown detector type: {cfg.type}")
+    return detectors

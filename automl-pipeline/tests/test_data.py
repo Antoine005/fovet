@@ -85,8 +85,12 @@ def test_synthetic_anomaly_count_matches_rate():
     n = 1000
     rate = 0.05
     ds = generate(_cfg(n_samples=n, anomaly_rate=rate))
-    expected = max(1, int(n * rate))
-    assert ds.anomaly_count == expected
+    assert ds.anomaly_count == int(n * rate)
+
+
+def test_synthetic_zero_anomaly_rate():
+    ds = generate(_cfg(n_samples=200, anomaly_rate=0.0))
+    assert ds.anomaly_count == 0
 
 
 def test_synthetic_labels_are_binary():
