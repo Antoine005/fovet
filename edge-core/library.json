@@ -1,0 +1,14 @@
+{
+  "name": "fovet-sentinelle",
+  "version": "0.1.0",
+  "description": "Fovet SDK — Sentinelle: embedded anomaly detection (C99, zero malloc)",
+  "license": "LGPL-3.0",
+  "keywords": ["anomaly-detection", "embedded", "zscore", "esp32"],
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32", "native"],
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src",
+    "srcFilter": ["+<zscore.c>", "+<platform/platform_esp32.cpp>"]
+  }
+}
