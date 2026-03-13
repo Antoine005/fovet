@@ -1,0 +1,7 @@
+# PlatformIO build artifacts
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Credentials — NEVER commit
+src/config.h
