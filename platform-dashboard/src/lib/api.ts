@@ -5,8 +5,10 @@
  * Commercial licensing: contact@fovet.eu
  */
 import { Hono } from "hono";
+import type { MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
-import { jwt, sign } from "hono/jwt";
+import { sign, verify } from "hono/jwt";
+import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 
@@ -30,10 +32,21 @@ app.use(
 );
 
 // -------------------------------------------------------------------------
-// JWT auth — protect all routes except /health and /auth/token
+// Cookie auth — protect all routes except /health and /auth/*
 // -------------------------------------------------------------------------
-app.use("/devices/*", jwt({ secret: jwtSecret, alg: "HS256" }));
-app.use("/alerts/*", jwt({ secret: jwtSecret, alg: "HS256" }));
+const cookieAuth: MiddlewareHandler = async (c, next) => {
+  const token = getCookie(c, "fovet_token");
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    await verify(token, jwtSecret, "HS256");
+  } catch {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  await next();
+};
+
+app.use("/devices/*", cookieAuth);
+app.use("/alerts/*", cookieAuth);
 
 // -------------------------------------------------------------------------
 // In-memory rate limiter — /auth/token: max 5 attempts per 15 min per IP
@@ -109,7 +122,22 @@ app.post("/auth/token", async (c) => {
     jwtSecret,
     "HS256"
   );
-  return c.json({ token });
+  setCookie(c, "fovet_token", token, {
+    httpOnly: true,
+    sameSite: "Lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+  return c.json({ ok: true });
+});
+
+// -------------------------------------------------------------------------
+// POST /api/auth/logout — clear the auth cookie
+// -------------------------------------------------------------------------
+app.post("/auth/logout", (c) => {
+  deleteCookie(c, "fovet_token", { path: "/" });
+  return c.json({ ok: true });
 });
 
 // -------------------------------------------------------------------------

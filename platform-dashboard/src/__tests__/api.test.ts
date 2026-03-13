@@ -29,13 +29,13 @@ import { prisma } from "@/lib/prisma";
 
 const SECRET = process.env.JWT_SECRET!;
 
-async function bearerToken() {
+async function cookieToken() {
   const token = await sign(
     { role: "dashboard", exp: Math.floor(Date.now() / 1000) + 3600 },
     SECRET,
     "HS256"
   );
-  return `Bearer ${token}`;
+  return `fovet_token=${token}`;
 }
 
 function json(body: unknown, extra?: RequestInit) {
@@ -68,12 +68,14 @@ describe("GET /api/health", () => {
 // POST /api/auth/token
 // ---------------------------------------------------------------------------
 describe("POST /api/auth/token", () => {
-  it("returns 200 and token on valid password", async () => {
+  it("returns 200 and sets httpOnly cookie on valid password", async () => {
     const res = await app.request("/api/auth/token", json({ password: "test-password" }));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(typeof body.token).toBe("string");
-    expect(body.token.split(".")).toHaveLength(3); // JWT format
+    expect(body).toEqual({ ok: true });
+    const cookie = res.headers.get("set-cookie");
+    expect(cookie).toContain("fovet_token=");
+    expect(cookie).toContain("HttpOnly");
   });
 
   it("returns 401 on wrong password", async () => {
@@ -147,7 +149,7 @@ describe("GET /api/devices", () => {
     vi.mocked(prisma.device.findMany).mockResolvedValue(mockDevices as never);
 
     const res = await app.request("/api/devices", {
-      headers: { Authorization: await bearerToken() },
+      headers: { Cookie: await cookieToken() },
     });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -169,7 +171,7 @@ describe("POST /api/devices", () => {
       ...json({ name: "", mqttClientId: "y" }), // name too short
       headers: {
         "Content-Type": "application/json",
-        Authorization: await bearerToken(),
+        Cookie: await cookieToken(),
       },
     });
     expect(res.status).toBe(400);
@@ -186,7 +188,7 @@ describe("POST /api/devices", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: await bearerToken(),
+        Cookie: await cookieToken(),
       },
       body: JSON.stringify({ name: "ESP32", mqttClientId: "esp32-001" }),
     });
@@ -203,7 +205,7 @@ describe("GET /api/devices/:id/readings", () => {
     vi.mocked(prisma.device.findUnique).mockResolvedValue(null);
 
     const res = await app.request("/api/devices/unknown-id/readings", {
-      headers: { Authorization: await bearerToken() },
+      headers: { Cookie: await cookieToken() },
     });
     expect(res.status).toBe(404);
   });
@@ -217,7 +219,7 @@ describe("GET /api/devices/:id/readings", () => {
     vi.mocked(prisma.reading.findMany).mockResolvedValue(readings as never);
 
     const res = await app.request("/api/devices/d1/readings", {
-      headers: { Authorization: await bearerToken() },
+      headers: { Cookie: await cookieToken() },
     });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -235,9 +237,23 @@ describe("GET /api/devices/:id/alerts", () => {
     vi.mocked(prisma.device.findUnique).mockResolvedValue(null);
 
     const res = await app.request("/api/devices/unknown-id/alerts", {
-      headers: { Authorization: await bearerToken() },
+      headers: { Cookie: await cookieToken() },
     });
     expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/logout
+// ---------------------------------------------------------------------------
+describe("POST /api/auth/logout", () => {
+  it("clears the cookie and returns 200", async () => {
+    const res = await app.request("/api/auth/logout", { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ ok: true });
+    const cookie = res.headers.get("set-cookie");
+    expect(cookie).toContain("fovet_token=");
   });
 });
 
@@ -255,7 +271,7 @@ describe("PATCH /api/alerts/:id/ack", () => {
 
     const res = await app.request("/api/alerts/unknown-id/ack", {
       method: "PATCH",
-      headers: { Authorization: await bearerToken() },
+      headers: { Cookie: await cookieToken() },
     });
     expect(res.status).toBe(404);
   });
@@ -267,7 +283,7 @@ describe("PATCH /api/alerts/:id/ack", () => {
 
     const res = await app.request("/api/alerts/a1/ack", {
       method: "PATCH",
-      headers: { Authorization: await bearerToken() },
+      headers: { Cookie: await cookieToken() },
     });
     expect(res.status).toBe(200);
     const body = await res.json();

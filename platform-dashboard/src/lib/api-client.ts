@@ -5,34 +5,18 @@
  * Commercial licensing: contact@fovet.eu
  */
 
-const TOKEN_KEY = "fovet_token";
-
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
-
 export async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
-  const token = getToken();
   const res = await fetch(url, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
   });
 
   if (res.status === 401) {
-    clearToken();
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     window.location.href = "/login";
   }
 
