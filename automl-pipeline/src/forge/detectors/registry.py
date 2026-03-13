@@ -16,7 +16,8 @@ def build_detectors(configs: list[DetectorConfig]) -> list[Detector]:
             from forge.detectors.zscore import ZScoreDetector
             detectors.append(ZScoreDetector(cfg))
         elif cfg.type == DetectorType.isolation_forest:
-            raise NotImplementedError("IsolationForestDetector -- Forge-3b")
+            from forge.detectors.isolation_forest import IsolationForestDetector
+            detectors.append(IsolationForestDetector(cfg))
         elif cfg.type == DetectorType.autoencoder:
             raise NotImplementedError("AutoEncoderDetector -- Forge-4")
         else:
