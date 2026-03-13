@@ -236,15 +236,17 @@ def test_registry_builds_zscore():
     assert detectors[0].config.threshold_sigma == 4.0
 
 
-def test_registry_isolation_forest_raises():
+def test_registry_builds_isolation_forest():
     from forge.config import PipelineConfig
+    from forge.detectors.isolation_forest import IsolationForestDetector
     cfg = PipelineConfig.model_validate({
         "name": "test",
         "data": {"source": "synthetic", "columns": ["v"]},
-        "detectors": [{"type": "isolation_forest"}],
+        "detectors": [{"type": "isolation_forest", "contamination": 0.05}],
     })
-    with pytest.raises(NotImplementedError, match="Forge-3b"):
-        build_detectors(cfg.detectors)
+    detectors = build_detectors(cfg.detectors)
+    assert len(detectors) == 1
+    assert isinstance(detectors[0], IsolationForestDetector)
 
 
 # ---------------------------------------------------------------------------
