@@ -1,0 +1,31 @@
+# Fovet Forge — Demo config: Z-Score on synthetic sine signal
+# Run: forge run --config configs/demo_zscore.yaml
+
+name: demo-zscore-sine
+description: "Détection d'anomalies Z-Score sur signal sinusoïdal synthétique"
+
+data:
+  source: synthetic
+  signal: sine
+  n_samples: 1000
+  frequency: 1.0
+  noise_std: 0.1
+  anomaly_rate: 0.05
+  anomaly_magnitude: 5.0
+  columns: [value]
+  seed: 42
+
+detectors:
+  - type: zscore
+    threshold_sigma: 3.0
+    min_samples: 30
+
+export:
+  targets: [c_header, json_config]
+  output_dir: models/demo_zscore
+  quantization: float32
+
+report:
+  enabled: true
+  format: html
+  output_dir: reports

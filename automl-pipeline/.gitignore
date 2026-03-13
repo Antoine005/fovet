@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# uv
+.python-version
+uv.lock
+
+# Project data (client data never committed)
+data/
+models/
+reports/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Env
+.env

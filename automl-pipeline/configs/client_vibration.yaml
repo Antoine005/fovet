@@ -1,0 +1,30 @@
+# Fovet Forge — Client config template: vibration monitoring (MPU-6050)
+# Customize: replace data.path and tune detector parameters
+
+name: client-vibration
+description: "Détection d'anomalies vibratoires — axes XYZ accéléromètre"
+
+data:
+  source: csv
+  path: data/vibration.csv
+  columns: [x_accel, y_accel, z_accel]
+  timestamp_column: timestamp
+  separator: ","
+
+detectors:
+  - type: zscore
+    threshold_sigma: 3.5
+    min_samples: 50
+  - type: isolation_forest
+    contamination: 0.03
+    n_estimators: 200
+
+export:
+  targets: [c_header, tflite_micro, json_config]
+  output_dir: models/client_vibration
+  quantization: int8
+
+report:
+  enabled: true
+  format: html
+  output_dir: reports
