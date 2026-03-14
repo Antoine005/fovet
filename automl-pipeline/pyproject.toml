@@ -2,6 +2,7 @@
 name = "fovet-forge"
 version = "0.1.0"
 description = "Fovet Forge — AutoML pipeline for anomaly detection on embedded targets"
+readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "pydantic>=2.0",
@@ -17,8 +18,8 @@ dependencies = [
 forge = "forge.cli:app"
 
 [project.optional-dependencies]
+# Install ML extras for AutoEncoder support: uv sync --extra ml
 ml = [
-    "scikit-learn>=1.5",
     "tensorflow>=2.17",
 ]
 dev = [

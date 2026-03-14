@@ -19,7 +19,8 @@ def build_detectors(configs: list[DetectorConfig]) -> list[Detector]:
             from forge.detectors.isolation_forest import IsolationForestDetector
             detectors.append(IsolationForestDetector(cfg))
         elif cfg.type == DetectorType.autoencoder:
-            raise NotImplementedError("AutoEncoderDetector -- Forge-4")
+            from forge.detectors.autoencoder import AutoEncoderDetector
+            detectors.append(AutoEncoderDetector(cfg))
         else:
             raise ValueError(f"Unknown detector type: {cfg.type}")
     return detectors

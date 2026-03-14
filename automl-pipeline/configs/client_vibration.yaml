@@ -1,28 +1,29 @@
 # Fovet Forge — Client config template: vibration monitoring (MPU-6050)
-# Customize: replace data.path and tune detector parameters
+# Personnaliser : remplacer data.path et ajuster les paramètres des détecteurs.
+# Run: uv run forge run --config configs/client_vibration.yaml
 
 name: client-vibration
 description: "Détection d'anomalies vibratoires — axes XYZ accéléromètre"
 
 data:
   source: csv
-  path: data/vibration.csv
-  columns: [x_accel, y_accel, z_accel]
-  timestamp_column: timestamp
+  path: data/vibration.csv  # chemin vers le fichier CSV des mesures
+  columns: [x_accel, y_accel, z_accel]  # colonnes à utiliser (doivent exister dans le CSV)
+  timestamp_column: timestamp  # colonne timestamp optionnelle (ignorée si absente)
   separator: ","
 
 detectors:
   - type: zscore
-    threshold_sigma: 3.5
-    min_samples: 50
+    threshold_sigma: 3.5   # plus strict que 3.0 — réduit les faux positifs
+    min_samples: 50        # délai de warmup avant détection active
   - type: isolation_forest
-    contamination: 0.03
-    n_estimators: 200
+    contamination: 0.03    # fraction d'anomalies estimée dans les données d'entraînement
+    n_estimators: 200      # nombre d'arbres (plus = plus précis, mais plus lent)
 
 export:
-  targets: [c_header, tflite_micro, json_config]
+  targets: [c_header, json_config]  # retirer tflite_micro si pas d'AutoEncoder
   output_dir: models/client_vibration
-  quantization: int8
+  quantization: int8  # int8 pour déploiement ESP32 (réduit taille modèle ~4x)
 
 report:
   enabled: true

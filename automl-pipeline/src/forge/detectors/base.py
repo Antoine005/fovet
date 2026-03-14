@@ -51,6 +51,6 @@ class Detector(ABC):
     def predict(self, dataset: Dataset) -> DetectionResult:
         """Return binary anomaly labels + scores."""
 
-    def export(self, output_dir: Path, stem: str) -> list[Path]:
+    def export(self, output_dir: Path, stem: str, **kwargs) -> list[Path]:
         """Export the trained detector to files. Returns list of written paths."""
         return []

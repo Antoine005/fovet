@@ -29,6 +29,7 @@ class Pipeline:
         return cls(PipelineConfig.from_yaml(path))
 
     def run(self) -> None:
+        """Execute the full pipeline: load data → fit detectors → predict → export."""
         console.rule(f"[bold blue]Fovet Forge -- {self.config.name}")
         console.print(f"[dim]{self.config.description}[/dim]\n")
 
@@ -101,7 +102,11 @@ class Pipeline:
         targets = set(self.config.export.targets)
 
         for detector, result in zip(self.detectors, self.results):
-            if ExportTarget.c_header in targets or ExportTarget.json_config in targets:
-                written = detector.export(Path(output_dir), stem=self.config.name)
+            if targets & {ExportTarget.c_header, ExportTarget.json_config, ExportTarget.tflite_micro}:
+                written = detector.export(
+                    Path(output_dir),
+                    stem=self.config.name,
+                    quantization=self.config.export.quantization,
+                )
                 for p in written:
                     console.print(f"  Wrote: {p}")
