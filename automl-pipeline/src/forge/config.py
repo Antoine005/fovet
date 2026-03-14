@@ -159,8 +159,26 @@ class ExportConfig(BaseModel):
 # Report config
 # ---------------------------------------------------------------------------
 
+class TrainTestSplitConfig(BaseModel):
+    """Optional train/test split applied before fitting detectors.
+
+    When enabled, detectors are fitted on the training portion only.
+    Evaluation metrics (precision, recall, F1) are computed on the test portion.
+    Fitting on clean data (without anomalies) yields much better recall.
+    """
+
+    enabled: bool = False
+    test_ratio: float = Field(default=0.2, gt=0.0, lt=1.0)
+    random_state: int = 42
+
+
 class ReportConfig(BaseModel):
-    """Optional HTML/JSON evaluation report (precision, recall, anomaly timeline).  Forge-5."""
+    """Evaluation report written after each pipeline run.
+
+    Formats:
+        - ``html`` -- self-contained HTML file (metrics tables, score summary)
+        - ``json`` -- machine-readable metrics (useful for CI thresholds)
+    """
 
     enabled: bool = True
     format: Literal["html", "json"] = "html"
@@ -182,6 +200,7 @@ class PipelineConfig(BaseModel):
     description: str = ""
     data: DataConfig
     detectors: list[DetectorConfig] = Field(min_length=1)
+    split: TrainTestSplitConfig = Field(default_factory=TrainTestSplitConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
     report: ReportConfig = Field(default_factory=ReportConfig)
 

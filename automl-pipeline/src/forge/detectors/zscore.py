@@ -116,7 +116,7 @@ class ZScoreDetector(Detector):
     # Export -- generates fovet_zscore_config.h for the SDK
     # ------------------------------------------------------------------
 
-    def export(self, output_dir: Path, stem: str) -> list[Path]:
+    def export(self, output_dir: Path, stem: str, **_kwargs) -> list[Path]:
         """Write fovet_zscore_config.h pre-loaded with calibrated parameters."""
         self._check_fitted()
         output_dir.mkdir(parents=True, exist_ok=True)

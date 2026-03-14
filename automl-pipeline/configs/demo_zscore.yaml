@@ -20,6 +20,13 @@ detectors:
     threshold_sigma: 3.0  # seuil en sigmas (3.0 = ~0.3% faux positifs sur gaussienne)
     min_samples: 30       # nombre minimum de samples avant que le seuil soit actif
 
+# Train/test split : entraîner sur données propres, évaluer sur données avec anomalies
+# Désactiver (enabled: false) pour entraîner et évaluer sur les mêmes données
+split:
+  enabled: true
+  test_ratio: 0.2      # 80% entraînement, 20% évaluation
+  random_state: 42
+
 export:
   targets: [c_header, json_config]
   output_dir: models/demo_zscore

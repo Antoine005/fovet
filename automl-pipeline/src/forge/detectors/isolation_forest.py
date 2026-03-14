@@ -76,8 +76,8 @@ class IsolationForestDetector(Detector):
     # Export
     # ------------------------------------------------------------------
 
-    def export(self, output_dir: Path, stem: str) -> list[Path]:
-        """Export model metadata as JSON (TFLite conversion planned Forge-4)."""
+    def export(self, output_dir: Path, stem: str, **_kwargs) -> list[Path]:
+        """Export model metadata as JSON."""
         self._check_fitted()
         output_dir.mkdir(parents=True, exist_ok=True)
 

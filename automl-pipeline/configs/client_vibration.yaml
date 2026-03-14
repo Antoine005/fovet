@@ -21,7 +21,7 @@ detectors:
     n_estimators: 200      # nombre d'arbres (plus = plus précis, mais plus lent)
 
 export:
-  targets: [c_header, json_config]  # retirer tflite_micro si pas d'AutoEncoder
+  targets: [c_header, tflite_micro, json_config]  # retirer tflite_micro si pas d'AutoEncoder
   output_dir: models/client_vibration
   quantization: int8  # int8 pour déploiement ESP32 (réduit taille modèle ~4x)
 
