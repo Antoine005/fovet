@@ -19,6 +19,7 @@
 
 import mqtt from "mqtt";
 import { prisma } from "./prisma";
+import { emitReading } from "./event-bus";
 
 const BROKER_URL = process.env.MQTT_BROKER_URL ?? "mqtt://localhost:1883";
 const TOPIC = `${process.env.MQTT_TOPIC_PREFIX ?? "fovet/devices"}/+/readings`;
@@ -105,7 +106,7 @@ export function startMqttIngestion(): void {
       if (!device || !device.active) return;
 
       // Persist reading
-      await prisma.reading.create({
+      const reading = await prisma.reading.create({
         data: {
           deviceId: device.id,
           timestamp,
@@ -116,6 +117,9 @@ export function startMqttIngestion(): void {
           isAnomaly: data.anomaly,
         },
       });
+
+      // Broadcast to SSE clients
+      emitReading(device.id, { ...reading, id: String(reading.id) });
 
       // If anomaly, create alert
       if (data.anomaly) {

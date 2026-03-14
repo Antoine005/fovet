@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/api-client";
 import {
   ResponsiveContainer,
@@ -9,11 +9,12 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ReferenceLine,
   CartesianGrid,
 } from "recharts";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+
+const MAX_READINGS = 200;
 
 interface Reading {
   id: string;
@@ -32,22 +33,65 @@ interface Props {
 export function ReadingChart({ deviceId }: Props) {
   const [readings, setReadings] = useState<Reading[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"sse" | "polling">("sse");
+  const eventSourceRef = useRef<EventSource | null>(null);
 
-  const fetchReadings = useCallback(() => {
-    apiFetch(`/api/devices/${deviceId}/readings?limit=200`)
+  const appendReading = useCallback((r: Reading) => {
+    setReadings((prev) => {
+      const next = [...prev, r];
+      return next.length > MAX_READINGS ? next.slice(-MAX_READINGS) : next;
+    });
+  }, []);
+
+  const fetchInitial = useCallback(() => {
+    apiFetch(`/api/devices/${deviceId}/readings?limit=${MAX_READINGS}`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then((data: Reading[]) => { setReadings(data); setError(null); })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Erreur réseau"));
+      .then((envelope: { data: Reading[] }) => {
+        setReadings(envelope.data);
+        setError(null);
+      })
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Erreur réseau")
+      );
   }, [deviceId]);
 
+  // SSE connection — falls back to polling on error
   useEffect(() => {
-    fetchReadings();
-    const interval = setInterval(fetchReadings, 5000); // refresh every 5s
+    fetchInitial();
+
+    const es = new EventSource(`/api/devices/${deviceId}/stream`);
+    eventSourceRef.current = es;
+    setMode("sse");
+
+    es.addEventListener("reading", (e: MessageEvent) => {
+      try {
+        appendReading(JSON.parse(e.data) as Reading);
+        setError(null);
+      } catch {
+        // ignore parse errors
+      }
+    });
+
+    es.onerror = () => {
+      es.close();
+      setMode("polling");
+    };
+
+    return () => {
+      es.close();
+      eventSourceRef.current = null;
+    };
+  }, [deviceId, fetchInitial, appendReading]);
+
+  // Polling fallback when SSE is unavailable
+  useEffect(() => {
+    if (mode !== "polling") return;
+    const interval = setInterval(fetchInitial, 5000);
     return () => clearInterval(interval);
-  }, [fetchReadings]);
+  }, [mode, fetchInitial]);
 
   const chartData = readings.map((r) => ({
     ts: format(new Date(r.timestamp), "HH:mm:ss", { locale: fr }),
@@ -61,7 +105,8 @@ export function ReadingChart({ deviceId }: Props) {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold text-white">Signal capteur</h2>
         <span className="text-xs text-gray-500">
-          {readings.length} mesures — rafraîchissement 5s
+          {readings.length} mesures —{" "}
+          {mode === "sse" ? "temps réel (SSE)" : "rafraîchissement 5s"}
         </span>
       </div>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, clearToken, getToken } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 import { ReadingChart } from "@/components/ReadingChart";
 import { AlertList } from "@/components/AlertList";
 import { DeviceCard } from "@/components/DeviceCard";
@@ -22,10 +22,7 @@ export default function DashboardPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!getToken()) {
-      router.push("/login");
-      return;
-    }
+    // Auth is httpOnly cookie — apiFetch redirects to /login on 401
     apiFetch("/api/devices")
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -56,7 +53,11 @@ export default function DashboardPage() {
             {new Date().toLocaleString("fr-FR")}
           </span>
           <button
-            onClick={() => { clearToken(); router.push("/login"); }}
+            onClick={() => {
+              apiFetch("/api/auth/logout", { method: "POST" }).finally(() => {
+                router.push("/login");
+              });
+            }}
             className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
           >
             Déconnexion

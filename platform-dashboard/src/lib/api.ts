@@ -9,8 +9,10 @@ import type { MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 import { sign, verify } from "hono/jwt";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
+import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { emitReading, subscribeToReadings } from "@/lib/event-bus";
 
 const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) {
@@ -166,22 +168,79 @@ app.post("/devices", async (c) => {
 });
 
 // -------------------------------------------------------------------------
-// GET /api/devices/:id/readings — last N readings for a device
+// GET /api/devices/:id/readings — last N readings with cursor pagination
+// ?limit=100&cursor=<bigint-id>  (cursor = last id from previous page, desc order)
 // -------------------------------------------------------------------------
 app.get("/devices/:id/readings", async (c) => {
   const { id } = c.req.param();
   const rawLimit = parseInt(c.req.query("limit") ?? "100", 10);
   const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 100, 1000);
+  const cursorParam = c.req.query("cursor");
 
   const device = await prisma.device.findUnique({ where: { id }, select: { id: true } });
   if (!device) return c.json({ error: "Device not found" }, 404);
 
-  const readings = await prisma.reading.findMany({
+  // Validate cursor if provided
+  let cursorId: bigint | undefined;
+  if (cursorParam !== undefined) {
+    try {
+      cursorId = BigInt(cursorParam);
+    } catch {
+      return c.json({ error: "Invalid cursor" }, 400);
+    }
+    const cursorReading = await prisma.reading.findUnique({
+      where: { id: cursorId },
+      select: { id: true },
+    });
+    if (!cursorReading) return c.json({ error: "Cursor not found" }, 400);
+  }
+
+  // Fetch limit+1 to detect next page
+  const rows = await prisma.reading.findMany({
     where: { deviceId: id },
     orderBy: { timestamp: "desc" },
-    take: limit,
+    take: limit + 1,
+    ...(cursorId !== undefined && {
+      cursor: { id: cursorId },
+      skip: 1,
+    }),
   });
-  return c.json(readings.reverse());
+
+  const hasMore = rows.length > limit;
+  const data = hasMore ? rows.slice(0, limit) : rows;
+
+  // nextCursor = last item in desc order (oldest in this page), captured before reversing
+  const nextCursor = hasMore ? String(data[data.length - 1].id) : null;
+  // Serialize BigInt ids as strings, return in chronological order
+  const serialized = data.reverse().map((r) => ({ ...r, id: String(r.id) }));
+
+  return c.json({ data: serialized, pagination: { limit, hasMore, nextCursor } });
+});
+
+// -------------------------------------------------------------------------
+// GET /api/devices/:id/stream — SSE stream of new readings
+// -------------------------------------------------------------------------
+app.get("/devices/:id/stream", cookieAuth, async (c) => {
+  const { id } = c.req.param();
+
+  const device = await prisma.device.findUnique({ where: { id }, select: { id: true } });
+  if (!device) return c.json({ error: "Device not found" }, 404);
+
+  return streamSSE(c, async (stream) => {
+    const cleanup = subscribeToReadings(id, async (reading) => {
+      await stream.writeSSE({ event: "reading", data: JSON.stringify(reading) });
+    });
+
+    stream.onAbort(() => cleanup());
+
+    // Keep alive with periodic heartbeat
+    while (!stream.aborted) {
+      await stream.sleep(30_000);
+      if (!stream.aborted) {
+        await stream.writeSSE({ event: "ping", data: "heartbeat" });
+      }
+    }
+  });
 });
 
 // -------------------------------------------------------------------------
