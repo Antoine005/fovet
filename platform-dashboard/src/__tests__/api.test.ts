@@ -15,6 +15,7 @@ vi.mock("@/lib/prisma", () => ({
     },
     reading: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
     },
     alert: {
       findMany: vi.fn(),
@@ -22,6 +23,12 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
     },
   },
+}));
+
+// event-bus is a no-op in unit tests
+vi.mock("@/lib/event-bus", () => ({
+  emitReading: vi.fn(),
+  subscribeToReadings: vi.fn(() => () => undefined),
 }));
 
 import { app, loginBucket } from "@/lib/api";
@@ -210,11 +217,12 @@ describe("GET /api/devices/:id/readings", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns readings in chronological order", async () => {
+  it("returns envelope with data in chronological order", async () => {
     vi.mocked(prisma.device.findUnique).mockResolvedValue({ id: "d1" } as never);
+    // DB returns desc order (most recent first), API reverses to asc
     const readings = [
-      { id: 2, timestamp: "2026-01-01T00:00:02Z", value: 2 },
-      { id: 1, timestamp: "2026-01-01T00:00:01Z", value: 1 },
+      { id: BigInt(2), timestamp: "2026-01-01T00:00:02Z", value: 2 },
+      { id: BigInt(1), timestamp: "2026-01-01T00:00:01Z", value: 1 },
     ];
     vi.mocked(prisma.reading.findMany).mockResolvedValue(readings as never);
 
@@ -223,9 +231,71 @@ describe("GET /api/devices/:id/readings", () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    // reversed from desc → asc
-    expect(body[0].id).toBe(1);
-    expect(body[1].id).toBe(2);
+    expect(body.data).toBeDefined();
+    // IDs serialized as strings
+    expect(body.data[0].id).toBe("1");
+    expect(body.data[1].id).toBe("2");
+  });
+
+  it("returns hasMore false when results <= limit", async () => {
+    vi.mocked(prisma.device.findUnique).mockResolvedValue({ id: "d1" } as never);
+    // 2 rows returned, limit defaults to 100 — no next page
+    vi.mocked(prisma.reading.findMany).mockResolvedValue([
+      { id: BigInt(2), timestamp: "2026-01-01T00:00:02Z", value: 2 },
+      { id: BigInt(1), timestamp: "2026-01-01T00:00:01Z", value: 1 },
+    ] as never);
+
+    const res = await app.request("/api/devices/d1/readings", {
+      headers: { Cookie: await cookieToken() },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.pagination.hasMore).toBe(false);
+    expect(body.pagination.nextCursor).toBeNull();
+  });
+
+  it("returns hasMore true and nextCursor when more rows exist", async () => {
+    vi.mocked(prisma.device.findUnique).mockResolvedValue({ id: "d1" } as never);
+    // limit=2, DB returns limit+1=3 rows → hasMore
+    const threeRows = [
+      { id: BigInt(3), timestamp: "2026-01-01T00:00:03Z", value: 3 },
+      { id: BigInt(2), timestamp: "2026-01-01T00:00:02Z", value: 2 },
+      { id: BigInt(1), timestamp: "2026-01-01T00:00:01Z", value: 1 },
+    ];
+    vi.mocked(prisma.reading.findMany).mockResolvedValue(threeRows as never);
+
+    const res = await app.request("/api/devices/d1/readings?limit=2", {
+      headers: { Cookie: await cookieToken() },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.pagination.hasMore).toBe(true);
+    // nextCursor = id of last item in the returned page (desc order, so id=2 after slice)
+    expect(body.pagination.nextCursor).toBe("2");
+    expect(body.data).toHaveLength(2);
+  });
+
+  it("returns 400 when cursor reading not found", async () => {
+    vi.mocked(prisma.device.findUnique).mockResolvedValue({ id: "d1" } as never);
+    vi.mocked(prisma.reading.findUnique).mockResolvedValue(null);
+
+    const res = await app.request("/api/devices/d1/readings?cursor=999", {
+      headers: { Cookie: await cookieToken() },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Cursor not found");
+  });
+
+  it("returns 400 on non-numeric cursor", async () => {
+    vi.mocked(prisma.device.findUnique).mockResolvedValue({ id: "d1" } as never);
+
+    const res = await app.request("/api/devices/d1/readings?cursor=bad", {
+      headers: { Cookie: await cookieToken() },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Invalid cursor");
   });
 });
 
