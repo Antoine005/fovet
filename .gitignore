@@ -47,8 +47,8 @@ Thumbs.db
 .env.production
 secrets/
 
-# Local docs / session notes (may contain private data)
-docs/
+# Session notes (may contain private data)
+docs/session-*.md
 
 # Test coverage
 coverage/

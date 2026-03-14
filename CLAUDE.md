@@ -156,6 +156,18 @@ Header à inclure dans chaque fichier source :
 - Nommage fichiers : snake_case
 - Commits : conventional commits (`feat:`, `fix:`, `chore:`, `docs:`)
 
+## Convention documentation — OBLIGATOIRE
+
+**Toute modification de code doit être accompagnée de la mise à jour de la documentation dans le même commit.** Voir `docs/contributing.md` pour le détail.
+
+Règle rapide selon ce qui change :
+- Nouvelle fonction C publique → mettre à jour `edge-core/README.md`
+- Nouveau détecteur Forge → mettre à jour `automl-pipeline/README.md` + `docs/architecture.md`
+- Nouvelle route API → mettre à jour `platform-dashboard/README.md`
+- Nouvelle variable d'env → mettre à jour `.env.example` + README Vigie
+- Décision architecturale → mettre à jour `docs/architecture.md`
+- Nouveau produit ou sous-module → mettre à jour `README.md` racine
+
 ---
 
 ## Hardware disponible
