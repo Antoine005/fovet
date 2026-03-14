@@ -1,0 +1,34 @@
+# Fovet Forge — AutoEncoder demo pipeline
+# Trains a Dense autoencoder on synthetic multivariate data and exports
+# the TFLite model for deployment on ESP32 (TFLite Micro).
+#
+# Usage:
+#   uv run forge run --config configs/demo_autoencoder.yaml
+#
+# Install ML extras first:
+#   uv sync --extra ml
+
+name: demo-autoencoder
+description: "Dense autoencoder on synthetic 2D signal — Forge-4 demo"
+
+data:
+  source: synthetic
+  columns: [x, y]
+  signal: sine
+  n_samples: 1000
+  noise_std: 0.1
+  anomaly_rate: 0.05
+  anomaly_magnitude: 5.0
+  seed: 42
+
+detectors:
+  - type: autoencoder
+    latent_dim: 4
+    epochs: 30
+    batch_size: 32
+    threshold_percentile: 95.0
+
+export:
+  targets: [tflite_micro, json_config]
+  output_dir: models/demo_autoencoder
+  quantization: float32   # use int8 for production ESP32 deployment

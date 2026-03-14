@@ -47,6 +47,8 @@ class Quantization(str, Enum):
 # ---------------------------------------------------------------------------
 
 class CsvDataConfig(BaseModel):
+    """Load data from a local CSV file.  ``columns`` must match CSV column headers."""
+
     source: Literal[DataSource.csv]
     path: Path
     columns: list[str] = Field(min_length=1)
@@ -55,6 +57,8 @@ class CsvDataConfig(BaseModel):
 
 
 class MqttDataConfig(BaseModel):
+    """Stream data from a live MQTT broker.  Subscribes for ``duration_seconds``."""
+
     source: Literal[DataSource.mqtt]
     broker: str = "localhost"
     port: int = 1883
@@ -66,6 +70,12 @@ class MqttDataConfig(BaseModel):
 
 
 class SyntheticDataConfig(BaseModel):
+    """Generate synthetic sensor data with optional injected anomalies.
+
+    Supported signals: ``sine`` (periodic), ``random_walk``, ``constant``.
+    Anomalies are Gaussian spikes of amplitude ``anomaly_magnitude * noise_std``.
+    """
+
     source: Literal[DataSource.synthetic]
     signal: Literal["sine", "random_walk", "constant"] = "sine"
     n_samples: int = Field(default=1000, ge=100)
@@ -88,12 +98,16 @@ DataConfig = Annotated[
 # ---------------------------------------------------------------------------
 
 class ZScoreDetectorConfig(BaseModel):
+    """Z-Score detector using Welford online statistics.  Best for univariate Gaussian signals."""
+
     type: Literal[DetectorType.zscore]
     threshold_sigma: float = Field(default=3.0, gt=0)
     min_samples: int = Field(default=30, ge=2)
 
 
 class IsolationForestDetectorConfig(BaseModel):
+    """Isolation Forest detector (scikit-learn).  Handles multivariate and contextual anomalies."""
+
     type: Literal[DetectorType.isolation_forest]
     contamination: float = Field(default=0.05, gt=0, le=0.5)
     n_estimators: int = Field(default=100, ge=10)
@@ -101,6 +115,8 @@ class IsolationForestDetectorConfig(BaseModel):
 
 
 class AutoEncoderDetectorConfig(BaseModel):
+    """Dense autoencoder detector (Keras/TF).  Exports TFLite INT8 for TFLite Micro on ESP32."""
+
     type: Literal[DetectorType.autoencoder]
     latent_dim: int = Field(default=8, ge=2)
     epochs: int = Field(default=50, ge=1)
@@ -119,6 +135,14 @@ DetectorConfig = Annotated[
 # ---------------------------------------------------------------------------
 
 class ExportConfig(BaseModel):
+    """Controls where and how trained detector artifacts are written.
+
+    Targets:
+        - ``c_header``    -- C header with pre-calibrated structs (Z-Score)
+        - ``tflite_micro`` -- TFLite model + C byte-array header (AutoEncoder)
+        - ``json_config`` -- JSON metadata + decision threshold (all detectors)
+    """
+
     targets: list[ExportTarget] = Field(default=[ExportTarget.json_config])
     output_dir: Path = Path("models")
     quantization: Quantization = Quantization.float32
@@ -136,6 +160,8 @@ class ExportConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 class ReportConfig(BaseModel):
+    """Optional HTML/JSON evaluation report (precision, recall, anomaly timeline).  Forge-5."""
+
     enabled: bool = True
     format: Literal["html", "json"] = "html"
     output_dir: Path = Path("reports")
@@ -146,6 +172,12 @@ class ReportConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 class PipelineConfig(BaseModel):
+    """Root configuration for a Fovet Forge pipeline.
+
+    Validated from a YAML file with ``PipelineConfig.from_yaml(path)``.
+    Cross-field validation enforces that ``tflite_micro`` export requires an ML detector.
+    """
+
     name: str = Field(min_length=1, max_length=100)
     description: str = ""
     data: DataConfig
@@ -168,6 +200,7 @@ class PipelineConfig(BaseModel):
         return self
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> PipelineConfig:
+    def from_yaml(cls, path: str | Path) -> "PipelineConfig":
+        """Load and validate a pipeline config from a YAML file."""
         raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
         return cls.model_validate(raw)
