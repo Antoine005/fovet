@@ -97,8 +97,26 @@ git commit --no-verify -m "..."
 
 **Seuils :**
 - Sentinelle : 16/16 tests natifs
-- Forge : 92/92 tests pytest (dont tests TF skippés si `uv sync --extra ml` non fait)
+- Forge : 113/113 tests pytest (dont tests TF skippés si `uv sync --extra ml` non fait)
 - Vigie : 19/19 tests Vitest
+
+---
+
+## CI / GitHub Actions
+
+Tout push ou PR sur `master` déclenche automatiquement :
+
+| Job | Workflow | Ce qu'il fait |
+|---|---|---|
+| `edge-core` | `ci.yml` | `make -C tests` — compile + exécute les 16 tests C natifs (Ubuntu gcc) |
+| `dashboard` | `ci.yml` | `pnpm test` — TypeScript check + 19 tests Vitest |
+| `forge` | `ci.yml` | `uv run pytest` — 113 tests Python (TF skippés sans extra ml) |
+| `deploy-landing` | `ci.yml` | Déploiement GitHub Pages (push master uniquement) |
+
+**Scaleway GPU (manuel)** : `.github/workflows/forge-gpu.yml`
+- Déclenché depuis l'UI GitHub Actions → "Run workflow"
+- SSH sur l'instance GPU → `uv run forge run --config configs/<config>.yaml`
+- Requiert les secrets `SCALEWAY_SSH_KEY`, `SCALEWAY_GPU_HOST`, `SCALEWAY_GPU_USER`
 
 ---
 

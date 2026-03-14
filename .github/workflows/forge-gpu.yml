@@ -1,0 +1,66 @@
+name: Forge GPU Training (Scaleway)
+
+# Trigger manually from GitHub Actions UI or via API.
+# Requires a Scaleway GPU instance with SSH access configured via secrets.
+#
+# Required secrets:
+#   SCALEWAY_SSH_KEY    — private SSH key to access the GPU instance
+#   SCALEWAY_GPU_HOST   — IP or hostname of the Scaleway GPU instance
+#   SCALEWAY_GPU_USER   — SSH username (usually 'ubuntu' or 'root')
+#
+# The Scaleway instance must have uv + Python 3.13 + CUDA installed.
+# See docs/architecture.md for the full Forge → Scaleway workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      config:
+        description: "Config YAML to run (relative to automl-pipeline/configs/)"
+        required: true
+        default: "demo_autoencoder.yaml"
+      push_artifacts:
+        description: "Push exported models back to repository (true/false)"
+        required: false
+        default: "false"
+
+jobs:
+  train-on-gpu:
+    name: Train on Scaleway GPU
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Forge pipeline on GPU instance
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SCALEWAY_GPU_HOST }}
+          username: ${{ secrets.SCALEWAY_GPU_USER }}
+          key: ${{ secrets.SCALEWAY_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/fovet/automl-pipeline
+            git pull origin master
+            uv sync --extra ml
+            uv run forge run --config configs/${{ github.event.inputs.config }}
+            echo "Training complete — artifacts in models/"
+
+      # Optional: copy model artifacts back as GitHub Actions artifact
+      - name: Download model artifacts
+        if: ${{ github.event.inputs.push_artifacts == 'true' }}
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SCALEWAY_GPU_HOST }}
+          username: ${{ secrets.SCALEWAY_GPU_USER }}
+          key: ${{ secrets.SCALEWAY_SSH_KEY }}
+          source: "~/fovet/automl-pipeline/models/"
+          target: "automl-pipeline/models/"
+          strip_components: 5
+
+      - name: Upload models as artifact
+        if: ${{ github.event.inputs.push_artifacts == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-models-${{ github.run_id }}
+          path: automl-pipeline/models/
+          retention-days: 30
