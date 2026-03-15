@@ -11,6 +11,8 @@ import { WorkerMap } from "@/components/WorkerMap";
 import { AlertTimeline } from "@/components/AlertTimeline";
 import { FatigueCard } from "@/components/FatigueCard";
 import { HRVChart } from "@/components/HRVChart";
+import { TempCard } from "@/components/TempCard";
+import { TemperatureChart } from "@/components/TemperatureChart";
 
 interface Device {
   id: string;
@@ -25,7 +27,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue" | "thermique">("fleet");
 
   useEffect(() => {
     apiFetch("/api/devices")
@@ -102,6 +104,16 @@ export default function DashboardPage() {
                 }`}
               >
                 Fatigue
+              </button>
+              <button
+                onClick={() => setView("thermique")}
+                className={`px-3 py-1.5 transition-colors ${
+                  view === "thermique"
+                    ? "bg-gray-800 text-white"
+                    : "text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                Thermique
               </button>
             </div>
           )}
@@ -198,6 +210,33 @@ export default function DashboardPage() {
 
           {selectedId && (
             <HRVChart deviceId={selectedId} />
+          )}
+        </>
+      )}
+
+      {/* Thermique view — WBGT thermal stress fleet + temperature chart */}
+      {view === "thermique" && devices.length > 0 && (
+        <>
+          <section className="mb-6">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+              Surveillance thermique — Sentinelle H3.3
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {devices.map((d) => (
+                <TempCard
+                  key={d.id}
+                  deviceId={d.id}
+                  deviceName={d.name}
+                  location={d.location}
+                  selected={d.id === selectedId}
+                  onSelect={() => setSelectedId(d.id)}
+                />
+              ))}
+            </div>
+          </section>
+
+          {selectedId && (
+            <TemperatureChart deviceId={selectedId} />
           )}
         </>
       )}

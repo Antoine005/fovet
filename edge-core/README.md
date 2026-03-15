@@ -23,6 +23,7 @@ make
 # test_max30102_hal       : 23/23 passed
 # test_fatigue_profile    : 27/27 passed
 # test_dht22_hal          : 43/43 passed
+# test_temp_profile       : 40/40 passed
 ```
 
 ### Build PlatformIO ESP32-CAM
@@ -54,7 +55,8 @@ edge-core/
 │   │   └── dht22_hal.h       ← Driver HAL DHT22 (température + humidité, single-wire)
 │   └── profiles/
 │       ├── pti_profile.h     ← Profil PTI : détection chute/immobilité/SOS
-│       └── fatigue_profile.h ← Profil Fatigue : classification HRV 3 niveaux + LED RGB
+│       ├── fatigue_profile.h ← Profil Fatigue : classification HRV 3 niveaux + LED RGB
+│       └── temp_profile.h    ← Profil Thermique : WBGT Stull (2011), 4 niveaux (H3.3)
 ├── src/
 │   ├── zscore.c              ← Algorithme de Welford (C99 pur)
 │   ├── drift.c               ← Double EWMA fast/slow
@@ -64,7 +66,8 @@ edge-core/
 │   ├── dht22_hal.c           ← Pilote DHT22 single-wire via callbacks pin/pulse/delay
 │   ├── profiles/
 │   │   ├── pti_profile.c     ← Profil PTI (chute + immobilité + SOS)
-│   │   └── fatigue_profile.c ← Profil Fatigue (EMA BPM + SpO₂ + LED RGB)
+│   │   ├── fatigue_profile.c ← Profil Fatigue (EMA BPM + SpO₂ + LED RGB)
+│   │   └── temp_profile.c    ← Profil Thermique (EMA temp + WBGT + COLD/WARN/DANGER)
 │   └── platform/
 │       └── platform_esp32.cpp ← Implémentation HAL pour ESP32/Arduino
 ├── tests/
@@ -76,7 +79,8 @@ edge-core/
 │   ├── test_pti_profile.c    ← 24 tests : chute/immobilité/SOS, debounce, callbacks
 │   ├── test_max30102_hal.c   ← 23 tests : init, FIFO, warmup, BPM 60/80, SpO₂, reset
 │   ├── test_fatigue_profile.c ← 27 tests : niveaux OK/ALERT/CRITICAL, EMA, SpO₂, LED
-│   └── test_dht22_hal.c      ← 43 tests : pulse mock, T+/T−/T=0, checksum, range, HAL
+│   ├── test_dht22_hal.c      ← 43 tests : pulse mock, T+/T−/T=0, checksum, range, HAL
+│   └── test_temp_profile.c   ← 40 tests : WBGT, SAFE/WARN/DANGER/COLD, EMA, callbacks
 ├── examples/
 │   └── esp32/zscore_demo/    ← Demo PlatformIO : sinus + MQTT + Vigie
 └── library.json              ← Manifest PlatformIO (fovet-sentinelle)

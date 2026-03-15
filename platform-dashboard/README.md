@@ -57,7 +57,7 @@ npm run dev             # http://localhost:3000
 platform-dashboard/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / PTI / Fatigue
+│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / PTI / Fatigue / Thermique
 │   │   ├── login/page.tsx              ← Page de connexion
 │   │   ├── api/[[...route]]/route.ts   ← API Hono (toutes les routes REST)
 │   │   └── instrumentation.ts          ← Boot hook — démarre startMqttIngestion()
@@ -70,7 +70,9 @@ platform-dashboard/
 │   │   ├── WorkerMap.tsx               ← Grille flottes PTI + bande résumé statuts
 │   │   ├── AlertTimeline.tsx           ← Chronologie cross-flotte alertes PTI
 │   │   ├── FatigueCard.tsx             ← Carte fatigue par dispositif (EMA BPM + niveau H2.3)
-│   │   └── HRVChart.tsx                ← Graphe BPM + EMA + zones seuils Sentinelle (SSE)
+│   │   ├── HRVChart.tsx                ← Graphe BPM + EMA + zones seuils Sentinelle (SSE)
+│   │   ├── TempCard.tsx                ← Carte thermique DHT22 (EMA + WBGT + niveau H3.3)
+│   │   └── TemperatureChart.tsx        ← Graphe temp + EMA + WBGT + zones COLD/WARN/DANGER
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)

@@ -52,8 +52,9 @@ automl-pipeline/
 │   │   ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
 │   │   └── registry.py     ← build_detectors(configs) factory
 │   └── pipelines/
-│       ├── fall_detection.py ← FallDetectionPipeline — fenêtre glissante + Dense + TFLite INT8
-│       └── fatigue_hrv.py    ← FatigueHRVPipeline — BVP → HRV features + Random Forest
+│       ├── fall_detection.py  ← FallDetectionPipeline — fenêtre glissante + Dense + TFLite INT8
+│       ├── fatigue_hrv.py     ← FatigueHRVPipeline — BVP → HRV features + Random Forest
+│       └── thermal_stress.py  ← ThermalStressPipeline — DHT22 → WBGT + Random Forest (H3.2)
 ├── configs/
 │   ├── demo_zscore.yaml        ← Démo synthétique sinus + Z-Score
 │   ├── demo_autoencoder.yaml   ← Démo synthétique 2D + AutoEncoder TFLite
@@ -67,7 +68,8 @@ automl-pipeline/
 │   ├── test_ewma_drift.py      ← 23 tests EWMADriftDetector + export + registry
 │   ├── test_preprocessing.py  ← 23 tests Scaler (fit, transform, export JSON + C header)
 │   ├── test_fall_detection.py ← 56 tests FallDetectionPipeline (skip si TF absent)
-│   └── test_fatigue_hrv.py   ← 67 tests FatigueHRVPipeline (sklearn only, toujours actifs)
+│   ├── test_fatigue_hrv.py    ← 67 tests FatigueHRVPipeline (sklearn only, toujours actifs)
+│   └── test_thermal_stress.py ← 88 tests ThermalStressPipeline (WBGT, 4 niveaux, export)
 ├── models/                     ← Fichiers exportés (gitignored)
 ├── data/                       ← Datasets capteurs (gitignored)
 └── pyproject.toml
