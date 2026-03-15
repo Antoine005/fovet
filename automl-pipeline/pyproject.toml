@@ -22,6 +22,10 @@ forge = "forge.cli:app"
 ml = [
     "tensorflow>=2.17",
 ]
+# Install MQTT extra for live broker data collection: uv sync --extra mqtt
+mqtt = [
+    "paho-mqtt>=2.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",

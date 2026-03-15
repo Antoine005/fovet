@@ -1,0 +1,5 @@
+# Fovet — Smoke test runner image
+# Pre-installs mqtt package so smoke-test.mjs can run without network access
+FROM node:20-alpine
+RUN npm install -g mqtt@5
+WORKDIR /app
