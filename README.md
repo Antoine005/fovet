@@ -17,26 +17,27 @@ Zéro cloud US. Cible : défense, industriel, aéronautique.
 │                        Fovet — Architecture                         │
 └─────────────────────────────────────────────────────────────────────┘
 
-  [Capteurs]          [ESP32-CAM]               [Serveur]
-  ─────────           ──────────────────         ────────────────────────
-  DHT22 ──→ ADC  ──→  fovet/zscore.h       WiFi  Mosquitto (MQTT broker)
-  MPU6050 → I2C  ──→  FovetZScore ctx  ──────────→ fovet/devices/+/readings
-                       anomaly detect.             │
-                       (16 bytes RAM)              ▼
-                                            Fovet Vigie (Next.js)
-                                            ┌─────────────────────┐
-                                            │ PostgreSQL/Timescale │
-                                            │ REST API (Hono)      │
-                                            │ Dashboard temps réel │
-                                            └─────────────────────┘
+  [Capteurs ESP32-CAM]                       [Serveur LAN / Cloud]
+  ────────────────────────────────           ────────────────────────────
+  MPU-6050 (I2C)   → PTI profile        WiFi  Mosquitto (MQTT broker)
+  MAX30102 (I2C)   → Fatigue profile ──────→  fovet/devices/+/readings
+  DHT22 (1-wire)   → Temp profile            │
+  AD8232 (ADC)     → [H4 — standby]          ▼
+                                       Fovet Vigie (Next.js)
+  Fovet Sentinelle (C99)               ┌──────────────────────┐
+    - zscore / drift détecteurs        │ PostgreSQL/Timescale  │
+    - biosignal HAL (4 slots)          │ REST + SSE (Hono)     │
+    - 335 tests natifs gcc             │ Flotte/PTI/Fatigue/   │
+    - zéro malloc, < 4 KB RAM          │ Thermique/Détail      │
+                                       └──────────────────────┘
 
   [PC / GPU]
   ─────────────────────────────────────────────────────────────
   Fovet Forge (Python AutoML)
-    ├── Données CSV / MQTT / synthétiques
-    ├── Calibration : ZScore, Isolation Forest, AutoEncoder
-    └── Export ──→ fovet_zscore_config.h  ──→ firmware ESP32
-                └→ autoencoder.tflite    ──→ TFLite Micro ESP32
+    ├── FallDetectionPipeline   → fall_detection.tflite  (H1)
+    ├── FatigueHRVPipeline      → fatigue_hrv_thresholds.h (H2)
+    ├── ThermalStressPipeline   → thermal_thresholds.h   (H3)
+    └── Export ──→ headers C / TFLite INT8 → firmware ESP32
 ```
 
 ---
@@ -57,9 +58,12 @@ Zéro cloud US. Cible : défense, industriel, aéronautique.
 
 ```bash
 cd edge-core/tests
+export PATH="/c/msys64/mingw64/bin:$PATH"   # Windows/MSYS2
 make
-./test_zscore
-# 16/16 tests passed
+# 335 tests — tous passants
+# test_zscore / drift / forge_integration / biosignal_hal
+# test_mpu6050_hal / pti_profile / max30102_hal / fatigue_profile
+# test_dht22_hal / test_temp_profile
 ```
 
 ### 2. Forge — calibrer un détecteur sur données synthétiques
@@ -123,6 +127,19 @@ fovet/
          ↓
 5. Flasher l'ESP32 → détection active immédiatement, sans warm-up
 ```
+
+---
+
+## État des modules physiologiques
+
+| Module | Capteur | Sentinelle | Forge | Vigie | Tests |
+|---|---|---|---|---|---|
+| **H1 — PTI** | MPU-6050 (chute/SOS) | ✅ | ✅ | ✅ | 105 |
+| **H2 — Fatigue** | MAX30102 (HR/SpO₂) | ✅ | ✅ | ✅ | 117 |
+| **H3 — Thermique** | DHT22 (WBGT) | ✅ | ✅ | ✅ | 171 |
+| **H4 — ECG** | AD8232 | 🟡 standby | 🟡 standby | 🟡 standby | — |
+
+> H4 bloqué en attente du module AD8232 (~20 €). Voir [`docs/hardware-bom.md`](docs/hardware-bom.md).
 
 ---
 
