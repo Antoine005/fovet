@@ -22,6 +22,18 @@ if TYPE_CHECKING:
     from forge.config import MqttDataConfig
 
 
+def _load_paho() -> object:
+    """Import paho.mqtt.client lazily. Extracted for testability."""
+    try:
+        import paho.mqtt.client as paho_client
+        return paho_client
+    except ImportError as exc:
+        raise ImportError(
+            "paho-mqtt is required for MQTT data collection.\n"
+            "Install it with: uv sync --extra mqtt"
+        ) from exc
+
+
 def load(config: "MqttDataConfig") -> Dataset:
     """
     Connect to MQTT, subscribe, collect for ``config.duration_seconds``,
@@ -35,13 +47,7 @@ def load(config: "MqttDataConfig") -> Dataset:
         ImportError: if ``paho-mqtt`` is not installed (uv sync --extra mqtt).
         RuntimeError: if no messages are received within the collection window.
     """
-    try:
-        import paho.mqtt.client as paho
-    except ImportError as exc:
-        raise ImportError(
-            "paho-mqtt is required for MQTT data collection.\n"
-            "Install it with: uv sync --extra mqtt"
-        ) from exc
+    paho = _load_paho()
 
     rows: list[list[float]] = []
     timestamps: list[float] = []
