@@ -14,13 +14,14 @@ cd edge-core/tests
 export PATH="/c/msys64/mingw64/bin:$PATH"   # MSYS2 / Windows uniquement
 make
 # Résultats attendus :
-# test_zscore            : 41/41 passed
-# test_drift             : 28/28 passed
-# test_forge_integration : 10/10 passed
-# test_biosignal_hal     : 30/30 passed
-# test_mpu6050_hal       : 25/25 passed
-# test_pti_profile       : 24/24 passed
-# test_max30102_hal      : 23/23 passed
+# test_zscore             : 41/41 passed
+# test_drift              : 28/28 passed
+# test_forge_integration  : 10/10 passed
+# test_biosignal_hal      : 30/30 passed
+# test_mpu6050_hal        : 25/25 passed
+# test_pti_profile        : 24/24 passed
+# test_max30102_hal       : 23/23 passed
+# test_fatigue_profile    : 27/27 passed
 ```
 
 ### Build PlatformIO ESP32-CAM
@@ -50,7 +51,8 @@ edge-core/
 │   │   ├── mpu6050_hal.h     ← Driver HAL MPU-6050 (accéléromètre/gyroscope I2C)
 │   │   └── max30102_hal.h    ← Driver HAL MAX30102 (fréquence cardiaque + SpO₂)
 │   └── profiles/
-│       └── pti_profile.h     ← Profil PTI : détection chute/immobilité/SOS
+│       ├── pti_profile.h     ← Profil PTI : détection chute/immobilité/SOS
+│       └── fatigue_profile.h ← Profil Fatigue : classification HRV 3 niveaux + LED RGB
 ├── src/
 │   ├── zscore.c              ← Algorithme de Welford (C99 pur)
 │   ├── drift.c               ← Double EWMA fast/slow
@@ -58,7 +60,8 @@ edge-core/
 │   ├── mpu6050_hal.c         ← Pilote MPU-6050 I2C via callbacks injectés
 │   ├── max30102_hal.c        ← Pilote MAX30102 I2C : Pan-Tompkins simplifié + SpO₂
 │   ├── profiles/
-│   │   └── pti_profile.c     ← Profil PTI (chute + immobilité + SOS)
+│   │   ├── pti_profile.c     ← Profil PTI (chute + immobilité + SOS)
+│   │   └── fatigue_profile.c ← Profil Fatigue (EMA BPM + SpO₂ + LED RGB)
 │   └── platform/
 │       └── platform_esp32.cpp ← Implémentation HAL pour ESP32/Arduino
 ├── tests/
@@ -68,7 +71,8 @@ edge-core/
 │   ├── test_biosignal_hal.c  ← 30 tests : registre, register/read/reset, 4 sources
 │   ├── test_mpu6050_hal.c    ← 25 tests : I2C mock, WHO_AM_I, ±2g, rate, magnitude
 │   ├── test_pti_profile.c    ← 24 tests : chute/immobilité/SOS, debounce, callbacks
-│   └── test_max30102_hal.c   ← 23 tests : init, FIFO, warmup, BPM 60/80, SpO₂, reset
+│   ├── test_max30102_hal.c   ← 23 tests : init, FIFO, warmup, BPM 60/80, SpO₂, reset
+│   └── test_fatigue_profile.c ← 27 tests : niveaux OK/ALERT/CRITICAL, EMA, SpO₂, LED
 ├── examples/
 │   └── esp32/zscore_demo/    ← Demo PlatformIO : sinus + MQTT + Vigie
 └── library.json              ← Manifest PlatformIO (fovet-sentinelle)
@@ -511,6 +515,74 @@ if (rc == FOVET_HAL_OK) {
     float spo2 = s.value.hr.spo2;   // SpO₂ %
     float rr   = s.value.hr.rmssd;  // RR moyen (ms)
 }
+```
+
+---
+
+## API publique — Profil Fatigue (H2.3)
+
+Classification HRV-based en 3 niveaux de fatigue à partir du MAX30102. Tourne à ~25 Hz.
+Compatible avec les seuils exportés par `FatigueHRVPipeline` (Forge H2.2).
+
+### Niveaux
+
+| Niveau | Valeur | Condition | LED |
+|---|---|---|---|
+| `FOVET_FATIGUE_LEVEL_UNKNOWN` | 0 | Warm-up (< 25 samples) | off |
+| `FOVET_FATIGUE_LEVEL_OK` | 1 | BPM < hr_ok ET SpO₂ ≥ spo2_critical | verte |
+| `FOVET_FATIGUE_LEVEL_ALERT` | 2 | hr_ok ≤ BPM ≤ hr_alert | ambre |
+| `FOVET_FATIGUE_LEVEL_CRITICAL` | 3 | BPM > hr_alert OU SpO₂ < 94 % | rouge |
+
+### Configuration (valeurs par défaut)
+
+```c
+cfg.hr_ok                  = 72.0f   // BPM < 72 → OK
+cfg.hr_alert               = 82.0f   // BPM > 82 → CRITICAL
+cfg.spo2_critical          = 94.0f   // SpO₂ < 94 % → CRITICAL (prioritaire)
+cfg.ema_alpha              = 0.05f   // EMA ~20-sample memory (résistance aux pics)
+cfg.warmup_samples         = 25U     // 1 s à 25 Hz avant première classification
+cfg.sleep_between_ticks_ms = 40U     // ~25 Hz
+```
+
+### Initialisation et boucle
+
+```c
+#include "fovet/profiles/fatigue_profile.h"
+
+fovet_fatigue_ctx_t ctx;
+
+// Seuils depuis FatigueHRVPipeline.export() (optionnel)
+// #include "fatigue_hrv_thresholds.h"
+// cfg.hr_ok    = FOVET_FATIGUE_HR_OK;
+// cfg.hr_alert = FOVET_FATIGUE_HR_ALERT;
+
+fovet_fatigue_init(
+    &ctx,
+    NULL,               // NULL = defaults
+    my_alert_fn,        // void fn(fovet_fatigue_level_t, void*)  — changement de niveau
+    my_led_fn,          // void fn(fovet_fatigue_level_t)          — LED RGB chaque tick
+    my_sleep_fn,        // void fn(uint32_t ms) — NULL pour désactiver
+    user_data
+);
+
+// Boucle principale (~25 Hz)
+while (1) {
+    int rc = fovet_fatigue_tick(&ctx);
+    if (rc < 0) handle_hr_error(rc);
+}
+```
+
+### Séquence d'un tick (`fovet_fatigue_tick`)
+
+```
+1. fovet_hal_biosignal_read(FOVET_SOURCE_HR) → BPM + SpO₂
+2. NODATA (capteur en warm-up) → skip, return OK
+3. EMA BPM : ema = α×bpm + (1-α)×ema  (α = 0.05)
+4. Classification : UNKNOWN / OK / ALERT / CRITICAL
+5. SpO₂ < spo2_critical → force CRITICAL (prioritaire)
+6. Changement de niveau → alert_fn()
+7. Niveau connu → led_fn()
+8. sleep_fn(40 ms)
 ```
 
 ---
