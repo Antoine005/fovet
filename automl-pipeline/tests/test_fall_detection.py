@@ -326,7 +326,9 @@ class TestFallDetectionPipeline:
         assert isinstance(r, FallDetectionReport)
 
     def test_evaluate_precision_positive(self, fitted_pipeline):
-        data = synthesize_fall_data(n_normal=400, n_fall=100)
+        import numpy as np
+        # Fixed seed + large enough fall count to guarantee ≥1 fall in test split
+        data = synthesize_fall_data(n_normal=400, n_fall=200, rng=np.random.default_rng(42))
         r = fitted_pipeline.evaluate(data)
         assert r.precision > 0.0
 
