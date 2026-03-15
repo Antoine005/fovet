@@ -21,28 +21,32 @@ extern "C" {
  * Uses Welford's online algorithm for numerically stable mean/variance
  * computation in a single pass. No dynamic allocation — stack or static only.
  *
- * RAM usage: sizeof(FovetZScore) = 16 bytes.
+ * RAM usage: sizeof(FovetZScore) = 20 bytes.
  */
 typedef struct {
-    uint32_t count;           /**< Number of samples processed */
+    uint32_t count;           /**< Number of samples processed (saturates at UINT32_MAX) */
     float    mean;            /**< Running mean */
     float    M2;              /**< Running sum of squared deviations */
     float    threshold_sigma; /**< Anomaly threshold (e.g. 3.0f = 3σ) */
+    uint32_t min_samples;     /**< Warm-up: detection suppressed until count >= min_samples */
 } FovetZScore;
 
 /**
  * @brief Initialize a Z-Score detector.
  * @param ctx             Pointer to detector context (must not be NULL)
  * @param threshold_sigma Anomaly threshold in standard deviations (e.g. 3.0f)
+ * @param min_samples     Warm-up period — no anomaly flagged before this many samples.
+ *                        Minimum enforced to 2 (variance requires at least 2 samples).
+ *                        Pass 0 for a pre-calibrated struct (Forge-exported header).
  */
-void fovet_zscore_init(FovetZScore *ctx, float threshold_sigma);
+void fovet_zscore_init(FovetZScore *ctx, float threshold_sigma, uint32_t min_samples);
 
 /**
  * @brief Feed a new sample and check for anomaly.
  *
  * Updates the running statistics and returns true if the sample deviates
- * more than threshold_sigma from the current mean.
- * The first two samples are never flagged as anomalies (variance undefined).
+ * more than threshold_sigma from the current mean AND count >= min_samples.
+ * count saturates at UINT32_MAX — stats stop updating beyond that point.
  *
  * @param ctx    Pointer to detector context
  * @param sample New measurement
@@ -72,7 +76,8 @@ float fovet_zscore_get_stddev(const FovetZScore *ctx);
 uint32_t fovet_zscore_get_count(const FovetZScore *ctx);
 
 /**
- * @brief Reset detector to initial state (preserves threshold).
+ * @brief Reset detector stats to initial state.
+ *        Preserves threshold_sigma and min_samples.
  * @param ctx Pointer to detector context
  */
 void fovet_zscore_reset(FovetZScore *ctx);

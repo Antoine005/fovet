@@ -13,7 +13,7 @@ Zéro malloc. Zéro dépendance. Testable sur PC avant de toucher le hardware.
 cd edge-core/tests
 make
 # Résultats attendus :
-# test_zscore            : 26/26 passed
+# test_zscore            : 41/41 passed
 # test_drift             : 28/28 passed
 # test_forge_integration : 10/10 passed
 ```

@@ -7,7 +7,8 @@
 
 #include "fovet/zscore.h"
 
-#include <math.h>   /* sqrtf, fabsf */
+#include <math.h>    /* sqrtf, fabsf */
+#include <stdint.h>  /* UINT32_MAX   */
 
 /* -------------------------------------------------------------------------
  * Welford's online algorithm — single-pass, zero malloc, numerically stable
@@ -17,23 +18,33 @@
  *   var_n  = M2_n / (n - 1)   (sample variance, unbiased)
  * ------------------------------------------------------------------------- */
 
-void fovet_zscore_init(FovetZScore *ctx, float threshold_sigma)
+void fovet_zscore_init(FovetZScore *ctx, float threshold_sigma, uint32_t min_samples)
 {
     ctx->count           = 0U;
     ctx->mean            = 0.0f;
     ctx->M2              = 0.0f;
     ctx->threshold_sigma = threshold_sigma;
+    /* Enforce minimum of 2: variance is undefined with fewer than 2 samples */
+    ctx->min_samples     = (min_samples >= 2U) ? min_samples : 2U;
 }
 
 bool fovet_zscore_update(FovetZScore *ctx, float sample)
 {
-    ctx->count++;
+    /* Saturate count at UINT32_MAX to avoid overflow on very long sessions */
+    if (ctx->count < UINT32_MAX) {
+        ctx->count++;
 
-    /* Welford update */
-    float delta  = sample - ctx->mean;
-    ctx->mean   += delta / (float)ctx->count;
-    float delta2 = sample - ctx->mean;
-    ctx->M2     += delta * delta2;
+        /* Welford update */
+        float delta  = sample - ctx->mean;
+        ctx->mean   += delta / (float)ctx->count;
+        float delta2 = sample - ctx->mean;
+        ctx->M2     += delta * delta2;
+    }
+
+    /* Warm-up guard: suppress detection until enough samples seen */
+    if (ctx->count < ctx->min_samples) {
+        return false;
+    }
 
     /* Need at least 2 samples for a meaningful variance */
     if (ctx->count < 2U) {
@@ -73,6 +84,7 @@ uint32_t fovet_zscore_get_count(const FovetZScore *ctx)
 
 void fovet_zscore_reset(FovetZScore *ctx)
 {
-    float saved_threshold = ctx->threshold_sigma;
-    fovet_zscore_init(ctx, saved_threshold);
+    float    saved_threshold   = ctx->threshold_sigma;
+    uint32_t saved_min_samples = ctx->min_samples;
+    fovet_zscore_init(ctx, saved_threshold, saved_min_samples);
 }
