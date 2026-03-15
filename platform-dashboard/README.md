@@ -57,14 +57,15 @@ npm run dev             # http://localhost:3000
 platform-dashboard/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                    ← Dashboard principal (graphes, alertes)
+│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail
 │   │   ├── login/page.tsx              ← Page de connexion
 │   │   ├── api/[[...route]]/route.ts   ← API Hono (toutes les routes REST)
 │   │   └── instrumentation.ts          ← Boot hook — démarre startMqttIngestion()
 │   ├── components/
 │   │   ├── ReadingChart.tsx            ← Graphe Recharts avec SSE + fallback polling
-│   │   ├── AlertList.tsx               ← Liste alertes + acquittement
-│   │   └── DeviceCard.tsx              ← Carte dispositif
+│   │   ├── AlertList.tsx               ← Liste alertes + acquittement + pagination cursor
+│   │   ├── DeviceCard.tsx              ← Carte dispositif (vue détail)
+│   │   └── FleetPanel.tsx              ← Sparkline compacte + badge alerte (vue flotte)
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
