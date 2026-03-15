@@ -19,6 +19,9 @@ if (!jwtSecret) {
   throw new Error("JWT_SECRET environment variable is not set");
 }
 
+const ACCESS_TOKEN_TTL  = 60 * 60 * 24;       // 1 day
+const REFRESH_TOKEN_TTL = 60 * 60 * 24 * 30;  // 30 days
+
 export const app = new Hono().basePath("/api");
 
 // -------------------------------------------------------------------------
@@ -40,7 +43,9 @@ const cookieAuth: MiddlewareHandler = async (c, next) => {
   const token = getCookie(c, "fovet_token");
   if (!token) return c.json({ error: "Unauthorized" }, 401);
   try {
-    await verify(token, jwtSecret, "HS256");
+    const payload = await verify(token, jwtSecret, "HS256") as { role?: string; type?: string };
+    // Reject refresh tokens presented as access tokens
+    if (payload.type === "refresh") return c.json({ error: "Unauthorized" }, 401);
   } catch {
     return c.json({ error: "Unauthorized" }, 401);
   }
@@ -126,8 +131,47 @@ app.post("/auth/token", async (c) => {
     return c.json({ error: "Invalid password" }, 401);
   }
 
+  const now = Math.floor(Date.now() / 1000);
   const token = await sign(
-    { role: "dashboard", exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 },
+    { role: "dashboard", type: "access", exp: now + ACCESS_TOKEN_TTL },
+    jwtSecret,
+    "HS256"
+  );
+  const refreshToken = await sign(
+    { role: "dashboard", type: "refresh", exp: now + REFRESH_TOKEN_TTL },
+    jwtSecret,
+    "HS256"
+  );
+
+  const cookieOpts = {
+    httpOnly: true,
+    sameSite: "Lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  };
+  setCookie(c, "fovet_token",   token,        { ...cookieOpts, maxAge: ACCESS_TOKEN_TTL });
+  setCookie(c, "fovet_refresh", refreshToken, { ...cookieOpts, maxAge: REFRESH_TOKEN_TTL });
+  return c.json({ ok: true });
+});
+
+// -------------------------------------------------------------------------
+// POST /api/auth/refresh — exchange refresh token for a new access token
+// -------------------------------------------------------------------------
+app.post("/auth/refresh", async (c) => {
+  const refreshToken = getCookie(c, "fovet_refresh");
+  if (!refreshToken) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    const payload = await verify(refreshToken, jwtSecret, "HS256") as { role?: string; type?: string };
+    if (payload.role !== "dashboard" || payload.type !== "refresh") {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+  } catch {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  const token = await sign(
+    { role: "dashboard", type: "access", exp: Math.floor(Date.now() / 1000) + ACCESS_TOKEN_TTL },
     jwtSecret,
     "HS256"
   );
@@ -136,16 +180,17 @@ app.post("/auth/token", async (c) => {
     sameSite: "Lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: ACCESS_TOKEN_TTL,
   });
   return c.json({ ok: true });
 });
 
 // -------------------------------------------------------------------------
-// POST /api/auth/logout — clear the auth cookie
+// POST /api/auth/logout — clear both auth cookies
 // -------------------------------------------------------------------------
 app.post("/auth/logout", (c) => {
-  deleteCookie(c, "fovet_token", { path: "/" });
+  deleteCookie(c, "fovet_token",   { path: "/" });
+  deleteCookie(c, "fovet_refresh", { path: "/" });
   return c.json({ ok: true });
 });
 
@@ -251,20 +296,36 @@ app.get("/devices/:id/stream", cookieAuth, async (c) => {
 });
 
 // -------------------------------------------------------------------------
-// GET /api/devices/:id/alerts — unacknowledged alerts for a device
+// GET /api/devices/:id/alerts — unacknowledged alerts (paginated)
+// ?limit=50  (default 50, max 200)
+// ?cursor=<alert-id>  (cuid of last item received, for next page)
 // -------------------------------------------------------------------------
 app.get("/devices/:id/alerts", async (c) => {
   const { id } = c.req.param();
+  const rawLimit  = parseInt(c.req.query("limit") ?? "50", 10);
+  const limit     = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
+  const cursorId  = c.req.query("cursor");
 
   const device = await prisma.device.findUnique({ where: { id }, select: { id: true } });
   if (!device) return c.json({ error: "Device not found" }, 404);
 
-  const alerts = await prisma.alert.findMany({
+  if (cursorId) {
+    const exists = await prisma.alert.findUnique({ where: { id: cursorId }, select: { id: true } });
+    if (!exists) return c.json({ error: "Cursor not found" }, 400);
+  }
+
+  const rows = await prisma.alert.findMany({
     where: { deviceId: id, acknowledged: false },
     orderBy: { timestamp: "desc" },
-    take: 50,
+    take: limit + 1,
+    ...(cursorId && { cursor: { id: cursorId }, skip: 1 }),
   });
-  return c.json(alerts);
+
+  const hasMore = rows.length > limit;
+  const data = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? data[data.length - 1].id : null;
+
+  return c.json({ data, pagination: { limit, hasMore, nextCursor } });
 });
 
 // -------------------------------------------------------------------------
