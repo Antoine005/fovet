@@ -194,9 +194,10 @@ data: heartbeat
 
 ### U3 — Notifications sortantes (webhook) ✅
 
-- Variable `.env` : `ALERT_WEBHOOK_URL` + `ALERT_WEBHOOK_MIN_LEVEL`
-- Dans `mqtt-ingestion.ts` : POST fire-and-forget sur chaque alerte
-- Payload : `{ deviceId, deviceName, alertModule, alertLevel, timestamp }`
+- `ALERT_WEBHOOK_URL` + `ALERT_WEBHOOK_MIN_LEVEL` dans `.env.example`
+- `mqtt-ingestion.ts` appelle `fireWebhook()` (fire-and-forget) après chaque alerte
+- Payload : `{ deviceId, deviceName, alertModule, alertLevel, value, zScore, timestamp }`
+- Compatible n8n, Make, Zapier, Slack Incoming Webhooks
 
 ### U4 — Export de session ✅
 

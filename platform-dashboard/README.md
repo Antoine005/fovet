@@ -48,6 +48,8 @@ npm run dev             # http://localhost:3000
 | `MQTT_BROKER_URL` | URL broker Mosquitto | `mqtt://localhost:1883` |
 | `MQTT_USERNAME` | Compte lecture MQTT | `fovet-vigie` |
 | `MQTT_PASSWORD` | Mot de passe MQTT | `monmotdepasse` |
+| `ALERT_WEBHOOK_URL` | URL POST notifiée à chaque alerte (optionnel) | `https://hooks.slack.com/…` |
+| `ALERT_WEBHOOK_MIN_LEVEL` | Niveau minimum déclenchant le webhook : `ALL` / `DANGER` (défaut) / `CRITICAL` | `DANGER` |
 
 ---
 
@@ -284,6 +286,38 @@ npm run test:coverage # Avec couverture
 ```
 
 Tests couverts : health, auth/login, rate limiting (429), JWT validation, Zod validation, CRUD devices/alerts, pagination cursor (hasMore, nextCursor, erreur cursor invalide), acquittement alertes.
+
+---
+
+## Notifications webhook sortantes — U3
+
+Quand `ALERT_WEBHOOK_URL` est défini, Vigie envoie un `POST` JSON à cette URL pour chaque alerte créée.
+
+**Payload :**
+
+```json
+{
+  "deviceId":    "clxxxx",
+  "deviceName":  "Pierre Dupont",
+  "alertModule": "THERMAL",
+  "alertLevel":  "DANGER",
+  "value":       38.5,
+  "zScore":      3.1,
+  "timestamp":   "2026-03-15T10:00:00.000Z"
+}
+```
+
+**Filtrage par niveau (`ALERT_WEBHOOK_MIN_LEVEL`) :**
+
+| Valeur | Alertes envoyées |
+|---|---|
+| `ALL` | Toutes (WARN, COLD, DANGER, CRITICAL) |
+| `DANGER` (défaut) | DANGER + CRITICAL uniquement |
+| `CRITICAL` | CRITICAL uniquement |
+
+**Compatibilité :** n8n, Make, Zapier, Slack Incoming Webhooks, endpoint HTTP custom.
+
+Le webhook est **fire-and-forget** — un échec réseau logue une erreur mais ne bloque pas l'ingestion MQTT.
 
 ---
 
