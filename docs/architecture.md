@@ -447,16 +447,24 @@ Compatible n8n, Make, Zapier, Slack Incoming Webhooks.
 - Contenu : durée totale, nb lectures, % temps en alerte par module, liste alertes, min/max/mean par valeur
 - Optionnel : export PDF côté client (jsPDF ou html2canvas)
 
-### U5 — Mode démo / simulation (sans hardware)
+### U5 — Mode démo / simulation (sans hardware) ✅
 
-**Besoin** : pour les démos commerciales (défense, industriel), montrer le système en fonctionnement sans avoir besoin d'un ESP32 branché.
+**Implémenté** : `scripts/demo_mqtt.py`
 
-**Ce qui manque** : aucune injection de données synthétiques dans le système temps réel.
+3 threads (IMU 1 Hz, HR 0.5 Hz, TEMP 0.33 Hz) publient des lectures Welford réalistes.
+Injection automatique d'anomalies (FALL/SOS/MOTIONLESS, fatigue, chaleur WBGT) toutes les 30 s.
 
-**Travaux** :
-- Script `scripts/demo-inject.ts` : publie des lectures MQTT synthétiques avec scénarios (normal → chute → récupération)
-- Scénarios : `pti-fall`, `fatigue-critical`, `thermal-stress-heat`, `thermal-stress-cold`
-- Paramètres : `--device esp32-demo-001 --scenario fatigue-critical --duration 120s`
+```bash
+# Démarrage rapide (sans installation)
+uv run --with paho-mqtt --with python-dotenv scripts/demo_mqtt.py
+
+# Options
+python scripts/demo_mqtt.py --device demo-001 --interval 1 --anomaly-period 20
+python scripts/demo_mqtt.py --no-anomalies   # flux normaux uniquement
+```
+
+**Corrige aussi** : `ptiType` désormais propagé depuis le payload MQTT vers la table `alerts`
+(les vues PTI fleet et `/api/pti/fleet` voient maintenant les alertes FALL/SOS/MOTIONLESS).
 
 ---
 
@@ -594,6 +602,6 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 | U1 | Vigie | ✅ | Alertes unifiées cross-modules (PTI + Fatigue + Thermique) |
 | U2 | Vigie | ✅ | Vue worker individuelle multi-capteur |
 | U3 | Vigie | ✅ | Notifications webhook sortantes |
-| U5 | Scripts | 🔜 | Mode démo — injection MQTT synthétique |
+| U5 | Scripts | ✅ | Mode démo — injection MQTT synthétique |
 | S10 | Sentinelle | ⏳ | Flash ESP32-CAM (MB de remplacement) |
 | Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |
