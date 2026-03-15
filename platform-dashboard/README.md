@@ -15,7 +15,7 @@ Reçoit les lectures MQTT des ESP32, stocke en PostgreSQL, expose une API REST s
 | MQTT ingestion | mqtt.js → `startMqttIngestion()` au boot Next.js |
 | Temps réel | SSE via EventEmitter in-process (`event-bus.ts`) |
 | Auth | JWT HS256 — cookies httpOnly (pas de localStorage) |
-| Tests | Vitest — 23 tests |
+| Tests | Vitest — 39 tests |
 
 ---
 
@@ -57,7 +57,7 @@ npm run dev             # http://localhost:3000
 platform-dashboard/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail
+│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / PTI
 │   │   ├── login/page.tsx              ← Page de connexion
 │   │   ├── api/[[...route]]/route.ts   ← API Hono (toutes les routes REST)
 │   │   └── instrumentation.ts          ← Boot hook — démarre startMqttIngestion()
@@ -65,7 +65,10 @@ platform-dashboard/
 │   │   ├── ReadingChart.tsx            ← Graphe Recharts avec SSE + fallback polling
 │   │   ├── AlertList.tsx               ← Liste alertes + acquittement + pagination cursor
 │   │   ├── DeviceCard.tsx              ← Carte dispositif (vue détail)
-│   │   └── FleetPanel.tsx              ← Sparkline compacte + badge alerte (vue flotte)
+│   │   ├── FleetPanel.tsx              ← Sparkline compacte + badge alerte (vue flotte)
+│   │   ├── WorkerCard.tsx              ← Carte travailleur PTI (FALL/MOTIONLESS/SOS)
+│   │   ├── WorkerMap.tsx               ← Grille flottes PTI + bande résumé statuts
+│   │   └── AlertTimeline.tsx           ← Chronologie cross-flotte alertes PTI
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
@@ -73,9 +76,9 @@ platform-dashboard/
 │       ├── mqtt-ingestion.ts           ← Subscribe MQTT → insertion PostgreSQL + emit
 │       └── prisma.ts                   ← PrismaClient singleton
 ├── prisma/
-│   └── schema.prisma                   ← Modèles Device, Reading (BigInt id), Alert
+│   └── schema.prisma                   ← Modèles Device, Reading (BigInt id), Alert (ptiType)
 ├── src/__tests__/
-│   └── api.test.ts                     ← 23 tests Vitest
+│   └── api.test.ts                     ← 39 tests Vitest
 └── .env.example                        ← Template variables d'environnement
 ```
 
@@ -89,6 +92,7 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 |---|---|---|---|
 | `GET` | `/api/health` | Non | État de l'API |
 | `POST` | `/api/auth/token` | Non | Login — retourne cookie httpOnly `fovet_token` |
+| `POST` | `/api/auth/refresh` | Non | Rafraîchir l'access token via refresh cookie |
 | `POST` | `/api/auth/logout` | Non | Supprime le cookie de session |
 | `GET` | `/api/devices` | JWT | Liste tous les dispositifs |
 | `POST` | `/api/devices` | JWT | Enregistrer un nouveau dispositif |
@@ -96,6 +100,8 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `GET` | `/api/devices/:id/stream` | JWT | Flux SSE temps réel des nouvelles lectures |
 | `GET` | `/api/devices/:id/alerts` | JWT | Alertes non acquittées |
 | `PATCH` | `/api/alerts/:id/ack` | JWT | Acquitter une alerte |
+| `GET` | `/api/pti/fleet` | JWT | Flotte PTI — tous les travailleurs + alertsByType |
+| `GET` | `/api/pti/alerts/recent` | JWT | Chronologie alertes PTI cross-flotte (max 200) |
 
 ### Pagination des lectures
 
@@ -211,6 +217,7 @@ model Alert {
   value          Float
   zScore         Float
   threshold      Float
+  ptiType        String?   // "FALL" | "MOTIONLESS" | "SOS" — null pour alertes z-score
   acknowledged   Boolean   @default(false)
   acknowledgedAt DateTime?
   timestamp      DateTime
@@ -219,14 +226,66 @@ model Alert {
 
 ---
 
+## Vue PTI — Protection du Travailleur Isolé
+
+La vue PTI est accessible via l'onglet **PTI** dans le dashboard. Elle supervise une flotte de travailleurs isolés à partir des alertes générées par le profil `fovet_pti_tick()`.
+
+### Composants
+
+| Composant | Description |
+|---|---|
+| `WorkerMap` | Grille de `WorkerCard`, bande résumé (critique / immobile / OK), auto-refresh 10 s |
+| `WorkerCard` | Statut par travailleur : dot de couleur, badges FALL/MOTIONLESS/SOS, bouton acquittement groupé |
+| `AlertTimeline` | Chronologie cross-flotte des alertes PTI actives + acquittées, ack individuel |
+
+### Codes couleur
+
+| Couleur | Condition |
+|---|---|
+| 🟢 Vert | Aucune alerte active |
+| 🟡 Ambre | Alerte MOTIONLESS uniquement |
+| 🔴 Rouge | Alerte FALL ou SOS (critique) |
+
+### Route `/api/pti/fleet`
+
+```json
+[
+  {
+    "id": "clxxxx",
+    "name": "Pierre Dupont",
+    "location": "Zone A",
+    "mqttClientId": "pti-001",
+    "alertsByType": { "FALL": 1, "MOTIONLESS": 0, "SOS": 0 },
+    "lastAlertAt": "2026-03-15T10:00:00.000Z"
+  }
+]
+```
+
+### Route `/api/pti/alerts/recent`
+
+```json
+[
+  {
+    "id": "clxxxx",
+    "deviceId": "clxxxx",
+    "deviceName": "Pierre Dupont",
+    "ptiType": "FALL",
+    "timestamp": "2026-03-15T10:00:00.000Z",
+    "acknowledged": false
+  }
+]
+```
+
+---
+
 ## Tests
 
 ```bash
-npm run test          # Vitest — 23 tests
+npm run test          # Vitest — 39 tests
 npm run test:coverage # Avec couverture
 ```
 
-Tests couverts : health, auth/login, rate limiting (429), JWT validation, Zod validation, CRUD devices/alerts, pagination cursor (hasMore, nextCursor, erreur cursor invalide), acquittement alertes.
+Tests couverts : health, auth/login/refresh/logout, rate limiting (429), JWT validation, Zod validation, CRUD devices/alerts, pagination cursor (hasMore, nextCursor, erreur cursor invalide), acquittement alertes, PTI fleet (alertsByType, lastAlertAt), PTI alerts/recent (shape, limit, cap 200).
 
 ---
 

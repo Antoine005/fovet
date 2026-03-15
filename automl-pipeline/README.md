@@ -44,13 +44,15 @@ automl-pipeline/
 │   │   ├── synthetic.py    ← Générateur sinus/random_walk/constant + anomalies injectées
 │   │   ├── csv_loader.py   ← Lecteur CSV (pandas)
 │   │   └── loader.py       ← Factory load_data(config)
-│   └── detectors/
-│       ├── base.py         ← Detector ABC + DetectionResult
-│       ├── zscore.py       ← ZScoreDetector (algo de Welford) + export fovet_zscore_config.h
-│       ├── isolation_forest.py ← IsolationForestDetector (sklearn) + export JSON
-│       ├── autoencoder.py  ← AutoEncoderDetector (Keras Dense) + export TFLite + C header
-│       ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
-│       └── registry.py     ← build_detectors(configs) factory
+│   ├── detectors/
+│   │   ├── base.py         ← Detector ABC + DetectionResult
+│   │   ├── zscore.py       ← ZScoreDetector (algo de Welford) + export fovet_zscore_config.h
+│   │   ├── isolation_forest.py ← IsolationForestDetector (sklearn) + export JSON
+│   │   ├── autoencoder.py  ← AutoEncoderDetector (Keras Dense) + export TFLite + C header
+│   │   ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
+│   │   └── registry.py     ← build_detectors(configs) factory
+│   └── pipelines/
+│       └── fall_detection.py ← FallDetectionPipeline — fenêtre glissante + Dense + TFLite INT8
 ├── configs/
 │   ├── demo_zscore.yaml        ← Démo synthétique sinus + Z-Score
 │   ├── demo_autoencoder.yaml   ← Démo synthétique 2D + AutoEncoder TFLite
@@ -62,7 +64,8 @@ automl-pipeline/
 │   ├── test_isolation_forest.py ← 16 tests IsolationForestDetector
 │   ├── test_autoencoder.py     ← 19 tests AutoEncoderDetector (skip si TF absent)
 │   ├── test_ewma_drift.py      ← 23 tests EWMADriftDetector + export + registry
-│   └── test_preprocessing.py  ← 23 tests Scaler (fit, transform, export JSON + C header)
+│   ├── test_preprocessing.py  ← 23 tests Scaler (fit, transform, export JSON + C header)
+│   └── test_fall_detection.py ← 56 tests FallDetectionPipeline (skip si TF absent)
 ├── models/                     ← Fichiers exportés (gitignored)
 ├── data/                       ← Datasets capteurs (gitignored)
 └── pyproject.toml
@@ -80,6 +83,80 @@ automl-pipeline/
 > **Note IsolationForest :** les structures d'arbres sont incompatibles avec les contraintes RAM d'un MCU. Ce détecteur est réservé à un usage cloud ou gateway (Raspberry Pi, serveur edge).
 
 > **Note EWMA Drift :** complémentaire au Z-Score. Le Z-Score détecte les pics soudains ; EWMA Drift détecte les glissements progressifs que Welford absorbe dans sa moyenne courante. À utiliser conjointement sur signaux physiques lents (température, pression).
+
+---
+
+## Pipeline métier — Détection de chute (PTI)
+
+`FallDetectionPipeline` entraîne un modèle de détection de chute sur un signal accéléromètre (IMU) et exporte un fichier `.tflite` INT8 < 32 KB prêt pour TFLite Micro sur ESP32.
+
+### Principe
+
+```
+Signal IMU (ax, ay, az @ 25 Hz)
+    ↓  _compute_magnitude → |a| = sqrt(ax²+ay²+az²)
+    ↓  Fenêtre glissante 50 samples (2 s), pas de 25 samples (50 % overlap)
+    ↓  _extract_window → 10 features par fenêtre
+    ↓  Dense(16, relu) → Dense(8, relu) → Dense(1, sigmoid)
+    ↓  Score ∈ [0, 1]  →  > 0.5 = chute détectée
+```
+
+### 10 features par fenêtre
+
+| Index | Feature | Description |
+|---|---|---|
+| 0 | `magnitude_mean` | Moyenne de \|a\| |
+| 1 | `magnitude_std` | Écart-type de \|a\| |
+| 2 | `magnitude_min` | Minimum de \|a\| |
+| 3 | `magnitude_max` | Maximum de \|a\| |
+| 4 | `magnitude_rms` | RMS de \|a\| |
+| 5 | `magnitude_kurtosis` | Kurtosis (aplatissement) |
+| 6 | `magnitude_skewness` | Asymétrie |
+| 7 | `zcr` | Taux de passage par zéro |
+| 8 | `peak_to_peak` | max - min |
+| 9 | `signal_energy` | sum(\|a\|²) / n |
+
+### Usage
+
+```python
+from forge.pipelines.fall_detection import FallDetectionPipeline, synthesize_fall_data
+
+# Données (DataFrame colonnes : timestamp_ms, sensor_type, value_1/2/3, label)
+data = synthesize_fall_data(n_normal=800, n_fall=200)
+
+pipeline = FallDetectionPipeline(epochs=50, window_samples=50, step_samples=25)
+pipeline.fit(data, verbose=1)
+
+# Évaluation
+report = pipeline.evaluate(data)
+print(report)  # Precision, Recall, F1, confusion matrix
+assert report.meets_spec()  # precision >= 0.92 et recall >= 0.90
+
+# Export vers edge-core (TFLite Micro + headers C + config JSON)
+pipeline.export("path/to/output/")
+```
+
+### Artefacts exportés
+
+| Fichier | Usage |
+|---|---|
+| `fall_detection.tflite` | Inférence TFLite Micro sur ESP32 |
+| `fall_detection_model.h` | Tableau C `g_fall_detection_model[]` + `#define FOVET_FALL_DETECTION_N_FEATURES 10` |
+| `fall_detection_model.cc` | Définition du tableau byte (à compiler avec le firmware) |
+| `fall_detection_config.json` | `scaler_mean`, `scaler_std`, `threshold`, `window_samples` |
+
+### Intégration firmware
+
+```c
+#include "fall_detection_model.h"
+
+// Dans fovet_pti_init(), passer my_fall_score_fn :
+float my_fall_score_fn(const float *mag, uint32_t n) {
+    // 1. Normaliser les 10 features avec scaler_mean / scaler_std
+    // 2. Inférence TFLite Micro → score sigmoid [0, 1]
+    return score;
+}
+```
 
 ## Prétraitement (optionnel)
 
@@ -183,7 +260,7 @@ static FovetDrift fovet_drift_temperature = {
 
 ```bash
 uv run pytest -v
-# 138 tests (dont 19 skippés si TF absent)
+# 194 tests (dont 75 skippés si TF absent — FallDetectionPipeline + AutoEncoder)
 ```
 
 ## Roadmap Forge
@@ -197,3 +274,4 @@ uv run pytest -v
 | Forge-4 | ✅ | AutoEncoderDetector (Keras Dense) + export TFLite INT8 + C header |
 | Forge-5 | ✅ | Rapport HTML/JSON + train/test split + métriques évaluation |
 | Forge-6 | ✅ | CI GitHub Actions + workflow GPU Scaleway |
+| H1.2 (monitoring/human) | ✅ | FallDetectionPipeline — détection chute IMU, TFLite INT8, 56 tests |

@@ -11,11 +11,15 @@ Zéro malloc. Zéro dépendance. Testable sur PC avant de toucher le hardware.
 
 ```bash
 cd edge-core/tests
+export PATH="/c/msys64/mingw64/bin:$PATH"   # MSYS2 / Windows uniquement
 make
 # Résultats attendus :
 # test_zscore            : 56/56 passed
 # test_drift             : 28/28 passed
 # test_forge_integration : 10/10 passed
+# test_biosignal_hal     : 30/30 passed
+# test_mpu6050_hal       : 25/25 passed
+# test_pti_profile       : 24/24 passed
 ```
 
 ### Build PlatformIO ESP32-CAM
@@ -36,20 +40,31 @@ edge-core/
 ├── include/fovet/
 │   ├── zscore.h              ← API publique Z-Score detector
 │   ├── drift.h               ← API publique EWMA Drift detector
-│   └── hal/
-│       ├── hal_uart.h        ← Interface UART (print, init)
-│       ├── hal_gpio.h        ← Interface GPIO (mode, read, write)
-│       ├── hal_adc.h         ← Interface ADC (read channel)
-│       └── hal_time.h        ← Interface temps (ms, delay)
+│   ├── hal/
+│   │   ├── hal_uart.h        ← Interface UART (print, init)
+│   │   ├── hal_gpio.h        ← Interface GPIO (mode, read, write)
+│   │   ├── hal_adc.h         ← Interface ADC (read channel)
+│   │   ├── hal_time.h        ← Interface temps (ms, delay)
+│   │   ├── fovet_biosignal_hal.h ← Registre HAL biosignaux (IMU, HR, TEMP, ECG)
+│   │   └── mpu6050_hal.h     ← Driver HAL MPU-6050 (accéléromètre/gyroscope I2C)
+│   └── profiles/
+│       └── pti_profile.h     ← Profil PTI : détection chute/immobilité/SOS
 ├── src/
 │   ├── zscore.c              ← Algorithme de Welford (C99 pur)
 │   ├── drift.c               ← Double EWMA fast/slow
+│   ├── biosignal_hal.c       ← Registre HAL biosignaux (4 slots statiques)
+│   ├── mpu6050_hal.c         ← Pilote MPU-6050 I2C via callbacks injectés
+│   ├── profiles/
+│   │   └── pti_profile.c     ← Profil PTI (chute + immobilité + SOS)
 │   └── platform/
 │       └── platform_esp32.cpp ← Implémentation HAL pour ESP32/Arduino
 ├── tests/
 │   ├── test_zscore.c         ← 56 tests : Welford, warm-up, saturation, windowed mode
 │   ├── test_drift.c          ← 28 tests : EWMA, complémentarité zscore/drift
-│   └── test_forge_integration.c ← 10 tests : validation header Forge→Sentinelle
+│   ├── test_forge_integration.c ← 10 tests : validation header Forge→Sentinelle
+│   ├── test_biosignal_hal.c  ← 30 tests : registre, register/read/reset, 4 sources
+│   ├── test_mpu6050_hal.c    ← 25 tests : I2C mock, WHO_AM_I, ±2g, rate, magnitude
+│   └── test_pti_profile.c    ← 24 tests : chute/immobilité/SOS, debounce, callbacks
 ├── examples/
 │   └── esp32/zscore_demo/    ← Demo PlatformIO : sinus + MQTT + Vigie
 └── library.json              ← Manifest PlatformIO (fovet-sentinelle)
@@ -199,6 +214,194 @@ while (1) {
     bool drift = fovet_drift_update(&drift_detector, sample);
     if (spike) handle_spike();
     if (drift)  handle_drift();
+}
+```
+
+---
+
+## API publique — Biosignal HAL
+
+Registre de fonctions de lecture pour les sources de biosignaux. Permet aux algorithmes d'accéder aux capteurs sans couplage direct au hardware.
+
+### Sources supportées
+
+| Enum | Valeur | Capteur |
+|---|---|---|
+| `FOVET_SOURCE_IMU` | 0 | Accéléromètre/gyroscope (IMU) |
+| `FOVET_SOURCE_HR` | 1 | Fréquence cardiaque |
+| `FOVET_SOURCE_TEMP` | 2 | Température corporelle |
+| `FOVET_SOURCE_ECG` | 3 | ECG |
+
+### Fonctions
+
+```c
+#include "fovet/hal/fovet_biosignal_hal.h"
+
+// Enregistrer un driver pour une source
+// fn : fonction de lecture → remplit fovet_biosignal_sample_t
+int fovet_hal_biosignal_register(fovet_biosignal_source_t source, fovet_hal_read_fn_t fn);
+
+// Lire un sample depuis la source enregistrée
+// Retourne FOVET_HAL_OK (0), FOVET_HAL_ERR_NULL (-1), FOVET_HAL_ERR_NOREG (-3)
+int fovet_hal_biosignal_read(fovet_biosignal_source_t source, fovet_biosignal_sample_t *out);
+
+// Effacer tous les drivers enregistrés (tests uniquement)
+void fovet_hal_biosignal_reset(void);
+```
+
+### Struct sample
+
+```c
+typedef union {
+    struct { float ax, ay, az, gx, gy, gz; } imu;   // 24 bytes
+    struct { float bpm, rr_ms; }             hr;     //  8 bytes
+    struct { float celsius; }                temp;   //  4 bytes
+    struct { float mv; }                     ecg;    //  4 bytes
+} fovet_biosignal_value_t;
+
+typedef struct {
+    fovet_biosignal_source_t source;    // Source du sample
+    uint32_t                 timestamp_ms;
+    fovet_biosignal_value_t  value;
+} fovet_biosignal_sample_t;             // sizeof == 32 bytes
+```
+
+---
+
+## API publique — Driver MPU-6050
+
+Pilote HAL pour le MPU-6050 (accéléromètre 3 axes ±2g, gyroscope 3 axes ±250°/s).
+L'accès I2C est entièrement injecté via callbacks — pas de dépendance à Wire.h.
+
+### Fonctions
+
+```c
+#include "fovet/hal/mpu6050_hal.h"
+
+// Injecter les callbacks I2C (appeler avant fovet_hal_imu_init)
+void fovet_mpu6050_set_i2c(fovet_i2c_write_fn_t write_fn, fovet_i2c_read_fn_t read_fn);
+
+// Initialiser le MPU-6050 à l'adresse i2c_addr (0x68 ou 0x69)
+// Vérifie WHO_AM_I, configure DLPF, s'enregistre dans le biosignal HAL
+// Retourne FOVET_HAL_OK, FOVET_MPU_ERR_I2C (-1), FOVET_MPU_ERR_ID (-2)
+int fovet_hal_imu_init(uint8_t i2c_addr);
+
+// Lire un sample IMU (ax/ay/az en g, gx/gy/gz en °/s)
+int fovet_hal_imu_read(fovet_biosignal_sample_t *out);
+
+// Calculer |a| = sqrt(ax²+ay²+az²)
+float fovet_hal_imu_get_magnitude(const fovet_biosignal_sample_t *s);
+
+// Configurer la fréquence d'échantillonnage (10–200 Hz)
+// SMPLRT_DIV = 1000/hz - 1 (DLPF actif → fréquence gyroscope interne = 1 kHz)
+int fovet_hal_imu_set_sample_rate(uint32_t hz);
+```
+
+### Exemple ESP32
+
+```c
+#include "fovet/hal/mpu6050_hal.h"
+
+// Callbacks Wire.h
+static int esp32_i2c_write(uint8_t addr, uint8_t reg, const uint8_t *buf, uint8_t len) {
+    Wire.beginTransmission(addr);
+    Wire.write(reg);
+    for (uint8_t i = 0; i < len; i++) Wire.write(buf[i]);
+    return Wire.endTransmission() == 0 ? 0 : -1;
+}
+static int esp32_i2c_read(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len) {
+    Wire.beginTransmission(addr);
+    Wire.write(reg);
+    Wire.endTransmission(false);
+    Wire.requestFrom(addr, len);
+    for (uint8_t i = 0; i < len; i++) buf[i] = Wire.read();
+    return 0;
+}
+
+// Initialisation
+Wire.begin();
+fovet_mpu6050_set_i2c(esp32_i2c_write, esp32_i2c_read);
+fovet_hal_imu_init(0x68);
+fovet_hal_imu_set_sample_rate(25); // 25 Hz
+
+// Lecture
+fovet_biosignal_sample_t s;
+fovet_hal_biosignal_read(FOVET_SOURCE_IMU, &s);
+float mag = fovet_hal_imu_get_magnitude(&s); // |a| en g
+```
+
+---
+
+## API publique — Profil PTI (Protection du Travailleur Isolé)
+
+Détection en temps réel de trois alertes critiques pour les travailleurs isolés, à partir d'un accéléromètre MPU-6050. Conçu pour tourner dans une boucle principale à ~25 Hz.
+
+| Alerte | Déclenchement |
+|---|---|
+| `FOVET_ALERT_FALL` | Score modèle chute > seuil sur fenêtre glissante 2 s |
+| `FOVET_ALERT_MOTIONLESS` | `|a| < 0.1 g` pendant > 30 s consécutives |
+| `FOVET_ALERT_SOS` | GPIO bouton actif-bas enfoncé |
+
+### Configuration
+
+```c
+#include "fovet/profiles/pti_profile.h"
+
+fovet_pti_config_t cfg = fovet_pti_default_config();
+// Valeurs par défaut :
+// cfg.fall_threshold        = 0.85f     // Seuil score modèle chute [0,1]
+// cfg.motion_threshold_g    = 0.1f      // Seuil immobilité (g)
+// cfg.motionless_timeout_ms = 30000U    // Délai avant alerte immobilité (ms)
+// cfg.sos_gpio_pin          = 0U        // Pin GPIO bouton SOS (actif-bas)
+// cfg.sleep_between_ticks_ms = 40U      // Pause fin de tick (25 Hz)
+```
+
+### Initialisation et boucle
+
+```c
+fovet_pti_ctx_t ctx;
+
+fovet_pti_init(
+    &ctx,
+    &cfg,
+    my_alert_handler,     // void fn(fovet_pti_alert_t, void*)
+    my_fall_score_fn,     // float fn(const float*, uint32_t) → score [0,1]
+    my_gpio_read_fn,      // int   fn(uint8_t pin) → 0=enfoncé, 1=relâché
+    my_sleep_fn,          // void  fn(uint32_t ms) — NULL pour désactiver
+    user_data
+);
+
+// Boucle principale (~25 Hz)
+while (1) {
+    int rc = fovet_pti_tick(&ctx);
+    if (rc != FOVET_HAL_OK) handle_imu_error();
+}
+```
+
+### Séquence d'un tick (`fovet_pti_tick`)
+
+```
+1. Lit IMU via fovet_hal_biosignal_read(FOVET_SOURCE_IMU)
+2. Calcule |a| = sqrt(ax²+ay²+az²)
+3. Pousse |a| dans la fenêtre circulaire (50 samples = 2 s @ 25 Hz)
+4. Si fenêtre pleine → fall_score_fn() ; si score > seuil → FOVET_ALERT_FALL
+5. Si |a| < motion_threshold_g → vérifie timeout → FOVET_ALERT_MOTIONLESS
+   Sinon → réinitialise horloge immobilité
+6. Si gpio_read_fn(pin) == 0 → FOVET_ALERT_SOS (actif-bas)
+7. Si sleep_fn != NULL → sleep(sleep_between_ticks_ms)
+```
+
+### Intégration du modèle TFLite Micro (Forge)
+
+```c
+// Généré par Fovet Forge / FallDetectionPipeline.export()
+#include "fall_detection_model.h"
+
+float my_fall_score_fn(const float *mag, uint32_t n) {
+    // Normalise avec scaler_mean / scaler_std (depuis fall_detection_config.json)
+    // Lance l'inférence TFLite Micro sur les 10 features extraites
+    // Retourne le score sigmoid [0.0, 1.0]
+    return tflite_infer(mag, n);
 }
 ```
 

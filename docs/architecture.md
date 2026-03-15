@@ -174,6 +174,92 @@ data: heartbeat
 
 ---
 
+## Module H1 — Monitoring humain (branch monitoring/human)
+
+Le module H1 étend Fovet Sentinelle vers la surveillance de l'humain (travailleur isolé, défense). Il est développé sur la branche locale `monitoring/human` et n'est pas poussé sur GitHub.
+
+### Architecture H1 — vue d'ensemble
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  EDGE (ESP32)                                                             │
+│                                                                           │
+│  MPU-6050 (I2C)                                                           │
+│     │                                                                     │
+│     ▼ fovet_mpu6050_set_i2c() → fovet_hal_imu_init()                    │
+│  Biosignal HAL (fovet_biosignal_hal.h)                                   │
+│     │  registre statique 4 slots (IMU / HR / TEMP / ECG)                │
+│     │                                                                     │
+│     ▼ fovet_pti_tick() — 25 Hz                                           │
+│  Profil PTI (pti_profile.h)                                              │
+│     ├─ Fenêtre circulaire 50 samples → fall_score_fn()                   │
+│     │     └─ Inférence TFLite Micro (fall_detection.tflite)             │
+│     ├─ Immobilité : |a| < 0.1 g pendant > 30 s                          │
+│     └─ SOS : GPIO actif-bas                                              │
+│     │                                                                     │
+│     ▼ alert_fn(FOVET_ALERT_FALL | MOTIONLESS | SOS)                     │
+│  → Publie sur MQTT : fovet/devices/<id>/alerts                           │
+└──────────────────────────────────────────────────────────────────────────┘
+         │ MQTT
+         ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  VIGIE (dashboard)                                                      │
+│                                                                          │
+│  mqtt-ingestion.ts → INSERT alerts (ptiType = "FALL"|"MOTIONLESS"|"SOS")│
+│                                                                          │
+│  GET /api/pti/fleet         → WorkerMap (grille statuts travailleurs)  │
+│  GET /api/pti/alerts/recent → AlertTimeline (chronologie cross-flotte) │
+└────────────────────────────────────────────────────────────────────────┘
+         ↑
+┌────────────────────────────────────────────────────────────────────────┐
+│  FORGE (offline)                                                         │
+│                                                                          │
+│  FallDetectionPipeline.fit(data) → Dense 10→16→8→1 sigmoid             │
+│  FallDetectionPipeline.export()  → fall_detection.tflite (INT8, < 32KB)│
+│                                  → fall_detection_model.h + .cc         │
+│                                  → fall_detection_config.json           │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### H1.1 — Driver HAL MPU-6050
+
+Le MPU-6050 est accédé via deux callbacks injectés (`fovet_i2c_write_fn_t`, `fovet_i2c_read_fn_t`), découplant le driver de Wire.h et le rendant testable sur PC.
+
+- Registres : `WHO_AM_I=0x75`, `PWR_MGMT_1=0x6B`, `ACCEL_XOUT_H=0x3B`
+- Échelle accéléromètre : 16 384 LSB/g (±2g)
+- Fréquence : `SMPLRT_DIV = 1000/hz - 1`, DLPF actif, plage 10–200 Hz
+- Auto-enregistrement dans le Biosignal HAL à l'init
+
+### H1.2 — FallDetectionPipeline (Forge)
+
+Pipeline Python entraînant un réseau Dense sur un signal IMU synthétique ou réel.
+
+- Entrée : 10 features extraites d'une fenêtre glissante de 50 samples (2 s @ 25 Hz)
+- Architecture : `Input(10) → Dense(16, relu) → Dense(8, relu) → Dense(1, sigmoid)`
+- Spécification : precision ≥ 0.92 et recall ≥ 0.90
+- Export : TFLite INT8 < 32 KB + header C + config JSON (scaler, threshold, window_samples)
+
+### H1.3 — Profil PTI Sentinelle
+
+Profil C99 zéro-malloc résidant entièrement dans `fovet_pti_ctx_t` (stack).
+
+| Alerte | Logique |
+|---|---|
+| FALL | `fall_score_fn(ordered_window) > fall_threshold` ; fenêtre pleine uniquement |
+| MOTIONLESS | `|a| < motion_threshold_g` continu ≥ `motionless_timeout_ms` ; debounce (1 fire / période) |
+| SOS | `gpio_read_fn(pin) == 0` (actif-bas) ; debounce release/press |
+
+### H1.4 — Vue Vigie Flotte PTI
+
+Extension du dashboard Vigie avec une vue dédiée aux travailleurs isolés.
+
+- Champ `Alert.ptiType String?` distingue alertes PTI des alertes z-score (rétrocompatible)
+- `GET /api/pti/fleet` : agrège les alertes actives par type pour chaque travailleur
+- `GET /api/pti/alerts/recent` : timeline cross-flotte pour le superviseur
+- UI : onglet `PTI` → WorkerMap (grille) + AlertTimeline (panneau latéral)
+
+---
+
 ## Décisions architecturales
 
 ### Pourquoi MQTT et non HTTP depuis l'ESP32 ?
@@ -258,7 +344,13 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 |---|---|---|---|
 | Forge-5 | Forge | ✅ | Rapport HTML/JSON + train/test split + métriques |
 | Forge-6 | Forge | ✅ | CI GitHub Actions + Scaleway GPU |
+| H1.1 | Sentinelle | ✅ | Driver HAL MPU-6050 (I2C callbacks, ±2g, DLPF, 25 tests) |
+| H1.2 | Forge | ✅ | FallDetectionPipeline (Dense TFLite INT8 < 32 KB, 56 tests) |
+| H1.3 | Sentinelle | ✅ | Profil PTI (FALL/MOTIONLESS/SOS, fenêtre 50 samples, 24 tests) |
+| H1.4 | Vigie | ✅ | Vue Flotte PTI (WorkerCard/Map/AlertTimeline, 39 tests API) |
 | S10 | Sentinelle | ⏳ ~19/03 | Flash ESP32-CAM (nouvelle carte MB) |
 | S11 | Sentinelle | ⏳ | Capteurs réels : DHT22 (I2C) ou MPU-6050 (accéléromètre) |
 | Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |
-| Prod-security | Vigie | ⏳ | Redis rate limiting, CSP nonce, refresh token |
+| H2.1 | Sentinelle | 🔜 | Driver HAL MAX30102 (Pan-Tompkins BPM, SpO₂) |
+| H2.2 | Forge | 🔜 | Pipeline fatigue HRV (WESAD, Random Forest, AUC ≥ 0.85) |
+| H2.3 | Sentinelle | 🔜 | Profil Sentinelle Fatigue (LED RGB, 3 niveaux) |
