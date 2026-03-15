@@ -8,6 +8,7 @@ import { AlertList } from "@/components/AlertList";
 import { DeviceCard } from "@/components/DeviceCard";
 import { FleetPanel } from "@/components/FleetPanel";
 import FleetHealth from "@/components/FleetHealth";
+import WorkerDetail from "@/components/WorkerDetail";
 
 interface Device {
   id: string;
@@ -22,7 +23,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail" | "sante">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "sante" | "worker">("fleet");
 
   useEffect(() => {
     apiFetch("/api/devices")
@@ -44,6 +45,11 @@ export default function DashboardPage() {
   const selectDevice = (id: string) => {
     setSelectedId(id);
     setView("detail");
+  };
+
+  const selectWorker = (id: string) => {
+    setSelectedId(id);
+    setView("worker");
   };
 
   return (
@@ -140,7 +146,15 @@ export default function DashboardPage() {
 
       {/* Santé view — cross-module fleet health */}
       {view === "sante" && (
-        <FleetHealth />
+        <FleetHealth onSelectWorker={selectWorker} />
+      )}
+
+      {/* Worker view — individual multi-sensor detail */}
+      {view === "worker" && selectedId && (
+        <WorkerDetail
+          deviceId={selectedId}
+          onBack={() => setView("sante")}
+        />
       )}
 
 

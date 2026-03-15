@@ -68,6 +68,7 @@ app.use("/devices/*", cookieAuth);
 app.use("/alerts/*", cookieAuth);
 app.use("/pti/*", cookieAuth);
 app.use("/fleet/*", cookieAuth);
+app.use("/workers/*", cookieAuth);
 
 // -------------------------------------------------------------------------
 // Rate limiting — /auth/token: max 5 attempts per 15 min per IP
@@ -432,6 +433,80 @@ app.get("/pti/alerts/recent", async (c) => {
       acknowledged: a.acknowledged,
     }))
   );
+});
+
+// -------------------------------------------------------------------------
+// GET /api/workers/:deviceId/summary — cross-module summary for one device
+//
+// Returns:
+//  - device metadata
+//  - PTI: unacknowledged alert counts by type + last alert
+//  - FATIGUE: last 50 readings with sensorType HR (for EMA computation on client)
+//  - THERMAL: last 50 readings with sensorType TEMP (for EMA + WBGT on client)
+//  - Recent alerts (last 20, any module) for timeline
+// -------------------------------------------------------------------------
+app.get("/workers/:deviceId/summary", async (c) => {
+  const { deviceId } = c.req.param();
+
+  const device = await prisma.device.findUnique({
+    where: { id: deviceId },
+    select: { id: true, name: true, location: true, mqttClientId: true, active: true },
+  });
+  if (!device) return c.json({ error: "Device not found" }, 404);
+
+  const [ptiAlerts, hrReadings, tempReadings, recentAlerts] = await Promise.all([
+    // Unacknowledged PTI alerts
+    prisma.alert.findMany({
+      where: { deviceId, acknowledged: false, ptiType: { not: null } },
+      orderBy: { timestamp: "desc" },
+      select: { id: true, ptiType: true, timestamp: true },
+    }),
+    // Latest HR readings (FATIGUE module)
+    prisma.reading.findMany({
+      where: { deviceId, sensorType: "HR" },
+      orderBy: { timestamp: "desc" },
+      take: 50,
+      select: { id: true, value: true, timestamp: true },
+    }),
+    // Latest TEMP readings (THERMAL module)
+    prisma.reading.findMany({
+      where: { deviceId, sensorType: "TEMP" },
+      orderBy: { timestamp: "desc" },
+      take: 50,
+      select: { id: true, value: true, value2: true, timestamp: true },
+    }),
+    // Last 20 alerts (any module) for timeline
+    prisma.alert.findMany({
+      where: { deviceId },
+      orderBy: { timestamp: "desc" },
+      take: 20,
+      select: {
+        id: true, timestamp: true, value: true, zScore: true,
+        ptiType: true, alertModule: true, alertLevel: true, acknowledged: true,
+      },
+    }),
+  ]);
+
+  const ptiByType = {
+    FALL:       ptiAlerts.filter((a) => a.ptiType === "FALL").length,
+    MOTIONLESS: ptiAlerts.filter((a) => a.ptiType === "MOTIONLESS").length,
+    SOS:        ptiAlerts.filter((a) => a.ptiType === "SOS").length,
+  };
+
+  return c.json({
+    device,
+    pti: {
+      alertsByType: ptiByType,
+      lastAlertAt: ptiAlerts[0]?.timestamp ?? null,
+    },
+    fatigue: {
+      readings: hrReadings.map((r) => ({ ...r, id: String(r.id) })).reverse(),
+    },
+    thermal: {
+      readings: tempReadings.map((r) => ({ ...r, id: String(r.id) })).reverse(),
+    },
+    recentAlerts,
+  });
 });
 
 // -------------------------------------------------------------------------

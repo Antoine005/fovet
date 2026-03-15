@@ -57,7 +57,7 @@ npm run dev             # http://localhost:3000
 platform-dashboard/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / Santé
+│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / Santé / Worker
 │   │   ├── login/page.tsx              ← Page de connexion
 │   │   ├── api/[[...route]]/route.ts   ← API Hono (toutes les routes REST)
 │   │   └── instrumentation.ts          ← Boot hook — démarre startMqttIngestion()
@@ -66,7 +66,8 @@ platform-dashboard/
 │   │   ├── AlertList.tsx               ← Liste alertes + acquittement + pagination cursor
 │   │   ├── DeviceCard.tsx              ← Carte dispositif (vue détail)
 │   │   ├── FleetPanel.tsx              ← Sparkline compacte + badge alerte (vue flotte)
-│   │   └── FleetHealth.tsx             ← Santé flotte cross-module (alertes par module par dispositif)
+│   │   ├── FleetHealth.tsx             ← Santé flotte cross-module (alertes par module par dispositif)
+│   │   └── WorkerDetail.tsx            ← Vue individuelle cross-module (résumé capteurs + export rapport)
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
@@ -98,6 +99,7 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `GET` | `/api/devices/:id/alerts` | JWT | Alertes non acquittées |
 | `PATCH` | `/api/alerts/:id/ack` | JWT | Acquitter une alerte |
 | `GET` | `/api/fleet/health` | JWT | Santé flotte cross-module (alertes par module par dispositif) |
+| `GET` | `/api/workers/:deviceId/summary` | JWT | Résumé individuel cross-module (lectures HR + TEMP + alertes récentes) |
 
 ### Pagination des lectures
 
