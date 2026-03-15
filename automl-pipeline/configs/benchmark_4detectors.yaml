@@ -1,0 +1,69 @@
+# Fovet Forge — Benchmark comparatif des 4 détecteurs
+#
+# Compare ZScore / IsolationForest / AutoEncoder / LSTMAutoEncoder
+# sur un signal synthétique avec anomalies injectées.
+#
+# Usage :
+#   uv run forge run --config configs/benchmark_4detectors.yaml
+#
+# Pour utiliser un dataset SKAB réel (CSV), remplacer la section data par :
+#   data:
+#     source: csv
+#     path: datasets/skab/valve1/0.csv
+#     columns: [datetime, Accelerometer1RMS, Accelerometer2RMS, Current, Pressure,
+#                Temperature, Thermocouple, Voltage, Volume Flow RateRMS]
+#     timestamp_column: datetime
+
+name: benchmark-4detectors
+description: >
+  Comparaison ZScore / IsolationForest / AutoEncoder dense / LSTM AutoEncoder
+  sur données synthétiques sinusoïdales avec anomalies 5σ injectées (5 % de taux).
+  Train/test split 80/20. Rapport HTML avec table de comparaison.
+
+data:
+  source: synthetic
+  signal: sine
+  n_samples: 2000
+  frequency: 1.0
+  noise_std: 0.15
+  anomaly_rate: 0.05
+  anomaly_magnitude: 5.0
+  columns: [value]
+  seed: 42
+
+split:
+  enabled: true
+  test_ratio: 0.20
+  random_state: 42
+
+detectors:
+  - type: zscore
+    threshold_sigma: 3.0
+    min_samples: 30
+
+  - type: isolation_forest
+    contamination: 0.05
+    n_estimators: 100
+    random_state: 42
+
+  - type: autoencoder
+    latent_dim: 4
+    epochs: 30
+    batch_size: 32
+    threshold_percentile: 95.0
+
+  - type: lstm_autoencoder
+    sequence_length: 20
+    latent_dim: 8
+    epochs: 20
+    batch_size: 32
+    threshold_percentile: 95.0
+
+export:
+  targets: [json_config]
+  output_dir: models/benchmark_4detectors
+
+report:
+  enabled: true
+  format: html
+  output_dir: reports

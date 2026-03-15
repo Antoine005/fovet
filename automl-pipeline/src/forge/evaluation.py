@@ -20,6 +20,56 @@ from forge.detectors.base import DetectionResult
 
 
 @dataclass
+class BenchmarkSummary:
+    """Cross-detector comparison derived from a list of EvaluationMetrics.
+
+    Identifies the best detector for each metric when ground truth is available.
+    Used by the report generator to render a comparison table.
+
+    Attributes:
+        metrics:             All detector metrics in the benchmark.
+        best_by_f1:          Name of the detector with the highest F1, or None.
+        best_by_precision:   Name of the detector with the highest precision, or None.
+        best_by_recall:      Name of the detector with the highest recall, or None.
+    """
+
+    metrics: list[EvaluationMetrics]
+    best_by_f1: str | None = None
+    best_by_precision: str | None = None
+    best_by_recall: str | None = None
+
+    @classmethod
+    def from_metrics(cls, metrics: list[EvaluationMetrics]) -> "BenchmarkSummary":
+        """Build a BenchmarkSummary from a list of EvaluationMetrics.
+
+        Only considers detectors with ground-truth metrics.  Returns a summary
+        with all ``best_by_*`` fields set to ``None`` when no ground truth is
+        available.
+        """
+        scored = [m for m in metrics if m.has_ground_truth and m.f1 is not None]
+
+        best_f1   = max(scored, key=lambda m: m.f1,        default=None)
+        best_prec = max(scored, key=lambda m: m.precision, default=None)
+        best_rec  = max(scored, key=lambda m: m.recall,    default=None)
+
+        return cls(
+            metrics=metrics,
+            best_by_f1        = best_f1.detector_name   if best_f1   else None,
+            best_by_precision = best_prec.detector_name if best_prec else None,
+            best_by_recall    = best_rec.detector_name  if best_rec  else None,
+        )
+
+    def as_dict(self) -> dict:
+        """Serialise to a plain dict (JSON-friendly)."""
+        return {
+            "best_by_f1":        self.best_by_f1,
+            "best_by_precision": self.best_by_precision,
+            "best_by_recall":    self.best_by_recall,
+            "detectors":         [m.as_dict() for m in self.metrics],
+        }
+
+
+@dataclass
 class EvaluationMetrics:
     """Evaluation metrics for one detector run.
 
