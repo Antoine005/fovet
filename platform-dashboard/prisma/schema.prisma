@@ -59,11 +59,14 @@ model Alert {
   value       Float
   zScore      Float
   threshold   Float
+  // PTI profile alert type: "FALL" | "MOTIONLESS" | "SOS" — null for z-score alerts
+  ptiType     String?
   acknowledged Boolean  @default(false)
   acknowledgedAt DateTime?
 
   device      Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@index([deviceId, timestamp(sort: Desc)])
+  @@index([ptiType, timestamp(sort: Desc)])
   @@map("alerts")
 }

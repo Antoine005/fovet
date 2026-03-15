@@ -7,6 +7,8 @@ import { ReadingChart } from "@/components/ReadingChart";
 import { AlertList } from "@/components/AlertList";
 import { DeviceCard } from "@/components/DeviceCard";
 import { FleetPanel } from "@/components/FleetPanel";
+import { WorkerMap } from "@/components/WorkerMap";
+import { AlertTimeline } from "@/components/AlertTimeline";
 
 interface Device {
   id: string;
@@ -21,7 +23,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "pti">("fleet");
 
   useEffect(() => {
     apiFetch("/api/devices")
@@ -79,6 +81,16 @@ export default function DashboardPage() {
               >
                 Détail
               </button>
+              <button
+                onClick={() => setView("pti")}
+                className={`px-3 py-1.5 transition-colors ${
+                  view === "pti"
+                    ? "bg-gray-800 text-white"
+                    : "text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                PTI
+              </button>
             </div>
           )}
           <span className="text-xs text-gray-500 font-mono">
@@ -123,6 +135,31 @@ export default function DashboardPage() {
               onSelect={() => selectDevice(d.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* PTI view — worker fleet status + alert timeline */}
+      {view === "pti" && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2">
+            <section className="mb-2">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+                Carte travailleurs isolés
+              </h2>
+              <WorkerMap
+                onSelectWorker={(id) => {
+                  setSelectedId(id);
+                  setView("detail");
+                }}
+              />
+            </section>
+          </div>
+          <div>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+              Chronologie alertes
+            </h2>
+            <AlertTimeline />
+          </div>
         </div>
       )}
 

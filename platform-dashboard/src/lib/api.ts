@@ -320,6 +320,64 @@ app.get("/devices/:id/alerts", async (c) => {
 });
 
 // -------------------------------------------------------------------------
+// GET /api/pti/fleet — all active workers + their unacknowledged PTI alerts
+// -------------------------------------------------------------------------
+app.get("/pti/fleet", cookieAuth, async (c) => {
+  const devices = await prisma.device.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    include: {
+      alerts: {
+        where: { acknowledged: false, ptiType: { not: null } },
+        orderBy: { timestamp: "desc" },
+      },
+    },
+  });
+
+  return c.json(
+    devices.map((d) => ({
+      id:           d.id,
+      name:         d.name,
+      location:     d.location,
+      mqttClientId: d.mqttClientId,
+      alertsByType: {
+        FALL:       d.alerts.filter((a) => a.ptiType === "FALL").length,
+        MOTIONLESS: d.alerts.filter((a) => a.ptiType === "MOTIONLESS").length,
+        SOS:        d.alerts.filter((a) => a.ptiType === "SOS").length,
+      },
+      lastAlertAt: d.alerts[0]?.timestamp ?? null,
+    }))
+  );
+});
+
+// -------------------------------------------------------------------------
+// GET /api/pti/alerts/recent — recent PTI alerts across all workers
+// ?limit=50 (max 200)
+// -------------------------------------------------------------------------
+app.get("/pti/alerts/recent", cookieAuth, async (c) => {
+  const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
+  const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
+
+  const alerts = await prisma.alert.findMany({
+    where: { ptiType: { not: null } },
+    orderBy: { timestamp: "desc" },
+    take: limit,
+    include: { device: { select: { name: true } } },
+  });
+
+  return c.json(
+    alerts.map((a) => ({
+      id:           a.id,
+      deviceId:     a.deviceId,
+      deviceName:   a.device.name,
+      ptiType:      a.ptiType,
+      timestamp:    a.timestamp,
+      acknowledged: a.acknowledged,
+    }))
+  );
+});
+
+// -------------------------------------------------------------------------
 // PATCH /api/alerts/:id/ack — acknowledge an alert
 // -------------------------------------------------------------------------
 app.patch("/alerts/:id/ack", async (c) => {
