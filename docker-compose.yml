@@ -39,6 +39,17 @@ services:
     ports:
       - "127.0.0.1:1883:1883"   # localhost only
 
+  # ── Redis — rate limiting (décommentez pour activer en prod) ─────────────
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   command: redis-server --save "" --appendonly no   # pas de persistance
+  #   ports:
+  #     - "127.0.0.1:6379:6379"
+  #
+  # Pour activer : décommenter redis + ajouter REDIS_URL dans .env.
+  # Voir src/lib/api.ts pour le guide de migration du rate limiter.
+
   # ── Fovet Vigie dashboard ─────────────────────────────────────────────────
   dashboard:
     build:

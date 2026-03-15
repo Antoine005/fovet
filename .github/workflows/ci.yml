@@ -99,13 +99,35 @@ jobs:
         run: uv run pytest -v --tb=short
 
   # -------------------------------------------------------------------------
+  # smoke — Docker Compose end-to-end test (MQTT → ingestion → REST API)
+  # Builds the dashboard image, spins up postgres + mosquitto, publishes a
+  # synthetic reading via MQTT and asserts it appears through the REST API.
+  # -------------------------------------------------------------------------
+  smoke:
+    name: smoke test (Docker Compose e2e)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run smoke tests
+        run: |
+          docker compose -f docker-compose.test.yml up \
+            --build --abort-on-container-exit --exit-code-from smoke
+        timeout-minutes: 10
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+  # -------------------------------------------------------------------------
   # landing — deploy to GitHub Pages (push to master only)
   # Custom domain: fovet.eu (CNAME record must point to antoine005.github.io)
   # -------------------------------------------------------------------------
   deploy-landing:
     name: Deploy landing (GitHub Pages)
     runs-on: ubuntu-latest
-    needs: [edge-core, dashboard, forge]
+    needs: [edge-core, dashboard, forge, smoke]
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
 
     environment:
