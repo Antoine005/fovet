@@ -240,6 +240,11 @@ class ReportConfig(BaseModel):
 # Top-level pipeline config
 # ---------------------------------------------------------------------------
 
+class PreprocessingConfig(BaseModel):
+    """Optional preprocessing applied before detector training."""
+    normalize: bool = False  # True → StandardScaler fit on train set
+
+
 class PipelineConfig(BaseModel):
     """Root configuration for a Fovet Forge pipeline.
 
@@ -251,6 +256,7 @@ class PipelineConfig(BaseModel):
     description: str = ""
     data: DataConfig
     detectors: list[DetectorConfig] = Field(min_length=1)
+    preprocessing: PreprocessingConfig = Field(default_factory=PreprocessingConfig)
     split: TrainTestSplitConfig = Field(default_factory=TrainTestSplitConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
     report: ReportConfig = Field(default_factory=ReportConfig)
