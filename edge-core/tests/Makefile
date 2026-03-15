@@ -15,7 +15,7 @@ LDFLAGS = -lm
 SRC_DIR         = ..
 FORGE_MODELS    = ../../automl-pipeline/models/demo_zscore
 
-TESTS = test_zscore test_drift test_forge_integration test_biosignal_hal test_mpu6050_hal test_pti_profile test_max30102_hal test_fatigue_profile test_dht22_hal
+TESTS = test_zscore test_drift test_forge_integration test_biosignal_hal test_mpu6050_hal test_pti_profile test_max30102_hal test_fatigue_profile test_dht22_hal test_temp_profile
 
 .PHONY: all build run clean $(addprefix run_,$(TESTS))
 
@@ -88,6 +88,13 @@ test_dht22_hal: $(SRC_DIR)/src/biosignal_hal.c $(SRC_DIR)/src/dht22_hal.c test_d
 
 run_test_dht22_hal: test_dht22_hal
 	@echo "--- test_dht22_hal ---" && ./test_dht22_hal
+
+# --- test_temp_profile ---
+test_temp_profile: $(SRC_DIR)/src/biosignal_hal.c $(SRC_DIR)/src/profiles/temp_profile.c test_temp_profile.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+run_test_temp_profile: test_temp_profile
+	@echo "--- test_temp_profile ---" && ./test_temp_profile
 
 clean:
 	rm -f $(TESTS) *.o
