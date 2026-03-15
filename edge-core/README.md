@@ -15,7 +15,7 @@ make
 # Résultats attendus :
 # test_zscore            : 56/56 passed
 # test_drift             : 28/28 passed
-# test_forge_integration : 10/10 passed
+# test_forge_integration : 12/12 passed
 ```
 
 ### Build PlatformIO ESP32-CAM
