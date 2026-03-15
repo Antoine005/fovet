@@ -57,7 +57,7 @@ npm run dev             # http://localhost:3000
 platform-dashboard/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / PTI
+│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / PTI / Fatigue
 │   │   ├── login/page.tsx              ← Page de connexion
 │   │   ├── api/[[...route]]/route.ts   ← API Hono (toutes les routes REST)
 │   │   └── instrumentation.ts          ← Boot hook — démarre startMqttIngestion()
@@ -68,7 +68,9 @@ platform-dashboard/
 │   │   ├── FleetPanel.tsx              ← Sparkline compacte + badge alerte (vue flotte)
 │   │   ├── WorkerCard.tsx              ← Carte travailleur PTI (FALL/MOTIONLESS/SOS)
 │   │   ├── WorkerMap.tsx               ← Grille flottes PTI + bande résumé statuts
-│   │   └── AlertTimeline.tsx           ← Chronologie cross-flotte alertes PTI
+│   │   ├── AlertTimeline.tsx           ← Chronologie cross-flotte alertes PTI
+│   │   ├── FatigueCard.tsx             ← Carte fatigue par dispositif (EMA BPM + niveau H2.3)
+│   │   └── HRVChart.tsx                ← Graphe BPM + EMA + zones seuils Sentinelle (SSE)
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
@@ -223,6 +225,43 @@ model Alert {
   timestamp      DateTime
 }
 ```
+
+---
+
+## Vue Fatigue — Surveillance H2.3 (Sentinelle)
+
+La vue Fatigue est accessible via l'onglet **Fatigue** dans le dashboard. Elle supervise la fatigue de la flotte à partir des lectures HR (BPM) envoyées par les MCU exécutant `fovet_fatigue_tick()`.
+
+### Logique de classification
+
+Même algorithme que le profil MCU (`fatigue_profile.h`) — calculé côté client sur les dernières lectures :
+
+| Niveau | Condition |
+|---|---|
+| **Normal** | EMA BPM < 72 |
+| **Élevé** | 72 ≤ EMA BPM ≤ 82 |
+| **Critique** | EMA BPM > 82 |
+
+EMA α = 0,05 (≈ 20 échantillons de mémoire), seed = premier sample. Warmup = 25 samples avant classification.
+
+### Composants
+
+| Composant | Description |
+|---|---|
+| `FatigueCard` | Carte compacte par dispositif : niveau (badge couleur), EMA BPM, sparkline avec seuils 72/82 bpm, auto-refresh 15 s |
+| `HRVChart` | Graphe temps réel (SSE + fallback polling) : BPM brut + courbe EMA α=0,05, zones colorées OK/ALERT/CRITICAL, RefLines aux seuils 72 et 82 bpm |
+
+### Codes couleur
+
+| Couleur | Niveau | Condition |
+|---|---|---|
+| 🟢 Vert | Normal | EMA BPM < 72 |
+| 🟡 Ambre | Élevé | 72 ≤ EMA BPM ≤ 82 |
+| 🔴 Rouge clignotant | Critique | EMA BPM > 82 |
+
+### Intégration firmware
+
+La vue Fatigue consomme le flux de lectures standard `/api/devices/:id/readings` — aucun changement de schéma requis. Le champ `value` est interprété comme BPM pour les dispositifs MAX30102.
 
 ---
 

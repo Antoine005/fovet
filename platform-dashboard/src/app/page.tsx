@@ -9,6 +9,8 @@ import { DeviceCard } from "@/components/DeviceCard";
 import { FleetPanel } from "@/components/FleetPanel";
 import { WorkerMap } from "@/components/WorkerMap";
 import { AlertTimeline } from "@/components/AlertTimeline";
+import { FatigueCard } from "@/components/FatigueCard";
+import { HRVChart } from "@/components/HRVChart";
 
 interface Device {
   id: string;
@@ -23,7 +25,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail" | "pti">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue">("fleet");
 
   useEffect(() => {
     apiFetch("/api/devices")
@@ -90,6 +92,16 @@ export default function DashboardPage() {
                 }`}
               >
                 PTI
+              </button>
+              <button
+                onClick={() => setView("fatigue")}
+                className={`px-3 py-1.5 transition-colors ${
+                  view === "fatigue"
+                    ? "bg-gray-800 text-white"
+                    : "text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                Fatigue
               </button>
             </div>
           )}
@@ -161,6 +173,33 @@ export default function DashboardPage() {
             <AlertTimeline />
           </div>
         </div>
+      )}
+
+      {/* Fatigue view — HR monitoring fleet + HRV detail chart */}
+      {view === "fatigue" && devices.length > 0 && (
+        <>
+          <section className="mb-6">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+              Surveillance fatigue — Sentinelle H2.3
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {devices.map((d) => (
+                <FatigueCard
+                  key={d.id}
+                  deviceId={d.id}
+                  deviceName={d.name}
+                  location={d.location}
+                  selected={d.id === selectedId}
+                  onSelect={() => setSelectedId(d.id)}
+                />
+              ))}
+            </div>
+          </section>
+
+          {selectedId && (
+            <HRVChart deviceId={selectedId} />
+          )}
+        </>
       )}
 
       {/* Detail view — single device */}
