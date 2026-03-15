@@ -52,7 +52,8 @@ automl-pipeline/
 │   │   ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
 │   │   └── registry.py     ← build_detectors(configs) factory
 │   └── pipelines/
-│       └── fall_detection.py ← FallDetectionPipeline — fenêtre glissante + Dense + TFLite INT8
+│       ├── fall_detection.py ← FallDetectionPipeline — fenêtre glissante + Dense + TFLite INT8
+│       └── fatigue_hrv.py    ← FatigueHRVPipeline — BVP → HRV features + Random Forest
 ├── configs/
 │   ├── demo_zscore.yaml        ← Démo synthétique sinus + Z-Score
 │   ├── demo_autoencoder.yaml   ← Démo synthétique 2D + AutoEncoder TFLite
@@ -65,7 +66,8 @@ automl-pipeline/
 │   ├── test_autoencoder.py     ← 19 tests AutoEncoderDetector (skip si TF absent)
 │   ├── test_ewma_drift.py      ← 23 tests EWMADriftDetector + export + registry
 │   ├── test_preprocessing.py  ← 23 tests Scaler (fit, transform, export JSON + C header)
-│   └── test_fall_detection.py ← 56 tests FallDetectionPipeline (skip si TF absent)
+│   ├── test_fall_detection.py ← 56 tests FallDetectionPipeline (skip si TF absent)
+│   └── test_fatigue_hrv.py   ← 67 tests FatigueHRVPipeline (sklearn only, toujours actifs)
 ├── models/                     ← Fichiers exportés (gitignored)
 ├── data/                       ← Datasets capteurs (gitignored)
 └── pyproject.toml
@@ -156,6 +158,89 @@ float my_fall_score_fn(const float *mag, uint32_t n) {
     // 2. Inférence TFLite Micro → score sigmoid [0, 1]
     return score;
 }
+```
+
+---
+
+## Pipeline métier — Détection fatigue / HRV (H2.2)
+
+`FatigueHRVPipeline` entraîne un Random Forest sur des features HRV extraites d'un signal BVP (Blood Volume Pulse) et exporte un header C avec les seuils pour Sentinelle (H2.3). Aucune dépendance TensorFlow — sklearn uniquement.
+
+### Principe
+
+```
+Signal BVP (value_1 @ 64 Hz, sensor_type="hr")
+    ↓  _bvp_to_rr → détection pics (scipy.signal.find_peaks) → RR intervals (ms)
+    ↓  Fenêtre glissante 120 s, pas de 60 s
+    ↓  _extract_hrv_features → 7 features HRV par fenêtre
+    ↓  RandomForestClassifier (sklearn) — AUC ≥ 0.85
+    ↓  Proba ∈ [0, 1]  →  > 0.5 = fatigue détectée
+```
+
+### 7 features HRV par fenêtre
+
+| Index | Feature | Description |
+|---|---|---|
+| 0 | `mean_rr` | Intervalle RR moyen (ms) |
+| 1 | `sdnn` | Écart-type des RR (ms) — HRV globale |
+| 2 | `rmssd` | RMS des différences successives (ms) — tonus parasympathique |
+| 3 | `pnn50` | Proportion de \|ΔRR\| > 50 ms |
+| 4 | `mean_hr` | FC moyenne (bpm) = 60 000 / mean_rr |
+| 5 | `cv_rr` | Coefficient de variation = sdnn / mean_rr |
+| 6 | `range_rr` | max_rr - min_rr (ms) |
+
+### Usage
+
+```python
+from forge.pipelines.fatigue_hrv import FatigueHRVPipeline, synthesize_fatigue_data
+
+# Données synthétiques WESAD-like (BVP @ 64 Hz)
+data = synthesize_fatigue_data(n_baseline_s=600, n_stress_s=300)
+
+pipeline = FatigueHRVPipeline(window_s=120, step_s=60, n_estimators=100)
+pipeline.fit(data)
+
+# Évaluation — spec : AUC ≥ 0.85
+report = pipeline.evaluate(data)
+print(report)
+assert report.meets_spec()  # AUC >= 0.85
+
+# Export vers edge-core (header C + config JSON + modèle joblib)
+pipeline.export("models/fatigue_hrv/")
+```
+
+### Artefacts exportés
+
+| Fichier | Usage |
+|---|---|
+| `fatigue_hrv_model.pkl` | Modèle RandomForest sérialisé (joblib) — prédiction batch |
+| `fatigue_hrv_config.json` | `scaler_mean`, `scaler_std`, `feature_importances`, `threshold` |
+| `fatigue_hrv_thresholds.h` | Header C pour Sentinelle MCU (H2.3) — seuils RMSSD / HR |
+
+### Intégration firmware (H2.3)
+
+```c
+#include "fatigue_hrv_thresholds.h"
+
+// Classifier la fatigue en 3 niveaux à partir des features HRV temps réel :
+fovet_fatigue_level_t classify_fatigue(float rmssd_ms, float mean_hr_bpm) {
+    if (rmssd_ms > FOVET_FATIGUE_RMSSD_OK)    return FOVET_FATIGUE_LEVEL_OK;
+    if (rmssd_ms < FOVET_FATIGUE_RMSSD_ALERT) return FOVET_FATIGUE_LEVEL_CRITICAL;
+    return FOVET_FATIGUE_LEVEL_ALERT;
+}
+```
+
+### Données réelles (WESAD)
+
+```bash
+# Télécharger WESAD (accès académique — https://ubicomp.ifi.lmu.de/pub/datasets/WESAD/)
+# Extraire dans datasets/raw/wesad/ (structure S2/S2.pkl, S3/S3.pkl, ...)
+uv run python -m forge.datasets.download_human_datasets parse wesad \
+    --raw-dir datasets/raw/wesad \
+    --output-dir datasets/human
+# Puis entraîner sur données réelles :
+# df = load_parsed(Path("datasets/human"), "wesad")
+# pipeline.fit(df[df["sensor_type"] == "hr"])
 ```
 
 ## Prétraitement (optionnel)
@@ -260,7 +345,8 @@ static FovetDrift fovet_drift_temperature = {
 
 ```bash
 uv run pytest -v
-# 194 tests (dont 75 skippés si TF absent — FallDetectionPipeline + AutoEncoder)
+# 261 tests (dont 75 skippés si TF absent — FallDetectionPipeline + AutoEncoder)
+# 186 tests toujours actifs (sklearn only)
 ```
 
 ## Roadmap Forge
@@ -275,3 +361,4 @@ uv run pytest -v
 | Forge-5 | ✅ | Rapport HTML/JSON + train/test split + métriques évaluation |
 | Forge-6 | ✅ | CI GitHub Actions + workflow GPU Scaleway |
 | H1.2 (monitoring/human) | ✅ | FallDetectionPipeline — détection chute IMU, TFLite INT8, 56 tests |
+| H2.2 (monitoring/human) | ✅ | FatigueHRVPipeline — BVP→HRV, Random Forest, AUC ≥ 0.85, 67 tests |
