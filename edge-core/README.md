@@ -268,7 +268,30 @@ Tout passe par des fonctions `hal_*` définies dans `include/fovet/hal/`.
 
 ## Demo ESP32-CAM (zscore_demo)
 
-La démo génère un signal sinus synthétique à 100 Hz, injecte une anomalie 5σ toutes les 200 samples, et publie en MQTT vers Fovet Vigie.
+La démo fait tourner **Z-Score et EWMA Drift en parallèle** sur un signal sinus synthétique à 100 Hz, illustrant la complémentarité des deux détecteurs :
+
+| Événement injecté | Fréquence | Détecté par |
+|---|---|---|
+| Spike 5σ soudain | toutes les 200 mesures | **Z-Score** ✓ — Drift ✗ (EWMAs pas perturbés) |
+| Rampe lente +0.05/sample × 100 samples | toutes les 600 mesures | **Drift** ✓ — Z-Score ✗ (Welford absorbe) |
+
+**Format serial CSV :**
+```
+index,value,mean,stddev,drift_mag,spike_det,drift_det,event
+```
+
+**Payload MQTT :**
+```json
+{
+  "value": 0.9877,
+  "mean": 0.0031,
+  "stddev": 0.7071,
+  "zScore": 1.39,
+  "anomaly": false,
+  "driftMag": 0.0012,
+  "driftAlert": false
+}
+```
 
 **Fichier `src/config.h` à créer** (ne pas commiter) :
 ```c
@@ -280,6 +303,10 @@ La démo génère un signal sinus synthétique à 100 Hz, injecte une anomalie 5
 #define MQTT_PASSWORD   "mot_de_passe"
 #define DEVICE_ID       "esp32-cam-001"
 ```
+
+**Utilisation mémoire** (build esp32cam) :
+- RAM : ~14% (46 KB / 320 KB)
+- Flash : ~24% (749 KB / 3 MB)
 
 ---
 
