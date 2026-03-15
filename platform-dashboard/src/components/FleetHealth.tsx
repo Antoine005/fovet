@@ -85,7 +85,11 @@ function ModuleBadge({ label, module }: { label: string; module: ModuleHealth })
 
 const POLL_INTERVAL = 15_000;
 
-export default function FleetHealth() {
+interface FleetHealthProps {
+  onSelectWorker?: (deviceId: string) => void;
+}
+
+export default function FleetHealth({ onSelectWorker }: FleetHealthProps) {
   const [devices, setDevices] = useState<DeviceHealth[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,7 +184,10 @@ export default function FleetHealth() {
             return (
               <div
                 key={d.id}
-                className="flex items-center gap-4 p-4 rounded-lg bg-gray-800 border border-gray-700"
+                className={`flex items-center gap-4 p-4 rounded-lg bg-gray-800 border border-gray-700 ${
+                  onSelectWorker ? "cursor-pointer hover:border-gray-500 transition-colors" : ""
+                }`}
+                onClick={() => onSelectWorker?.(d.id)}
               >
                 {/* Status dot */}
                 <span className={`w-3 h-3 rounded-full shrink-0 ${DOT_STYLES[ws] ?? DOT_STYLES.OK}`} />

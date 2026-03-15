@@ -57,7 +57,7 @@ npm run dev             # http://localhost:3000
 platform-dashboard/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / PTI / Fatigue / Thermique / Santé
+│   │   ├── page.tsx                    ← Dashboard principal — 7 vues : Flotte/Détail/PTI/Fatigue/Thermique/Santé/Worker
 │   │   ├── login/page.tsx              ← Page de connexion
 │   │   ├── api/[[...route]]/route.ts   ← API Hono (toutes les routes REST)
 │   │   └── instrumentation.ts          ← Boot hook — démarre startMqttIngestion()
@@ -73,7 +73,8 @@ platform-dashboard/
 │   │   ├── HRVChart.tsx                ← Graphe BPM + EMA + zones seuils Sentinelle (SSE)
 │   │   ├── TempCard.tsx                ← Carte thermique DHT22 (EMA + WBGT + niveau H3.3)
 │   │   ├── TemperatureChart.tsx        ← Graphe temp + EMA + WBGT + zones COLD/WARN/DANGER
-│   │   └── FleetHealth.tsx             ← Santé flotte cross-module (PTI/FATIGUE/THERMAL par dispositif)
+│   │   ├── FleetHealth.tsx             ← Santé flotte cross-module (PTI/FATIGUE/THERMAL par dispositif)
+│   │   └── WorkerDetail.tsx            ← Vue individuelle multi-capteur (PTI + Fatigue + Thermique + alertes)
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
@@ -108,6 +109,7 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `GET` | `/api/pti/fleet` | JWT | Flotte PTI — tous les travailleurs + alertsByType |
 | `GET` | `/api/pti/alerts/recent` | JWT | Chronologie alertes PTI cross-flotte (max 200) |
 | `GET` | `/api/fleet/health` | JWT | Santé flotte cross-module (PTI/FATIGUE/THERMAL par dispositif) |
+| `GET` | `/api/workers/:deviceId/summary` | JWT | Résumé individuel cross-module (PTI + HR + TEMP + alertes récentes) |
 
 ### Pagination des lectures
 

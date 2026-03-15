@@ -410,28 +410,24 @@ Conception prévue :
 > Axe stratégique : compléter le périmètre *produit* au-delà des modules capteurs.
 > Ces items ne dépendent pas du hardware AD8232 et sont réalisables dans l'état actuel.
 
-### U1 — Alertes unifiées cross-modules
+### U1 — Alertes unifiées cross-modules ✅
 
-**Besoin** : le superviseur ne veut pas regarder 3 onglets séparés (PTI / Fatigue / Thermique) pour savoir si un travailleur est en danger.
+**Implémenté (commit 28936d1)**
 
-**Ce qui manque** : les modules H2 (Fatigue) et H3 (Thermique) ne poussent pas d'alertes dans la table `alerts`. Seul H1 (PTI) le fait. Le Vigie n'a pas de vue synthétique multi-capteur.
+- Migration Prisma : `Alert.alertModule` (PTI/FATIGUE/THERMAL), `Alert.alertLevel` (WARN/DANGER/COLD/CRITICAL)
+- `Reading.sensorType` (IMU/HR/TEMP), `Reading.value2` (humidité %)
+- `mqtt-ingestion.ts` : crée alerte si `level ∈ {WARN,DANGER,COLD,CRITICAL}` + z-score legacy
+- `GET /api/fleet/health` : état agrégé par module par dispositif
+- `FleetHealth.tsx` : vue **Santé** — une ligne par travailleur, badges PTI/FATIGUE/THERMAL
 
-**Travaux** :
-- Étendre `mqtt-ingestion.ts` pour créer une alerte quand `level` = CRITICAL ou DANGER/COLD
-- Ajouter un champ `alertType: "PTI" | "FATIGUE" | "THERMAL"` dans le schéma Prisma
-- Nouvelle vue **Santé flotte** : une ligne par travailleur, icônes PTI + Fatigue + Thermique avec statut agrégé
-- Indicateur global : `OK` / `WATCH` / `ALERT` par travailleur
+### U2 — Vue worker individuelle (multi-capteur) ✅
 
-### U2 — Vue worker individuelle (multi-capteur)
+**Implémenté (commit suivant)**
 
-**Besoin** : pour un travailleur donné, voir toutes ses données physiologiques sur une seule page — PTI + fréquence cardiaque + température — sans naviguer entre onglets.
-
-**Ce qui manque** : chaque onglet est indépendant, le concept de "worker" est fragmenté.
-
-**Travaux** :
-- Composant `WorkerDetail` : PTI status + FatigueCard + TempCard + alertes récentes dans un seul layout
-- Route `GET /api/workers/:deviceId/summary` → agrège statuts cross-module
-- Liaison device → worker (optionnel : `Device.workerName`)
+- `GET /api/workers/:deviceId/summary` : agrège PTI + HR (50 readings) + TEMP (50 readings) + 20 alertes récentes
+- `WorkerDetail.tsx` : layout 3 colonnes (PTI / Fatigue / Thermique) + chronologie alertes cross-module
+- EMA/WBGT calculés côté client (même formules que FatigueCard/TempCard)
+- Navigation depuis `FleetHealth` (clic ligne) et `WorkerMap` (clic carte travailleur)
 
 ### U3 — Notifications sortantes (webhook / email)
 
@@ -600,8 +596,8 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 | H4.1 | Sentinelle | 🟡 | Driver HAL AD8232 (ECG single-lead, R-peaks, RR) |
 | H4.2 | Forge | 🟡 | Pipeline stress combiné (HR + RMSSD + WBGT + accel — WESAD) |
 | H4.3 | Vigie | 🟡 | Vue ECG — tracé temps réel + détection arythmie |
-| U1 | Vigie | 🔜 | Alertes unifiées cross-modules (PTI + Fatigue + Thermique) |
-| U2 | Vigie | 🔜 | Vue worker individuelle multi-capteur |
+| U1 | Vigie | ✅ | Alertes unifiées cross-modules (PTI + Fatigue + Thermique) |
+| U2 | Vigie | ✅ | Vue worker individuelle multi-capteur |
 | U3 | Vigie | 🔜 | Notifications webhook sortantes |
 | U5 | Scripts | 🔜 | Mode démo — injection MQTT synthétique |
 | S10 | Sentinelle | ⏳ | Flash ESP32-CAM (MB de remplacement) |

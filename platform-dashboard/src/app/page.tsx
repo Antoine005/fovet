@@ -14,6 +14,7 @@ import { HRVChart } from "@/components/HRVChart";
 import { TempCard } from "@/components/TempCard";
 import { TemperatureChart } from "@/components/TemperatureChart";
 import FleetHealth from "@/components/FleetHealth";
+import WorkerDetail from "@/components/WorkerDetail";
 
 interface Device {
   id: string;
@@ -28,7 +29,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue" | "thermique" | "sante">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue" | "thermique" | "sante" | "worker">("fleet");
 
   useEffect(() => {
     apiFetch("/api/devices")
@@ -50,6 +51,11 @@ export default function DashboardPage() {
   const selectDevice = (id: string) => {
     setSelectedId(id);
     setView("detail");
+  };
+
+  const selectWorker = (id: string) => {
+    setSelectedId(id);
+    setView("worker");
   };
 
   return (
@@ -181,12 +187,7 @@ export default function DashboardPage() {
               <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
                 Carte travailleurs isolés
               </h2>
-              <WorkerMap
-                onSelectWorker={(id) => {
-                  setSelectedId(id);
-                  setView("detail");
-                }}
-              />
+              <WorkerMap onSelectWorker={selectWorker} />
             </section>
           </div>
           <div>
@@ -254,7 +255,15 @@ export default function DashboardPage() {
 
       {/* Santé view — cross-module fleet health */}
       {view === "sante" && (
-        <FleetHealth />
+        <FleetHealth onSelectWorker={selectWorker} />
+      )}
+
+      {/* Worker view — individual multi-sensor detail */}
+      {view === "worker" && selectedId && (
+        <WorkerDetail
+          deviceId={selectedId}
+          onBack={() => setView("sante")}
+        />
       )}
 
       {/* Detail view — single device */}
