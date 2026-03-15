@@ -29,6 +29,7 @@ class DetectorType(str, Enum):
     zscore = "zscore"
     isolation_forest = "isolation_forest"
     autoencoder = "autoencoder"
+    lstm_autoencoder = "lstm_autoencoder"
     ewma_drift = "ewma_drift"
 
 
@@ -125,6 +126,26 @@ class AutoEncoderDetectorConfig(BaseModel):
     threshold_percentile: float = Field(default=95.0, gt=50, le=100)
 
 
+class LSTMAutoEncoderDetectorConfig(BaseModel):
+    """LSTM autoencoder detector (Keras/TF) — sequence-aware reconstruction error.
+
+    Uses sliding windows of ``sequence_length`` timesteps.  The LSTM encoder
+    compresses each window to a latent vector; the decoder reconstructs it.
+    Anomaly score = MSE between input and reconstruction (averaged over timesteps
+    and features).  Score is assigned to the **last** sample of each window;
+    the first ``sequence_length - 1`` samples receive score 0.
+
+    Exports TFLite (float32 or INT8) + C byte-array header for TFLite Micro.
+    """
+
+    type: Literal[DetectorType.lstm_autoencoder]
+    sequence_length: int = Field(default=30, ge=2)
+    latent_dim: int = Field(default=16, ge=2)
+    epochs: int = Field(default=50, ge=1)
+    batch_size: int = Field(default=32, ge=1)
+    threshold_percentile: float = Field(default=95.0, gt=50, le=100)
+
+
 class EWMADriftDetectorConfig(BaseModel):
     """EWMA drift detector — double EMA for gradual shift detection.
 
@@ -155,7 +176,7 @@ class EWMADriftDetectorConfig(BaseModel):
 
 
 DetectorConfig = Annotated[
-    ZScoreDetectorConfig | IsolationForestDetectorConfig | AutoEncoderDetectorConfig | EWMADriftDetectorConfig,
+    ZScoreDetectorConfig | IsolationForestDetectorConfig | AutoEncoderDetectorConfig | LSTMAutoEncoderDetectorConfig | EWMADriftDetectorConfig,
     Field(discriminator="type"),
 ]
 
@@ -238,7 +259,7 @@ class PipelineConfig(BaseModel):
     def tflite_requires_ml_detector(self) -> PipelineConfig:
         has_tflite = ExportTarget.tflite_micro in self.export.targets
         has_ml = any(
-            d.type in (DetectorType.isolation_forest, DetectorType.autoencoder)
+            d.type in (DetectorType.isolation_forest, DetectorType.autoencoder, DetectorType.lstm_autoencoder)
             for d in self.detectors
         )
         if has_tflite and not has_ml:
