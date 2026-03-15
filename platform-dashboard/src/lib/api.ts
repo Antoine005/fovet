@@ -25,12 +25,20 @@ const REFRESH_TOKEN_TTL = 60 * 60 * 24 * 30;  // 30 days
 export const app = new Hono().basePath("/api");
 
 // -------------------------------------------------------------------------
-// CORS — allow only configured origin
+// CORS — allow one or more configured origins
+//
+// ALLOWED_ORIGIN supports comma-separated values for multi-origin setups:
+//   ALLOWED_ORIGIN=https://vigie.fovet.eu,https://vigie-staging.fovet.eu
 // -------------------------------------------------------------------------
+const _allowedOrigins = (process.env.ALLOWED_ORIGIN ?? "http://localhost:3000")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(
   "/*",
   cors({
-    origin: process.env.ALLOWED_ORIGIN ?? "http://localhost:3000",
+    origin: _allowedOrigins.length === 1 ? _allowedOrigins[0] : _allowedOrigins,
     allowMethods: ["GET", "POST", "PATCH", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
   })

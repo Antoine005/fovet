@@ -425,6 +425,28 @@ describe("POST /api/auth/logout", () => {
 });
 
 // ---------------------------------------------------------------------------
+// CORS — multi-origin ALLOWED_ORIGIN
+// ---------------------------------------------------------------------------
+describe("CORS multi-origin", () => {
+  it("reflects allowed origin in Access-Control-Allow-Origin", async () => {
+    // ALLOWED_ORIGIN in vitest.config.ts: 'http://localhost:3000,https://vigie.fovet.eu'
+    const res = await app.request("/api/health", {
+      headers: { Origin: "https://vigie.fovet.eu" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://vigie.fovet.eu");
+  });
+
+  it("reflects first allowed origin", async () => {
+    const res = await app.request("/api/health", {
+      headers: { Origin: "http://localhost:3000" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3000");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PATCH /api/alerts/:id/ack
 // ---------------------------------------------------------------------------
 describe("PATCH /api/alerts/:id/ack", () => {
