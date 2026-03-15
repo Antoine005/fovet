@@ -311,19 +311,116 @@ describe("GET /api/devices/:id/alerts", () => {
     });
     expect(res.status).toBe(404);
   });
+
+  it("returns envelope with data and pagination", async () => {
+    vi.mocked(prisma.device.findUnique).mockResolvedValue({ id: "d1" } as never);
+    const mockAlerts = [
+      { id: "a1", zScore: 5.1, value: 99.0, timestamp: "2026-01-01T00:00:01Z", acknowledged: false },
+      { id: "a2", zScore: 4.2, value: 88.0, timestamp: "2026-01-01T00:00:00Z", acknowledged: false },
+    ];
+    vi.mocked(prisma.alert.findMany).mockResolvedValue(mockAlerts as never);
+
+    const res = await app.request("/api/devices/d1/alerts", {
+      headers: { Cookie: await cookieToken() },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.pagination).toBeDefined();
+    expect(typeof body.pagination.hasMore).toBe("boolean");
+  });
+
+  it("returns hasMore true when more alerts exist", async () => {
+    vi.mocked(prisma.device.findUnique).mockResolvedValue({ id: "d1" } as never);
+    // limit=2, mock returns 3 rows (limit+1)
+    const rows = Array.from({ length: 3 }, (_, i) => ({
+      id: `a${i}`, zScore: 4.0, value: 1.0,
+      timestamp: "2026-01-01T00:00:00Z", acknowledged: false,
+    }));
+    vi.mocked(prisma.alert.findMany).mockResolvedValue(rows as never);
+
+    const res = await app.request("/api/devices/d1/alerts?limit=2", {
+      headers: { Cookie: await cookieToken() },
+    });
+    const body = await res.json();
+    expect(body.pagination.hasMore).toBe(true);
+    expect(body.pagination.nextCursor).toBe("a1");
+    expect(body.data).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/refresh
+// ---------------------------------------------------------------------------
+describe("POST /api/auth/refresh", () => {
+  async function refreshToken() {
+    const token = await sign(
+      { role: "dashboard", type: "refresh", exp: Math.floor(Date.now() / 1000) + 3600 },
+      SECRET,
+      "HS256"
+    );
+    return `fovet_refresh=${token}`;
+  }
+
+  it("returns 401 when no refresh cookie", async () => {
+    const res = await app.request("/api/auth/refresh", { method: "POST" });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 200 and new access token cookie on valid refresh token", async () => {
+    const res = await app.request("/api/auth/refresh", {
+      method: "POST",
+      headers: { Cookie: await refreshToken() },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ ok: true });
+    const cookie = res.headers.get("set-cookie");
+    expect(cookie).toContain("fovet_token=");
+    expect(cookie).toContain("HttpOnly");
+  });
+
+  it("returns 401 when access token presented as refresh token", async () => {
+    // fovet_refresh cookie contains an access-type token → rejected
+    const accessToken = await sign(
+      { role: "dashboard", type: "access", exp: Math.floor(Date.now() / 1000) + 3600 },
+      SECRET,
+      "HS256"
+    );
+    const res = await app.request("/api/auth/refresh", {
+      method: "POST",
+      headers: { Cookie: `fovet_refresh=${accessToken}` },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 401 with expired refresh token", async () => {
+    const expired = await sign(
+      { role: "dashboard", type: "refresh", exp: Math.floor(Date.now() / 1000) - 1 },
+      SECRET,
+      "HS256"
+    );
+    const res = await app.request("/api/auth/refresh", {
+      method: "POST",
+      headers: { Cookie: `fovet_refresh=${expired}` },
+    });
+    expect(res.status).toBe(401);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // POST /api/auth/logout
 // ---------------------------------------------------------------------------
 describe("POST /api/auth/logout", () => {
-  it("clears the cookie and returns 200", async () => {
+  it("clears both cookies and returns 200", async () => {
     const res = await app.request("/api/auth/logout", { method: "POST" });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ ok: true });
-    const cookie = res.headers.get("set-cookie");
+    // set-cookie header may be a comma-separated list or multiple headers
+    const cookie = res.headers.get("set-cookie") ?? "";
     expect(cookie).toContain("fovet_token=");
+    expect(cookie).toContain("fovet_refresh=");
   });
 });
 
