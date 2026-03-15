@@ -92,16 +92,8 @@ let deviceId = "";
 // ---------------------------------------------------------------------------
 console.log("\n[4] Publish MQTT reading");
 {
-  // Dynamically require mqtt (available in node:20-alpine via npm install)
-  let mqtt;
-  try {
-    mqtt = require("mqtt");
-  } catch {
-    // Install mqtt package at runtime if missing
-    const { execSync } = require("child_process");
-    execSync("npm install --no-save mqtt", { stdio: "inherit" });
-    mqtt = require("mqtt");
-  }
+  // mqtt is pre-installed in scripts/Dockerfile.smoke (npm install -g mqtt@5)
+  const mqtt = require("mqtt");
 
   await new Promise((resolve, reject) => {
     const client = mqtt.connect(MQTT_URL, { connectTimeout: 5000 });

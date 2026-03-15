@@ -30,11 +30,18 @@ interface Props {
   deviceId: string;
 }
 
+const SSE_MAX_RETRIES = 5;
+const SSE_BASE_DELAY_MS = 1_000;
+const SSE_MAX_DELAY_MS = 30_000;
+
 export function ReadingChart({ deviceId }: Props) {
   const [readings, setReadings] = useState<Reading[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"sse" | "polling">("sse");
   const eventSourceRef = useRef<EventSource | null>(null);
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unmountedRef = useRef(false);
 
   const appendReading = useCallback((r: Reading) => {
     setReadings((prev) => {
@@ -58,30 +65,59 @@ export function ReadingChart({ deviceId }: Props) {
       );
   }, [deviceId]);
 
-  // SSE connection — falls back to polling on error
+  // SSE connection with exponential backoff — falls back to polling after
+  // SSE_MAX_RETRIES consecutive failures.
   useEffect(() => {
+    unmountedRef.current = false;
+    retryCountRef.current = 0;
     fetchInitial();
 
-    const es = new EventSource(`/api/devices/${deviceId}/stream`);
-    eventSourceRef.current = es;
-    setMode("sse");
+    function connectSSE() {
+      if (unmountedRef.current) return;
 
-    es.addEventListener("reading", (e: MessageEvent) => {
-      try {
-        appendReading(JSON.parse(e.data) as Reading);
-        setError(null);
-      } catch {
-        // ignore parse errors
-      }
-    });
+      const es = new EventSource(`/api/devices/${deviceId}/stream`);
+      eventSourceRef.current = es;
+      setMode("sse");
 
-    es.onerror = () => {
-      es.close();
-      setMode("polling");
-    };
+      es.addEventListener("reading", (e: MessageEvent) => {
+        try {
+          appendReading(JSON.parse(e.data) as Reading);
+          setError(null);
+          retryCountRef.current = 0; // reset on successful message
+        } catch {
+          // ignore parse errors
+        }
+      });
+
+      es.onerror = () => {
+        es.close();
+        eventSourceRef.current = null;
+
+        if (unmountedRef.current) return;
+
+        retryCountRef.current += 1;
+        if (retryCountRef.current >= SSE_MAX_RETRIES) {
+          setMode("polling");
+          return;
+        }
+
+        const delay = Math.min(
+          SSE_BASE_DELAY_MS * 2 ** (retryCountRef.current - 1),
+          SSE_MAX_DELAY_MS
+        );
+        retryTimerRef.current = setTimeout(connectSSE, delay);
+      };
+    }
+
+    connectSSE();
 
     return () => {
-      es.close();
+      unmountedRef.current = true;
+      if (retryTimerRef.current !== null) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      eventSourceRef.current?.close();
       eventSourceRef.current = null;
     };
   }, [deviceId, fetchInitial, appendReading]);

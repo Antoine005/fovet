@@ -51,8 +51,11 @@ services:
       retries: 20
 
   # One-shot container that runs the smoke test assertions
+  # Uses a pre-built image with mqtt@5 installed (see scripts/Dockerfile.smoke)
   smoke:
-    image: node:20-alpine
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile.smoke
     depends_on:
       dashboard:
         condition: service_healthy
@@ -61,5 +64,5 @@ services:
       MQTT_URL: "mqtt://mosquitto:1883"
       DASHBOARD_PASSWORD: "smoke-password"
     volumes:
-      - ./scripts/smoke-test.mjs:/smoke-test.mjs:ro
-    command: node /smoke-test.mjs
+      - ./scripts/smoke-test.mjs:/app/smoke-test.mjs:ro
+    command: node /app/smoke-test.mjs
