@@ -22,6 +22,7 @@ make
 # test_pti_profile        : 24/24 passed
 # test_max30102_hal       : 23/23 passed
 # test_fatigue_profile    : 27/27 passed
+# test_dht22_hal          : 43/43 passed
 ```
 
 ### Build PlatformIO ESP32-CAM
@@ -49,7 +50,8 @@ edge-core/
 │   │   ├── hal_time.h        ← Interface temps (ms, delay)
 │   │   ├── fovet_biosignal_hal.h ← Registre HAL biosignaux (IMU, HR, TEMP, ECG)
 │   │   ├── mpu6050_hal.h     ← Driver HAL MPU-6050 (accéléromètre/gyroscope I2C)
-│   │   └── max30102_hal.h    ← Driver HAL MAX30102 (fréquence cardiaque + SpO₂)
+│   │   ├── max30102_hal.h    ← Driver HAL MAX30102 (fréquence cardiaque + SpO₂)
+│   │   └── dht22_hal.h       ← Driver HAL DHT22 (température + humidité, single-wire)
 │   └── profiles/
 │       ├── pti_profile.h     ← Profil PTI : détection chute/immobilité/SOS
 │       └── fatigue_profile.h ← Profil Fatigue : classification HRV 3 niveaux + LED RGB
@@ -59,20 +61,22 @@ edge-core/
 │   ├── biosignal_hal.c       ← Registre HAL biosignaux (4 slots statiques)
 │   ├── mpu6050_hal.c         ← Pilote MPU-6050 I2C via callbacks injectés
 │   ├── max30102_hal.c        ← Pilote MAX30102 I2C : Pan-Tompkins simplifié + SpO₂
+│   ├── dht22_hal.c           ← Pilote DHT22 single-wire via callbacks pin/pulse/delay
 │   ├── profiles/
 │   │   ├── pti_profile.c     ← Profil PTI (chute + immobilité + SOS)
 │   │   └── fatigue_profile.c ← Profil Fatigue (EMA BPM + SpO₂ + LED RGB)
 │   └── platform/
 │       └── platform_esp32.cpp ← Implémentation HAL pour ESP32/Arduino
 ├── tests/
-│   ├── test_zscore.c         ← 56 tests : Welford, warm-up, saturation, windowed mode
+│   ├── test_zscore.c         ← 41 tests : Welford, warm-up, saturation, windowed mode
 │   ├── test_drift.c          ← 28 tests : EWMA, complémentarité zscore/drift
 │   ├── test_forge_integration.c ← 10 tests : validation header Forge→Sentinelle
 │   ├── test_biosignal_hal.c  ← 30 tests : registre, register/read/reset, 4 sources
 │   ├── test_mpu6050_hal.c    ← 25 tests : I2C mock, WHO_AM_I, ±2g, rate, magnitude
 │   ├── test_pti_profile.c    ← 24 tests : chute/immobilité/SOS, debounce, callbacks
 │   ├── test_max30102_hal.c   ← 23 tests : init, FIFO, warmup, BPM 60/80, SpO₂, reset
-│   └── test_fatigue_profile.c ← 27 tests : niveaux OK/ALERT/CRITICAL, EMA, SpO₂, LED
+│   ├── test_fatigue_profile.c ← 27 tests : niveaux OK/ALERT/CRITICAL, EMA, SpO₂, LED
+│   └── test_dht22_hal.c      ← 43 tests : pulse mock, T+/T−/T=0, checksum, range, HAL
 ├── examples/
 │   └── esp32/zscore_demo/    ← Demo PlatformIO : sinus + MQTT + Vigie
 └── library.json              ← Manifest PlatformIO (fovet-sentinelle)
@@ -514,6 +518,86 @@ if (rc == FOVET_HAL_OK) {
     float bpm  = s.value.hr.bpm;    // BPM courant
     float spo2 = s.value.hr.spo2;   // SpO₂ %
     float rr   = s.value.hr.rmssd;  // RR moyen (ms)
+}
+```
+
+---
+
+## API publique — Driver DHT22 (H3.1)
+
+Pilote HAL pour le DHT22 (capteur AmbiMate — température ambiante + humidité relative).
+Protocole single-wire 40 bits.  L'accès GPIO + timing est entièrement injecté via callbacks — testable PC sans hardware.
+Enregistre `FOVET_SOURCE_TEMP` dans le biosignal HAL (`value.temp.celsius` + `value.temp.humidity_pct`).
+
+### Codes d'erreur
+
+| Code | Valeur | Description |
+|---|---|---|
+| `FOVET_DHT22_ERR_TIMEOUT`  | `-1` | Timeout pulse — capteur ne répond pas ou ligne bloquée |
+| `FOVET_DHT22_ERR_CHECKSUM` | `-2` | Trame corrompue |
+| `FOVET_DHT22_ERR_RANGE`    | `-3` | Valeur hors plage physique (T: -40..80 °C, H: 0..100 %) |
+| `FOVET_DHT22_ERR_IO`       | `-4` | Callbacks non injectés — appeler `fovet_dht22_set_io()` d'abord |
+
+### Plages valides
+
+| Paramètre | Min | Max |
+|---|---|---|
+| Température | -40 °C | 80 °C |
+| Humidité | 0 % | 100 % |
+
+### Callbacks injectés
+
+```c
+typedef struct {
+    void     (*pin_write)(uint8_t level);                         // Forcer ligne DATA HIGH/LOW
+    uint32_t (*pulse_us)(uint8_t expected_level, uint32_t timeout_us); // Mesure durée impulsion µs
+    void     (*delay_us)(uint32_t us);                            // Attente µs
+} fovet_dht22_io_t;
+```
+
+`pulse_us` retourne 0 en cas de timeout → le driver interprète 0 comme `FOVET_DHT22_ERR_TIMEOUT`.
+
+### Fonctions
+
+```c
+#include "fovet/hal/dht22_hal.h"
+
+// Injecter les callbacks GPIO + timing (appeler avant fovet_dht22_init)
+void fovet_dht22_set_io(const fovet_dht22_io_t *io);
+
+// Initialiser le driver et enregistrer FOVET_SOURCE_TEMP dans le biosignal HAL
+// Retourne FOVET_HAL_OK, FOVET_DHT22_ERR_IO
+int fovet_dht22_init(void);
+
+// Lire un sample directement (sans passer par le biosignal HAL)
+// out->celsius / out->humidity_pct
+// Retourne FOVET_HAL_OK, FOVET_DHT22_ERR_TIMEOUT/-CHECKSUM/-RANGE/-IO
+int fovet_dht22_read(fovet_dht22_reading_t *out);
+
+// Réinitialiser l'état du driver (tests uniquement)
+void fovet_dht22_reset(void);
+```
+
+### Intégration firmware
+
+```c
+// 1. Injecter les callbacks
+fovet_dht22_io_t io = {
+    .pin_write = esp32_gpio_write,   // digitalWrite(DHT_PIN, level)
+    .pulse_us  = esp32_pulse_us,     // pulseIn() wrapper
+    .delay_us  = esp32_delay_us,     // delayMicroseconds()
+};
+fovet_dht22_set_io(&io);
+
+// 2. Enregistrer dans le biosignal HAL
+fovet_dht22_init();
+
+// 3. Lire depuis le biosignal HAL (0.5 Hz max)
+fovet_biosignal_sample_t s;
+int rc = fovet_hal_biosignal_read(FOVET_SOURCE_TEMP, &s);
+if (rc == FOVET_HAL_OK) {
+    float t = s.value.temp.celsius;       // Température ambiante (°C)
+    float h = s.value.temp.humidity_pct;  // Humidité relative (%)
 }
 ```
 

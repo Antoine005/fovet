@@ -94,9 +94,10 @@ typedef union {
         float rmssd; /**< Root mean square of successive RR diffs   */
     } hr;
 
-    /** Skin / body temperature. */
+    /** Skin / body / ambient temperature + humidity (DHT22, NTC, etc.). */
     struct {
-        float celsius; /**< Temperature in degrees Celsius */
+        float celsius;      /**< Temperature in degrees Celsius           */
+        float humidity_pct; /**< Relative humidity in percent (0–100)     */
     } temp;
 
     /** Single-lead ECG. */
