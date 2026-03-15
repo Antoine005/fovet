@@ -280,9 +280,12 @@ pytestmark_tf = pytest.mark.skipif(not _TF_OK, reason="tensorflow not installed"
 @pytest.fixture(scope="module")
 def fitted_pipeline():
     """Train once for the whole module — expensive."""
+    import tensorflow as tf
+    tf.random.set_seed(42)
     from forge.pipelines.fall_detection import FallDetectionPipeline
-    data = synthesize_fall_data(n_normal=800, n_fall=200, rng=np.random.default_rng(1))
-    pipeline = FallDetectionPipeline(epochs=10, window_samples=50, step_samples=25)
+    # Balanced classes (500/500) to ensure the model learns to predict falls
+    data = synthesize_fall_data(n_normal=500, n_fall=500, rng=np.random.default_rng(1))
+    pipeline = FallDetectionPipeline(epochs=15, window_samples=50, step_samples=25)
     pipeline.fit(data, verbose=0)
     return pipeline
 
