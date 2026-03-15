@@ -13,6 +13,7 @@ import { FatigueCard } from "@/components/FatigueCard";
 import { HRVChart } from "@/components/HRVChart";
 import { TempCard } from "@/components/TempCard";
 import { TemperatureChart } from "@/components/TemperatureChart";
+import FleetHealth from "@/components/FleetHealth";
 
 interface Device {
   id: string;
@@ -27,7 +28,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue" | "thermique">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue" | "thermique" | "sante">("fleet");
 
   useEffect(() => {
     apiFetch("/api/devices")
@@ -114,6 +115,16 @@ export default function DashboardPage() {
                 }`}
               >
                 Thermique
+              </button>
+              <button
+                onClick={() => setView("sante")}
+                className={`px-3 py-1.5 transition-colors ${
+                  view === "sante"
+                    ? "bg-gray-800 text-white"
+                    : "text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                Santé
               </button>
             </div>
           )}
@@ -239,6 +250,11 @@ export default function DashboardPage() {
             <TemperatureChart deviceId={selectedId} />
           )}
         </>
+      )}
+
+      {/* Santé view — cross-module fleet health */}
+      {view === "sante" && (
+        <FleetHealth />
       )}
 
       {/* Detail view — single device */}

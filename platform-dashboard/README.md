@@ -57,7 +57,7 @@ npm run dev             # http://localhost:3000
 platform-dashboard/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / PTI / Fatigue / Thermique
+│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / PTI / Fatigue / Thermique / Santé
 │   │   ├── login/page.tsx              ← Page de connexion
 │   │   ├── api/[[...route]]/route.ts   ← API Hono (toutes les routes REST)
 │   │   └── instrumentation.ts          ← Boot hook — démarre startMqttIngestion()
@@ -72,7 +72,8 @@ platform-dashboard/
 │   │   ├── FatigueCard.tsx             ← Carte fatigue par dispositif (EMA BPM + niveau H2.3)
 │   │   ├── HRVChart.tsx                ← Graphe BPM + EMA + zones seuils Sentinelle (SSE)
 │   │   ├── TempCard.tsx                ← Carte thermique DHT22 (EMA + WBGT + niveau H3.3)
-│   │   └── TemperatureChart.tsx        ← Graphe temp + EMA + WBGT + zones COLD/WARN/DANGER
+│   │   ├── TemperatureChart.tsx        ← Graphe temp + EMA + WBGT + zones COLD/WARN/DANGER
+│   │   └── FleetHealth.tsx             ← Santé flotte cross-module (PTI/FATIGUE/THERMAL par dispositif)
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
@@ -80,9 +81,9 @@ platform-dashboard/
 │       ├── mqtt-ingestion.ts           ← Subscribe MQTT → insertion PostgreSQL + emit
 │       └── prisma.ts                   ← PrismaClient singleton
 ├── prisma/
-│   └── schema.prisma                   ← Modèles Device, Reading (BigInt id), Alert (ptiType)
+│   └── schema.prisma                   ← Modèles Device, Reading (BigInt id, sensorType, value2), Alert (ptiType, alertModule, alertLevel)
 ├── src/__tests__/
-│   └── api.test.ts                     ← 39 tests Vitest
+│   └── api.test.ts                     ← 52 tests Vitest
 └── .env.example                        ← Template variables d'environnement
 ```
 
@@ -106,6 +107,7 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `PATCH` | `/api/alerts/:id/ack` | JWT | Acquitter une alerte |
 | `GET` | `/api/pti/fleet` | JWT | Flotte PTI — tous les travailleurs + alertsByType |
 | `GET` | `/api/pti/alerts/recent` | JWT | Chronologie alertes PTI cross-flotte (max 200) |
+| `GET` | `/api/fleet/health` | JWT | Santé flotte cross-module (PTI/FATIGUE/THERMAL par dispositif) |
 
 ### Pagination des lectures
 
@@ -205,14 +207,16 @@ model Device {
 }
 
 model Reading {
-  id        BigInt   @id @default(autoincrement())  // BigInt pour cursor pagination
-  deviceId  String
-  value     Float
-  mean      Float
-  stddev    Float
-  zScore    Float
-  isAnomaly Boolean
-  timestamp DateTime
+  id         BigInt   @id @default(autoincrement())  // BigInt pour cursor pagination
+  deviceId   String
+  value      Float                     // Valeur principale (temp °C, BPM, accel g)
+  value2     Float?                    // Valeur secondaire (humidité % pour TEMP)
+  mean       Float
+  stddev     Float
+  zScore     Float
+  isAnomaly  Boolean
+  sensorType String?                   // "IMU" | "HR" | "TEMP"
+  timestamp  DateTime
 }
 
 model Alert {
@@ -221,7 +225,9 @@ model Alert {
   value          Float
   zScore         Float
   threshold      Float
-  ptiType        String?   // "FALL" | "MOTIONLESS" | "SOS" — null pour alertes z-score
+  ptiType        String?   // "FALL" | "MOTIONLESS" | "SOS" — null pour alertes non-PTI
+  alertModule    String?   // "PTI" | "FATIGUE" | "THERMAL" — null pour alertes z-score legacy
+  alertLevel     String?   // "WARN" | "DANGER" | "COLD" | "CRITICAL"
   acknowledged   Boolean   @default(false)
   acknowledgedAt DateTime?
   timestamp      DateTime
@@ -319,10 +325,66 @@ La vue PTI est accessible via l'onglet **PTI** dans le dashboard. Elle supervise
 
 ---
 
+## Vue Santé flotte — U1 (alertes unifiées)
+
+La vue **Santé** (`FleetHealth.tsx`) est accessible via l'onglet **Santé** dans le dashboard. Elle agrège l'état de santé de chaque dispositif sur les trois modules physiologiques actifs.
+
+### Route `/api/fleet/health`
+
+```json
+[
+  {
+    "id": "clxxxx",
+    "name": "Pierre Dupont",
+    "location": "Zone A",
+    "mqttClientId": "pti-001",
+    "modules": {
+      "PTI":     { "status": "CRITICAL", "count": 1, "lastAt": "2026-03-15T10:00:00.000Z" },
+      "FATIGUE": { "status": "WARN",     "count": 2, "lastAt": "2026-03-15T09:55:00.000Z" },
+      "THERMAL": { "status": "OK",       "count": 0, "lastAt": null }
+    }
+  }
+]
+```
+
+`status` suit la table de priorité Sentinelle :
+
+| Module | CRITICAL | DANGER | WARN | OK |
+|---|---|---|---|---|
+| PTI | FALL ou SOS actif | — | MOTIONLESS actif | Aucune alerte |
+| FATIGUE | `alertLevel=CRITICAL` | `alertLevel=DANGER` | `alertLevel=WARN` | Aucune alerte |
+| THERMAL | — | `alertLevel=DANGER` | `alertLevel=WARN` ou `COLD` | Aucune alerte |
+
+### Champs schema étendus (migration `add_alert_module_sensor_type`)
+
+- `Reading.sensorType` (`"IMU" | "HR" | "TEMP"`) — module producteur
+- `Reading.value2` — valeur secondaire (humidité % pour TEMP)
+- `Alert.alertModule` (`"PTI" | "FATIGUE" | "THERMAL"`) — module responsable de l'alerte
+- `Alert.alertLevel` (`"WARN" | "DANGER" | "COLD" | "CRITICAL"`) — niveau Sentinelle
+
+### Payload MQTT étendu (Sentinelle → Vigie)
+
+```json
+{
+  "value": 38.5,
+  "mean": 35.1,
+  "stddev": 1.2,
+  "zScore": 2.8,
+  "anomaly": false,
+  "sensorType": "TEMP",
+  "level": "DANGER",
+  "value2": 75.0
+}
+```
+
+Les champs `sensorType`, `level`, `value2` sont optionnels — les firmwares existants fonctionnent sans modification.
+
+---
+
 ## Tests
 
 ```bash
-npm run test          # Vitest — 39 tests
+npm run test          # Vitest — 52 tests
 npm run test:coverage # Avec couverture
 ```
 
