@@ -174,6 +174,45 @@ data: heartbeat
 
 ---
 
+## Backlog orienté utilisateur
+
+> Axe stratégique : compléter le périmètre *produit* au-delà des modules capteurs.
+
+### U1 — Alertes unifiées cross-modules ✅
+
+- Migration Prisma : `Alert.alertModule`, `Alert.alertLevel` (WARN/DANGER/COLD/CRITICAL)
+- `Reading.sensorType`, `Reading.value2`
+- `mqtt-ingestion.ts` : crée alerte si `level ∈ {WARN,DANGER,COLD,CRITICAL}` + z-score legacy
+- `GET /api/fleet/health` : état agrégé par module par dispositif
+- `FleetHealth.tsx` : vue **Santé** — une ligne par dispositif, badges par module
+
+### U2 — Vue worker individuelle (multi-capteur) ✅
+
+- `GET /api/workers/:deviceId/summary` : agrège lectures HR + TEMP (50 each) + 20 alertes récentes
+- `WorkerDetail.tsx` : résumé cross-module + chronologie alertes + export rapport
+- Navigation depuis `FleetHealth` (clic ligne)
+
+### U3 — Notifications sortantes (webhook) ✅
+
+- Variable `.env` : `ALERT_WEBHOOK_URL` + `ALERT_WEBHOOK_MIN_LEVEL`
+- Dans `mqtt-ingestion.ts` : POST fire-and-forget sur chaque alerte
+- Payload : `{ deviceId, deviceName, alertModule, alertLevel, timestamp }`
+
+### U4 — Export de session ✅
+
+- `GET /api/devices/:id/report?from=&to=&format=json|csv`
+- JSON : stats par module + liste alertes | CSV : lectures brutes
+- Cap 7 jours, défaut 8h
+
+### U5 — Mode démo MQTT ✅
+
+- `scripts/demo_mqtt.py` : 3 flux (IMU 1Hz / HR 0.5Hz / TEMP 0.33Hz)
+- Welford + EMA + WBGT Stull (2011) ; anomalies injectées périodiquement
+- Usage : `uv run --with paho-mqtt --with python-dotenv scripts/demo_mqtt.py`
+
+---
+
+
 ## Décisions architecturales
 
 ### Pourquoi MQTT et non HTTP depuis l'ESP32 ?
@@ -258,6 +297,7 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 |---|---|---|---|
 | Forge-5 | Forge | ✅ | Rapport HTML/JSON + train/test split + métriques |
 | Forge-6 | Forge | ✅ | CI GitHub Actions + Scaleway GPU |
+| U1–U5 | Vigie/Scripts | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT |
 | S10 | Sentinelle | ⏳ ~19/03 | Flash ESP32-CAM (nouvelle carte MB) |
 | S11 | Sentinelle | ⏳ | Capteurs réels : DHT22 (I2C) ou MPU-6050 (accéléromètre) |
 | Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |
