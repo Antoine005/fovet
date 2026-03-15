@@ -34,18 +34,22 @@ model Device {
 // Time-series table — will be converted to TimescaleDB hypertable in prod
 // -------------------------------------------------------------------------
 model Reading {
-  id        BigInt    @id @default(autoincrement())
-  deviceId  String
-  timestamp DateTime  @default(now())
-  value     Float                       // Raw sensor value
-  mean      Float                       // Running mean at time of reading
-  stddev    Float                       // Running stddev at time of reading
-  zScore    Float                       // |value - mean| / stddev
-  isAnomaly Boolean   @default(false)
+  id         BigInt    @id @default(autoincrement())
+  deviceId   String
+  timestamp  DateTime  @default(now())
+  value      Float                       // Raw sensor value (primary — temp °C, BPM, accel g)
+  value2     Float?                      // Secondary value — humidity % (TEMP module)
+  mean       Float                       // Running mean at time of reading
+  stddev     Float                       // Running stddev at time of reading
+  zScore     Float                       // |value - mean| / stddev
+  isAnomaly  Boolean   @default(false)
+  // Module that produced this reading: "IMU" | "HR" | "TEMP" | null (legacy/unknown)
+  sensorType String?
 
   device    Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@index([deviceId, timestamp(sort: Desc)])
+  @@index([deviceId, sensorType, timestamp(sort: Desc)])
   @@map("readings")
 }
 
@@ -59,11 +63,19 @@ model Alert {
   value       Float
   zScore      Float
   threshold   Float
+  // PTI profile alert type: "FALL" | "MOTIONLESS" | "SOS" — null for non-PTI alerts
+  ptiType     String?
+  // Module that raised this alert: "PTI" | "FATIGUE" | "THERMAL" — null for legacy z-score alerts
+  alertModule String?
+  // Severity level from Sentinelle profile: "WARN" | "DANGER" | "COLD" | "CRITICAL"
+  alertLevel  String?
   acknowledged Boolean  @default(false)
   acknowledgedAt DateTime?
 
   device      Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@index([deviceId, timestamp(sort: Desc)])
+  @@index([ptiType, timestamp(sort: Desc)])
+  @@index([alertModule, timestamp(sort: Desc)])
   @@map("alerts")
 }

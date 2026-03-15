@@ -7,6 +7,7 @@ import { ReadingChart } from "@/components/ReadingChart";
 import { AlertList } from "@/components/AlertList";
 import { DeviceCard } from "@/components/DeviceCard";
 import { FleetPanel } from "@/components/FleetPanel";
+import FleetHealth from "@/components/FleetHealth";
 
 interface Device {
   id: string;
@@ -21,7 +22,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "sante">("fleet");
 
   useEffect(() => {
     apiFetch("/api/devices")
@@ -79,6 +80,16 @@ export default function DashboardPage() {
               >
                 Détail
               </button>
+              <button
+                onClick={() => setView("sante")}
+                className={`px-3 py-1.5 transition-colors ${
+                  view === "sante"
+                    ? "bg-gray-800 text-white"
+                    : "text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                Santé
+              </button>
             </div>
           )}
           <span className="text-xs text-gray-500 font-mono">
@@ -125,6 +136,13 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+
+
+      {/* Santé view — cross-module fleet health */}
+      {view === "sante" && (
+        <FleetHealth />
+      )}
+
 
       {/* Detail view — single device */}
       {view === "detail" && devices.length > 0 && (
