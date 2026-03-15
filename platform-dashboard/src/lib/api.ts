@@ -52,6 +52,13 @@ app.use("/alerts/*", cookieAuth);
 
 // -------------------------------------------------------------------------
 // In-memory rate limiter — /auth/token: max 5 attempts per 15 min per IP
+//
+// NOTE (prod): replace with Redis-backed rate limiter before multi-instance
+// deployment. The in-memory Map is not shared across Node.js workers/pods.
+// Migration path:
+//   1. Add REDIS_URL to .env + docker-compose.yml
+//   2. Replace loginBucket with `ioredis` INCR + EXPIRE on key `rl:auth:<ip>`
+//   3. Remove the loginBucket.size > 500 cleanup loop
 // -------------------------------------------------------------------------
 export const loginBucket = new Map<string, { count: number; expiresAt: number }>();
 

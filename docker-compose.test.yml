@@ -1,0 +1,65 @@
+# Fovet Vigie — Integration smoke test stack
+# Usage: scripts/smoke-test.sh
+#
+# Spins up postgres + mosquitto + dashboard with test credentials,
+# publishes a synthetic MQTT reading, then verifies it appears via REST API.
+# No volume mounts needed — everything is ephemeral.
+
+services:
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fovet_test
+      POSTGRES_PASSWORD: fovet_test
+      POSTGRES_DB: fovet_vigie_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fovet_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    command: mosquitto -c /mosquitto/config/mosquitto.conf
+    volumes:
+      - ./mosquitto/mosquitto.test.conf:/mosquitto/config/mosquitto.conf:ro
+
+  dashboard:
+    build:
+      context: ./platform-dashboard
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    environment:
+      DATABASE_URL: "postgresql://fovet_test:fovet_test@db:5432/fovet_vigie_test"
+      JWT_SECRET: "smoke-test-secret-32-chars-ok-xx"
+      DASHBOARD_PASSWORD: "smoke-password"
+      ALLOWED_ORIGIN: "http://localhost:3000"
+      MQTT_BROKER_URL: "mqtt://mosquitto:1883"
+      MQTT_USERNAME: ""
+      MQTT_PASSWORD: ""
+    ports:
+      - "13000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot container that runs the smoke test assertions
+  smoke:
+    image: node:20-alpine
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    environment:
+      DASHBOARD_URL: "http://dashboard:3000"
+      MQTT_URL: "mqtt://mosquitto:1883"
+      DASHBOARD_PASSWORD: "smoke-password"
+    volumes:
+      - ./scripts/smoke-test.mjs:/smoke-test.mjs:ro
+    command: node /smoke-test.mjs
