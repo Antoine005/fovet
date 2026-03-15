@@ -66,6 +66,8 @@ const cookieAuth: MiddlewareHandler = async (c, next) => {
 
 app.use("/devices/*", cookieAuth);
 app.use("/alerts/*", cookieAuth);
+app.use("/pti/*", cookieAuth);
+app.use("/fleet/*", cookieAuth);
 
 // -------------------------------------------------------------------------
 // Rate limiting — /auth/token: max 5 attempts per 15 min per IP
@@ -317,6 +319,119 @@ app.get("/devices/:id/alerts", async (c) => {
   const nextCursor = hasMore ? data[data.length - 1].id : null;
 
   return c.json({ data, pagination: { limit, hasMore, nextCursor } });
+});
+
+// -------------------------------------------------------------------------
+// GET /api/fleet/health — aggregated cross-module health per active device
+//
+// Returns for each device the count of unacknowledged alerts per module
+// (PTI / FATIGUE / THERMAL) and the most recent alert timestamp per module.
+// Used by the "Santé flotte" view.
+// -------------------------------------------------------------------------
+app.get("/fleet/health", cookieAuth, async (c) => {
+  const devices = await prisma.device.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    include: {
+      alerts: {
+        where: { acknowledged: false },
+        orderBy: { timestamp: "desc" },
+        select: { alertModule: true, alertLevel: true, timestamp: true, ptiType: true },
+      },
+    },
+  });
+
+  return c.json(
+    devices.map((d) => {
+      const byModule = (module: string) => d.alerts.filter((a) => a.alertModule === module);
+
+      const pti      = byModule("PTI");
+      const fatigue  = byModule("FATIGUE");
+      const thermal  = byModule("THERMAL");
+
+      // Worst PTI level: FALL/SOS > MOTIONLESS > none
+      const ptiFall       = pti.some((a) => a.ptiType === "FALL" || a.ptiType === "SOS");
+      const ptiMotionless = pti.some((a) => a.ptiType === "MOTIONLESS");
+      const ptiStatus     = ptiFall ? "CRITICAL" : ptiMotionless ? "WARN" : pti.length > 0 ? "WARN" : "OK";
+
+      // Worst level for FATIGUE / THERMAL: respect Sentinelle level ordering
+      const worstLevel = (alerts: { alertLevel: string | null }[]) => {
+        if (alerts.some((a) => a.alertLevel === "CRITICAL" || a.alertLevel === "DANGER")) return "DANGER";
+        if (alerts.some((a) => a.alertLevel === "WARN" || a.alertLevel === "COLD")) return "WARN";
+        return alerts.length > 0 ? "WARN" : "OK";
+      };
+
+      return {
+        id:           d.id,
+        name:         d.name,
+        location:     d.location,
+        mqttClientId: d.mqttClientId,
+        modules: {
+          PTI:     { status: ptiStatus,              count: pti.length,     lastAt: pti[0]?.timestamp     ?? null },
+          FATIGUE: { status: worstLevel(fatigue),    count: fatigue.length, lastAt: fatigue[0]?.timestamp ?? null },
+          THERMAL: { status: worstLevel(thermal),    count: thermal.length, lastAt: thermal[0]?.timestamp ?? null },
+        },
+      };
+    })
+  );
+});
+
+// -------------------------------------------------------------------------
+// GET /api/pti/fleet — all active workers + their unacknowledged PTI alerts
+// -------------------------------------------------------------------------
+app.get("/pti/fleet", async (c) => {
+  const devices = await prisma.device.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    include: {
+      alerts: {
+        where: { acknowledged: false, ptiType: { not: null } },
+        orderBy: { timestamp: "desc" },
+      },
+    },
+  });
+
+  return c.json(
+    devices.map((d) => ({
+      id:           d.id,
+      name:         d.name,
+      location:     d.location,
+      mqttClientId: d.mqttClientId,
+      alertsByType: {
+        FALL:       d.alerts.filter((a) => a.ptiType === "FALL").length,
+        MOTIONLESS: d.alerts.filter((a) => a.ptiType === "MOTIONLESS").length,
+        SOS:        d.alerts.filter((a) => a.ptiType === "SOS").length,
+      },
+      lastAlertAt: d.alerts[0]?.timestamp ?? null,
+    }))
+  );
+});
+
+// -------------------------------------------------------------------------
+// GET /api/pti/alerts/recent — recent PTI alerts across all workers
+// ?limit=50 (max 200)
+// -------------------------------------------------------------------------
+app.get("/pti/alerts/recent", async (c) => {
+  const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
+  const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
+
+  const alerts = await prisma.alert.findMany({
+    where: { ptiType: { not: null } },
+    orderBy: { timestamp: "desc" },
+    take: limit,
+    include: { device: { select: { name: true } } },
+  });
+
+  return c.json(
+    alerts.map((a) => ({
+      id:           a.id,
+      deviceId:     a.deviceId,
+      deviceName:   a.device.name,
+      ptiType:      a.ptiType,
+      timestamp:    a.timestamp,
+      acknowledged: a.acknowledged,
+    }))
+  );
 });
 
 // -------------------------------------------------------------------------

@@ -6,12 +6,15 @@
  *
  * MQTT message format (JSON):
  * {
- *   "value":   1.2345,
- *   "mean":    0.0012,
- *   "stddev":  0.5432,
- *   "zScore":  2.275,
- *   "anomaly": false,
- *   "ts":      1704067200000   // Unix ms (optional, defaults to server time)
+ *   "value":      1.2345,
+ *   "mean":       0.0012,
+ *   "stddev":     0.5432,
+ *   "zScore":     2.275,
+ *   "anomaly":    false,
+ *   "ts":         1704067200000,   // Unix ms (optional, defaults to server time)
+ *   "sensorType": "TEMP",          // optional: "IMU" | "HR" | "TEMP"
+ *   "level":      "WARN",          // optional: "SAFE" | "WARN" | "DANGER" | "COLD" | "CRITICAL"
+ *   "value2":     65.0             // optional: secondary value (e.g. humidity % for TEMP)
  * }
  *
  * Topic pattern: fovet/devices/<mqttClientId>/readings
@@ -24,6 +27,16 @@ import { emitReading } from "./event-bus";
 const BROKER_URL = process.env.MQTT_BROKER_URL ?? "mqtt://localhost:1883";
 const TOPIC = `${process.env.MQTT_TOPIC_PREFIX ?? "fovet/devices"}/+/readings`;
 
+// Modules that produce alerts beyond z-score anomalies
+const ALERT_MODULES: Record<string, string> = {
+  IMU:  "PTI",
+  HR:   "FATIGUE",
+  TEMP: "THERMAL",
+};
+
+// Levels that trigger an Alert record (in addition to z-score anomalies)
+const ALERT_LEVELS = new Set(["WARN", "DANGER", "COLD", "CRITICAL"]);
+
 interface SensorPayload {
   value: number;
   mean: number;
@@ -31,6 +44,9 @@ interface SensorPayload {
   zScore: number;
   anomaly: boolean;
   ts?: number;
+  sensorType?: string;   // "IMU" | "HR" | "TEMP"
+  level?: string;        // "SAFE" | "WARN" | "DANGER" | "COLD" | "CRITICAL"
+  value2?: number;       // secondary value (e.g. humidity %)
 }
 
 let client: mqtt.MqttClient | null = null;
@@ -105,34 +121,55 @@ export function startMqttIngestion(): void {
       });
       if (!device || !device.active) return;
 
+      // Validate optional numeric fields
+      if (data.value2 !== undefined && (typeof data.value2 !== "number" || !isFinite(data.value2))) {
+        console.warn(`[MQTT] Invalid value2 from ${mqttClientId}`);
+        return;
+      }
+
       // Persist reading
       const reading = await prisma.reading.create({
         data: {
           deviceId: device.id,
           timestamp,
           value: data.value,
+          ...(data.value2 !== undefined && { value2: data.value2 }),
           mean: data.mean,
           stddev: data.stddev,
           zScore: data.zScore,
           isAnomaly: data.anomaly,
+          ...(data.sensorType && { sensorType: data.sensorType }),
         },
       });
 
       // Broadcast to SSE clients
       emitReading(device.id, { ...reading, id: String(reading.id) });
 
-      // If anomaly, create alert
-      if (data.anomaly) {
+      // Create alert when:
+      //   a) legacy z-score anomaly (anomaly: true), OR
+      //   b) Sentinelle profile level requires attention (WARN/DANGER/COLD/CRITICAL)
+      const shouldAlert =
+        data.anomaly ||
+        (data.level !== undefined && ALERT_LEVELS.has(data.level));
+
+      if (shouldAlert) {
+        const alertModule = data.sensorType ? ALERT_MODULES[data.sensorType] ?? null : null;
         await prisma.alert.create({
           data: {
             deviceId: device.id,
             timestamp,
             value: data.value,
             zScore: data.zScore,
-            threshold: 3.0, // TODO: make per-device configurable
+            threshold: 3.0,
+            ...(alertModule && { alertModule }),
+            ...(data.level && { alertLevel: data.level }),
           },
         });
-        console.log(`[MQTT] Anomaly detected on ${mqttClientId} z=${data.zScore.toFixed(2)}`);
+        console.log(
+          `[MQTT] Alert on ${mqttClientId}` +
+          (alertModule ? ` [${alertModule}]` : "") +
+          (data.level ? ` level=${data.level}` : ` z=${data.zScore.toFixed(2)}`)
+        );
       }
     } catch (err) {
       console.error("[MQTT] Processing error:", err);

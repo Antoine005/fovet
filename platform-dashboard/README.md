@@ -57,7 +57,7 @@ npm run dev             # http://localhost:3000
 platform-dashboard/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail
+│   │   ├── page.tsx                    ← Dashboard principal — vue Flotte / Détail / Santé
 │   │   ├── login/page.tsx              ← Page de connexion
 │   │   ├── api/[[...route]]/route.ts   ← API Hono (toutes les routes REST)
 │   │   └── instrumentation.ts          ← Boot hook — démarre startMqttIngestion()
@@ -65,7 +65,8 @@ platform-dashboard/
 │   │   ├── ReadingChart.tsx            ← Graphe Recharts avec SSE + fallback polling
 │   │   ├── AlertList.tsx               ← Liste alertes + acquittement + pagination cursor
 │   │   ├── DeviceCard.tsx              ← Carte dispositif (vue détail)
-│   │   └── FleetPanel.tsx              ← Sparkline compacte + badge alerte (vue flotte)
+│   │   ├── FleetPanel.tsx              ← Sparkline compacte + badge alerte (vue flotte)
+│   │   └── FleetHealth.tsx             ← Santé flotte cross-module (alertes par module par dispositif)
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
@@ -73,9 +74,9 @@ platform-dashboard/
 │       ├── mqtt-ingestion.ts           ← Subscribe MQTT → insertion PostgreSQL + emit
 │       └── prisma.ts                   ← PrismaClient singleton
 ├── prisma/
-│   └── schema.prisma                   ← Modèles Device, Reading (BigInt id), Alert
+│   └── schema.prisma                   ← Modèles Device, Reading (BigInt id, sensorType, value2), Alert (ptiType, alertModule, alertLevel)
 ├── src/__tests__/
-│   └── api.test.ts                     ← 23 tests Vitest
+│   └── api.test.ts                     ← 52 tests Vitest
 └── .env.example                        ← Template variables d'environnement
 ```
 
@@ -96,6 +97,7 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `GET` | `/api/devices/:id/stream` | JWT | Flux SSE temps réel des nouvelles lectures |
 | `GET` | `/api/devices/:id/alerts` | JWT | Alertes non acquittées |
 | `PATCH` | `/api/alerts/:id/ack` | JWT | Acquitter une alerte |
+| `GET` | `/api/fleet/health` | JWT | Santé flotte cross-module (alertes par module par dispositif) |
 
 ### Pagination des lectures
 
@@ -195,14 +197,16 @@ model Device {
 }
 
 model Reading {
-  id        BigInt   @id @default(autoincrement())  // BigInt pour cursor pagination
-  deviceId  String
-  value     Float
-  mean      Float
-  stddev    Float
-  zScore    Float
-  isAnomaly Boolean
-  timestamp DateTime
+  id         BigInt   @id @default(autoincrement())  // BigInt pour cursor pagination
+  deviceId   String
+  value      Float                     // Valeur principale (temp °C, BPM, accel g)
+  value2     Float?                    // Valeur secondaire (humidité % pour TEMP)
+  mean       Float
+  stddev     Float
+  zScore     Float
+  isAnomaly  Boolean
+  sensorType String?                   // "IMU" | "HR" | "TEMP"
+  timestamp  DateTime
 }
 
 model Alert {
@@ -211,6 +215,9 @@ model Alert {
   value          Float
   zScore         Float
   threshold      Float
+  ptiType        String?   // "FALL" | "MOTIONLESS" | "SOS" — null pour alertes non-PTI
+  alertModule    String?   // module responsable : null pour alertes z-score legacy
+  alertLevel     String?   // "WARN" | "DANGER" | "COLD" | "CRITICAL"
   acknowledged   Boolean   @default(false)
   acknowledgedAt DateTime?
   timestamp      DateTime
@@ -219,10 +226,58 @@ model Alert {
 
 ---
 
+## Vue Santé flotte — U1 (alertes unifiées)
+
+La vue **Santé** (`FleetHealth.tsx`) est accessible via l'onglet **Santé** dans le dashboard. Elle agrège l'état de santé de chaque dispositif par module d'alerte.
+
+### Route `/api/fleet/health`
+
+```json
+[
+  {
+    "id": "clxxxx",
+    "name": "Pierre Dupont",
+    "location": "Zone A",
+    "mqttClientId": "pti-001",
+    "modules": {
+      "PTI":     { "status": "CRITICAL", "count": 1, "lastAt": "2026-03-15T10:00:00.000Z" },
+      "FATIGUE": { "status": "WARN",     "count": 2, "lastAt": "2026-03-15T09:55:00.000Z" },
+      "THERMAL": { "status": "OK",       "count": 0, "lastAt": null }
+    }
+  }
+]
+```
+
+### Champs schema étendus (migration `add_alert_module_sensor_type`)
+
+- `Reading.sensorType` — module producteur (ex: `"IMU"`, `"HR"`, `"TEMP"`)
+- `Reading.value2` — valeur secondaire (ex: humidité % pour capteur TEMP)
+- `Alert.alertModule` — module responsable de l'alerte
+- `Alert.alertLevel` (`"WARN" | "DANGER" | "COLD" | "CRITICAL"`) — niveau Sentinelle
+
+### Payload MQTT étendu (Sentinelle → Vigie)
+
+```json
+{
+  "value": 38.5,
+  "mean": 35.1,
+  "stddev": 1.2,
+  "zScore": 2.8,
+  "anomaly": false,
+  "sensorType": "TEMP",
+  "level": "DANGER",
+  "value2": 75.0
+}
+```
+
+Les champs `sensorType`, `level`, `value2` sont optionnels — les firmwares existants fonctionnent sans modification.
+
+---
+
 ## Tests
 
 ```bash
-npm run test          # Vitest — 23 tests
+npm run test          # Vitest — 52 tests
 npm run test:coverage # Avec couverture
 ```
 
