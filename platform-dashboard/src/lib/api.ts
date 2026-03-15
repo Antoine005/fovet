@@ -436,6 +436,139 @@ app.get("/pti/alerts/recent", async (c) => {
 });
 
 // -------------------------------------------------------------------------
+// GET /api/devices/:id/report — session report for compliance / end-of-shift
+//
+// Query params:
+//   from    ISO 8601 start (default: 8 h ago)
+//   to      ISO 8601 end   (default: now)
+//   format  "json" (default) | "csv"
+//
+// JSON response: device info, session stats per module, full alert list
+// CSV  response: flat table of all readings in the window (for Excel/import)
+// -------------------------------------------------------------------------
+app.get("/devices/:id/report", async (c) => {
+  const { id }   = c.req.param();
+  const format   = (c.req.query("format") ?? "json").toLowerCase();
+  const fromStr  = c.req.query("from");
+  const toStr    = c.req.query("to");
+
+  const toDate   = toStr   ? new Date(toStr)   : new Date();
+  const fromDate = fromStr ? new Date(fromStr)  : new Date(toDate.getTime() - 8 * 60 * 60 * 1000);
+
+  if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+    return c.json({ error: "Invalid date — use ISO 8601 format" }, 400);
+  }
+  if (fromDate >= toDate) {
+    return c.json({ error: "'from' must be before 'to'" }, 400);
+  }
+  // Cap window at 7 days to prevent runaway queries
+  if (toDate.getTime() - fromDate.getTime() > 7 * 24 * 60 * 60 * 1000) {
+    return c.json({ error: "Window cannot exceed 7 days" }, 400);
+  }
+
+  const device = await prisma.device.findUnique({
+    where: { id },
+    select: { id: true, name: true, location: true, mqttClientId: true },
+  });
+  if (!device) return c.json({ error: "Device not found" }, 404);
+
+  const [readings, alerts] = await Promise.all([
+    prisma.reading.findMany({
+      where: { deviceId: id, timestamp: { gte: fromDate, lte: toDate } },
+      orderBy: { timestamp: "asc" },
+      select: {
+        id: true, timestamp: true, sensorType: true,
+        value: true, value2: true, mean: true, stddev: true,
+        zScore: true, isAnomaly: true,
+      },
+    }),
+    prisma.alert.findMany({
+      where: { deviceId: id, timestamp: { gte: fromDate, lte: toDate } },
+      orderBy: { timestamp: "asc" },
+      select: {
+        id: true, timestamp: true, value: true, zScore: true,
+        alertModule: true, alertLevel: true, ptiType: true, acknowledged: true,
+      },
+    }),
+  ]);
+
+  // ----- CSV format --------------------------------------------------------
+  if (format === "csv") {
+    const header = "id,timestamp,sensorType,value,value2,mean,stddev,zScore,isAnomaly";
+    const rows = readings.map((r) =>
+      [
+        String(r.id),
+        r.timestamp.toISOString(),
+        r.sensorType ?? "",
+        r.value,
+        r.value2 ?? "",
+        r.mean,
+        r.stddev,
+        r.zScore,
+        r.isAnomaly ? "1" : "0",
+      ].join(",")
+    );
+    const csv      = [header, ...rows].join("\r\n");
+    const filename = `fovet_${device.mqttClientId}_${fromDate.toISOString().slice(0, 10)}.csv`;
+    return new Response(csv, {
+      headers: {
+        "Content-Type":        "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
+    });
+  }
+
+  // ----- JSON format -------------------------------------------------------
+  const durationMin = Math.round((toDate.getTime() - fromDate.getTime()) / 60_000);
+
+  // Stats helper
+  const moduleNames = ["IMU", "HR", "TEMP"] as const;
+  const moduleStats = Object.fromEntries(
+    moduleNames.map((mod) => {
+      const r = readings.filter((x) => x.sensorType === mod);
+      const a = alerts.filter((x)  => x.alertModule === (mod === "IMU" ? "PTI" : mod === "HR" ? "FATIGUE" : "THERMAL"));
+      const vals = r.map((x) => x.value);
+      const stats = vals.length > 0
+        ? {
+            min:  Math.min(...vals),
+            max:  Math.max(...vals),
+            mean: vals.reduce((s, v) => s + v, 0) / vals.length,
+          }
+        : null;
+      return [mod, {
+        readings:  r.length,
+        anomalies: r.filter((x) => x.isAnomaly).length,
+        alerts:    a.length,
+        stats,
+      }];
+    })
+  );
+
+  const alertsByLevel = alerts.reduce<Record<string, number>>((acc, a) => {
+    const key = a.alertLevel ?? "LEGACY";
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return c.json({
+    device,
+    session: {
+      from:            fromDate.toISOString(),
+      to:              toDate.toISOString(),
+      durationMinutes: durationMin,
+    },
+    summary: {
+      totalReadings: readings.length,
+      totalAlerts:   alerts.length,
+      modules:       moduleStats,
+      alertsByLevel,
+    },
+    alerts,
+    generatedAt: new Date().toISOString(),
+  });
+});
+
+// -------------------------------------------------------------------------
 // GET /api/workers/:deviceId/summary — cross-module summary for one device
 //
 // Returns:

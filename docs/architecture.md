@@ -436,16 +436,15 @@ Conception prévue :
 Payload : `{ deviceId, deviceName, alertModule, alertLevel, value, zScore, timestamp }`.
 Compatible n8n, Make, Zapier, Slack Incoming Webhooks.
 
-### U4 — Export de session (rapport travailleur)
+### U4 — Export de session (rapport travailleur) ✅
 
-**Besoin** : à la fin d'un poste, le superviseur veut un rapport synthétique de la session : anomalies détectées, durée en zone de risque, alertes déclenchées.
+**Implémenté**
 
-**Ce qui manque** : aucun endpoint d'export, aucun résumé de session.
-
-**Travaux** :
-- `GET /api/devices/:id/report?from=&to=` → JSON ou CSV
-- Contenu : durée totale, nb lectures, % temps en alerte par module, liste alertes, min/max/mean par valeur
-- Optionnel : export PDF côté client (jsPDF ou html2canvas)
+- `GET /api/devices/:id/report?from=ISO&to=ISO&format=json|csv`
+- JSON : device info, session stats par module (IMU/HR/TEMP), alertsByLevel, liste complète alertes
+- CSV : table plate de toutes les lectures (timestamp, sensorType, value, value2, zScore, isAnomaly…)
+- Cap 7 jours — défaut last 8h
+- `ExportReport` dans `WorkerDetail` : presets (8h / Aujourd'hui / Personnalisé) + boutons JSON + CSV (download via blob URL)
 
 ### U5 — Mode démo / simulation (sans hardware) ✅
 
@@ -602,6 +601,7 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 | U1 | Vigie | ✅ | Alertes unifiées cross-modules (PTI + Fatigue + Thermique) |
 | U2 | Vigie | ✅ | Vue worker individuelle multi-capteur |
 | U3 | Vigie | ✅ | Notifications webhook sortantes |
+| U4 | Vigie | ✅ | Export rapport session JSON + CSV |
 | U5 | Scripts | ✅ | Mode démo — injection MQTT synthétique |
 | S10 | Sentinelle | ⏳ | Flash ESP32-CAM (MB de remplacement) |
 | Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |

@@ -112,6 +112,7 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `GET` | `/api/pti/alerts/recent` | JWT | Chronologie alertes PTI cross-flotte (max 200) |
 | `GET` | `/api/fleet/health` | JWT | Santé flotte cross-module (PTI/FATIGUE/THERMAL par dispositif) |
 | `GET` | `/api/workers/:deviceId/summary` | JWT | Résumé individuel cross-module (PTI + HR + TEMP + alertes récentes) |
+| `GET` | `/api/devices/:id/report` | JWT | Rapport de session `?from=ISO&to=ISO&format=json\|csv` (défaut: 8h, cap 7j) |
 
 ### Pagination des lectures
 
