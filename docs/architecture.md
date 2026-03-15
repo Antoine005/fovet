@@ -15,18 +15,18 @@ Il est composé de trois couches indépendantes qui s'interfacent via des contra
 │                                                                              │
 │   ESP32-CAM               Mosquitto                       Fovet Forge        │
 │   ┌──────────┐            ┌─────────────┐                 ┌──────────────┐   │
-│   │ Sentinelle│  WiFi/    │ Broker MQTT │                 │ Python AutoML│   │
-│   │ (C99)    │──MQTT──→  │ port 1883   │                 │              │   │
-│   │          │            └──────┬──────┘                 │ ZScore       │   │
-│   │ zscore.h │                   │ subscribe              │ IsoForest    │   │
-│   │ 16 bytes │                   ▼                        │ AutoEncoder  │   │
-│   │ RAM      │            ┌─────────────┐                 └──────┬───────┘   │
-│   └──────────┘            │ Fovet Vigie │                        │           │
-│         ▲                 │ (Next.js)   │                 export ↓           │
-│         │                 │ PostgreSQL  │          fovet_zscore_config.h     │
-│         │                 │ REST API    │          autoencoder.tflite        │
-│         │                 └─────────────┘                        │           │
-│         └──────────────────────────────────────────────────────--┘           │
+│   │Sentinelle│  WiFi/    │ Broker MQTT │                 │ Python AutoML│   │
+│   │ (C99)   │──MQTT──→  │ port 1883   │                 │              │   │
+│   │         │            └──────┬──────┘                 │ ZScore       │   │
+│   │ zscore.h│                   │ subscribe              │ IsoForest    │   │
+│   │ 20 bytes│                   ▼                        │ AutoEncoder  │   │
+│   │ drift.h │            ┌─────────────┐                 └──────┬───────┘   │
+│   │ 24 bytes│            │ Fovet Vigie │                        │           │
+│   └─────────┘            │ (Next.js)   │                 export ↓           │
+│         ▲                │ PostgreSQL  │          fovet_zscore_config.h     │
+│         │                │ REST + SSE  │          autoencoder.tflite        │
+│         │                └─────────────┘                        │           │
+│         └──────────────────────────────────────────────────────-┘           │
 │              firmware mis à jour avec stats précalibrées                     │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -41,6 +41,7 @@ Il est composé de trois couches indépendantes qui s'interfacent via des contra
 ESP32-CAM
   │  Lit capteur (ADC / I2C)
   │  Appelle fovet_zscore_update(ctx, sample)
+  │  Appelle fovet_drift_update(ctx, sample)
   │  Si anomalie → LED clignote
   │  Publie JSON sur MQTT:
   │    topic : fovet/devices/esp32-cam-001/readings
@@ -52,17 +53,18 @@ Mosquitto broker (LAN ou Scaleway)
   ▼
 Fovet Vigie (instrumentation.ts → startMqttIngestion())
   │  Subscribe fovet/devices/+/readings
-  │  Extrait deviceId du topic
-  │  INSERT INTO readings (value, mean, stddev, zScore, anomaly)
+  │  INSERT INTO readings (value, mean, stddev, zScore, isAnomaly)
   │  Si anomaly=true → INSERT INTO alerts
+  │  emitReading() → EventEmitter → clients SSE connectés
   ▼
 PostgreSQL / TimescaleDB
   │  TimescaleDB en prod (compression + requêtes temporelles)
   │  PostgreSQL en dev local
   ▼
-Dashboard (page.tsx)
-  Graphes Recharts : readings par device
-  Liste alertes + bouton acquittement
+Dashboard (page.tsx + ReadingChart.tsx)
+  │  SSE EventSource : lectures en temps réel
+  │  Fallback polling 5 s si SSE indisponible
+  Graphes Recharts, liste alertes + bouton acquittement
 ```
 
 ### 2. Calibration hors-ligne (Forge → ESP32)
@@ -74,19 +76,21 @@ Données sources
 Fovet Forge
   │  uv run forge run --config configs/mon_capteur.yaml
   │  1. Charge les données (load_data)
-  │  2. Crée les détecteurs (build_detectors)
-  │  3. Fit sur données propres (sans anomalies)
-  │  4. Export vers models/
+  │  2. Normalisation optionnelle (StandardScaler)
+  │  3. Crée les détecteurs (build_detectors)
+  │  4. Fit sur données propres (sans anomalies)
+  │  5. Export vers models/
   ▼
 Artefacts exportés
   ├── fovet_zscore_config.h       → firmware ESP32 (#include direct)
-  ├── isolation_forest_config.json → documentation / rapport client
+  ├── scaler_params.json          → paramètres normalisation (si normalize: true)
+  ├── isolation_forest_config.json → cloud/gateway uniquement
   ├── autoencoder.tflite          → TFLite Micro sur ESP32
   └── fovet_autoencoder_model.h   → C byte-array pour TFLite Micro
   ▼
 Firmware ESP32 mis à jour
   #include "fovet_zscore_config.h"
-  // FovetZScore pré-initialisé avec count=10000, mean=23.8f, ...
+  // FovetZScore pré-initialisé avec count=10000, mean=23.8f, min_samples=0U
   // Détection active dès le premier sample
 ```
 
@@ -104,6 +108,7 @@ static FovetZScore fovet_zscore_temperature = {
     .mean             = 23.847f,
     .M2               = 1842.315f,
     .threshold_sigma  = 3.0f,
+    .min_samples      = 0U,   // précalibré : pas de warm-up
 };
 ```
 
@@ -136,14 +141,35 @@ const float g_autoencoder_threshold = 0.042f;
 
 Topic : `fovet/devices/<mqttClientId>/readings`
 
-### Vigie → Client (REST JSON)
+### Vigie → Client (REST JSON — lectures paginées)
 
 ```json
-// GET /api/devices/:id/readings
-[
-  { "id": "clx...", "value": 23.41, "anomaly": false, "timestamp": "2026-03-14T..." },
-  ...
-]
+// GET /api/devices/:id/readings?limit=100&cursor=1234
+{
+  "data": [
+    { "id": "1234", "value": 23.41, "isAnomaly": false, "timestamp": "2026-03-14T..." },
+    ...
+  ],
+  "pagination": {
+    "limit": 100,
+    "hasMore": true,
+    "nextCursor": "1133"
+  }
+}
+```
+
+Les ids `Reading` sont des BigInt sérialisés en String pour la compatibilité JSON.
+
+### Vigie → Client (SSE temps réel)
+
+```
+GET /api/devices/:id/stream
+
+event: reading
+data: {"id":"1235","value":23.44,"isAnomaly":false,"timestamp":"..."}
+
+event: ping
+data: heartbeat
 ```
 
 ---
@@ -168,11 +194,35 @@ Topic : `fovet/devices/<mqttClientId>/readings`
 - Pas de tableau circulaire, pas de gestion de buffer → convient au SDK embarqué
 - La variance de Welford est numériquement stable (contrairement à `sum(x²) - n*mean²`)
 
+### Pourquoi un double EWMA (Drift) en complément du Z-Score ?
+
+- Le Z-Score détecte les pics ponctuels (anomalies impulsionnelles)
+- Le double EWMA détecte les dérives lentes (changement de régime, vieillissement capteur)
+- Les deux sont O(1) mémoire et < 1 µs/sample : combinables sans coût
+
 ### Pourquoi Dense et non LSTM pour l'AutoEncoder ?
 
-- Un LSTM nécessite des fenêtres temporelles → complexité mémoire et latence incompatibles avec TFLite Micro sur ESP32
+- Un LSTM nécessite des fenêtres temporelles → complexité mémoire incompatible avec TFLite Micro
 - Dense : chaque sample est traité indépendamment, latence O(1)
-- LSTM est possible en Forge-5+ si le modèle Dense s'avère insuffisant
+- LSTM possible en Forge-7+ si le modèle Dense s'avère insuffisant
+
+### Pourquoi IsolationForest cloud-only ?
+
+- Les structures d'arbres (dizaines d'arbres × centaines de nœuds) sont incompatibles avec < 4 KB RAM
+- Réservé à un usage post-traitement cloud ou gateway (Raspberry Pi, serveur edge)
+- Le JSON exporté documente explicitement `"deployment": "cloud_or_gateway_only"`
+
+### Pourquoi cursor-based pagination pour les lectures ?
+
+- L'id `Reading` est un BigInt autoincrement → stable comme curseur (pas de drift sur offset)
+- Évite les doublons ou sauts lors d'insertions concurrentes (problème du OFFSET SQL)
+- Compatible avec le flux SSE : le client connaît son dernier id reçu
+
+### Pourquoi SSE et non WebSocket pour le temps réel ?
+
+- SSE est unidirectionnel (serveur → client) ce qui correspond exactement au besoin (push de lectures)
+- SSE fonctionne sur HTTP/1.1, supporte le Cookie httpOnly pour l'auth
+- Moins complexe qu'un WebSocket pour un flux de données en lecture seule
 
 ### Pourquoi PostgreSQL et non InfluxDB ou TimescaleDB dès le départ ?
 
@@ -204,11 +254,11 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 
 ## Roadmap technique
 
-| Session | Produit | Contenu |
-|---|---|---|
-| S10 | Sentinelle | Flash ESP32-CAM avec nouvelle carte MB (~19/03) |
-| Forge-5 | Forge | Rapport HTML/PDF + train/test split dans pipeline.run() |
-| Forge-6 | Forge | CI GitHub Actions + Scaleway GPU |
-| S11 | Sentinelle | Capteurs réels : DHT22 (I2C) ou MPU-6050 (accéléromètre) |
-| Prod-deploy | Vigie | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |
-| Prod-security | Vigie | CSP nonce (suppr. unsafe-eval), refresh token |
+| Session | Produit | Statut | Contenu |
+|---|---|---|---|
+| Forge-5 | Forge | ✅ | Rapport HTML/JSON + train/test split + métriques |
+| Forge-6 | Forge | ✅ | CI GitHub Actions + Scaleway GPU |
+| S10 | Sentinelle | ⏳ ~19/03 | Flash ESP32-CAM (nouvelle carte MB) |
+| S11 | Sentinelle | ⏳ | Capteurs réels : DHT22 (I2C) ou MPU-6050 (accéléromètre) |
+| Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |
+| Prod-security | Vigie | ⏳ | Redis rate limiting, CSP nonce, refresh token |
