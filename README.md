@@ -80,6 +80,20 @@ npm install
 npm run dev               # http://localhost:3000
 ```
 
+### 4. Démo — simuler des capteurs sans hardware (U5)
+
+```bash
+# Créer le dispositif démo dans la BDD (une seule fois)
+curl -c /tmp/c.txt -X POST http://localhost:3000/api/auth/token \
+  -H "Content-Type: application/json" -d '{"password":"monmotdepasse"}'
+curl -b /tmp/c.txt -X POST http://localhost:3000/api/devices \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Démo Travailleur","mqttClientId":"demo-001","location":"Zone démo"}'
+
+# Lancer le flux synthétique (IMU + HR + TEMP + anomalies auto)
+uv run --with paho-mqtt --with python-dotenv scripts/demo_mqtt.py
+```
+
 ---
 
 ## Structure du monorepo
