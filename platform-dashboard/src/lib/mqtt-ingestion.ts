@@ -24,8 +24,14 @@ import mqtt from "mqtt";
 import { prisma } from "./prisma";
 import { emitReading } from "./event-bus";
 
-const BROKER_URL = process.env.MQTT_BROKER_URL ?? "mqtt://localhost:1883";
-const TOPIC = `${process.env.MQTT_TOPIC_PREFIX ?? "fovet/devices"}/+/readings`;
+const BROKER_URL   = process.env.MQTT_BROKER_URL ?? "mqtt://localhost:1883";
+const TOPIC        = `${process.env.MQTT_TOPIC_PREFIX ?? "fovet/devices"}/+/readings`;
+const WEBHOOK_URL  = process.env.ALERT_WEBHOOK_URL ?? "";
+const WEBHOOK_MIN  = (process.env.ALERT_WEBHOOK_MIN_LEVEL ?? "DANGER").toUpperCase();
+
+// Severity rank — higher = more severe. Used to filter by WEBHOOK_MIN.
+const LEVEL_RANK: Record<string, number> = { WARN: 1, COLD: 1, DANGER: 2, CRITICAL: 3 };
+const WEBHOOK_MIN_RANK = WEBHOOK_MIN === "ALL" ? 0 : (LEVEL_RANK[WEBHOOK_MIN] ?? 2);
 
 // Modules that produce alerts beyond z-score anomalies
 const ALERT_MODULES: Record<string, string> = {
@@ -47,6 +53,36 @@ interface SensorPayload {
   sensorType?: string;   // "IMU" | "HR" | "TEMP"
   level?: string;        // "SAFE" | "WARN" | "DANGER" | "COLD" | "CRITICAL"
   value2?: number;       // secondary value (e.g. humidity %)
+}
+
+interface WebhookPayload {
+  deviceId:    string;
+  deviceName:  string;
+  alertModule: string | null;
+  alertLevel:  string | null;
+  value:       number;
+  zScore:      number;
+  timestamp:   string;
+}
+
+/**
+ * POST the alert to ALERT_WEBHOOK_URL (fire-and-forget, non-blocking).
+ * Skips if URL is not configured or level is below the minimum threshold.
+ */
+function fireWebhook(payload: WebhookPayload): void {
+  if (!WEBHOOK_URL) return;
+
+  // Apply minimum level filter
+  const rank = payload.alertLevel ? (LEVEL_RANK[payload.alertLevel] ?? 1) : 0;
+  if (rank < WEBHOOK_MIN_RANK) return;
+
+  fetch(WEBHOOK_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch((err: unknown) => {
+    console.error("[Webhook] POST failed:", err instanceof Error ? err.message : err);
+  });
 }
 
 let client: mqtt.MqttClient | null = null;
@@ -117,7 +153,7 @@ export function startMqttIngestion(): void {
       // Lookup device
       const device = await prisma.device.findUnique({
         where: { mqttClientId },
-        select: { id: true, active: true },
+        select: { id: true, name: true, active: true },
       });
       if (!device || !device.active) return;
 
@@ -170,6 +206,16 @@ export function startMqttIngestion(): void {
           (alertModule ? ` [${alertModule}]` : "") +
           (data.level ? ` level=${data.level}` : ` z=${data.zScore.toFixed(2)}`)
         );
+
+        fireWebhook({
+          deviceId:    device.id,
+          deviceName:  device.name,
+          alertModule: alertModule,
+          alertLevel:  data.level ?? null,
+          value:       data.value,
+          zScore:      data.zScore,
+          timestamp:   timestamp.toISOString(),
+        });
       }
     } catch (err) {
       console.error("[MQTT] Processing error:", err);

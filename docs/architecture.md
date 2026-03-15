@@ -429,17 +429,12 @@ Conception prévue :
 - EMA/WBGT calculés côté client (même formules que FatigueCard/TempCard)
 - Navigation depuis `FleetHealth` (clic ligne) et `WorkerMap` (clic carte travailleur)
 
-### U3 — Notifications sortantes (webhook / email)
+### U3 — Notifications sortantes (webhook / email) ✅
 
-**Besoin** : le superviseur ne surveille pas le dashboard en permanence. Une alerte critique doit déclencher une notification externe.
-
-**Ce qui manque** : aucune notification sortante n'existe. Les alertes restent dans la BDD.
-
-**Travaux** :
-- Variable `.env` : `ALERT_WEBHOOK_URL` (optionnel)
-- Dans `mqtt-ingestion.ts` : `fetch(ALERT_WEBHOOK_URL, { method: "POST", body: alert })`
-- Format payload : `{ deviceId, deviceName, alertType, level, timestamp }`
-- Facilement extensible vers email (Resend/SMTP) ou SMS (Twilio)
+**Implémenté** : `ALERT_WEBHOOK_URL` + `ALERT_WEBHOOK_MIN_LEVEL` dans `.env.example`.
+`mqtt-ingestion.ts` appelle `fireWebhook()` (fire-and-forget) après chaque création d'alerte.
+Payload : `{ deviceId, deviceName, alertModule, alertLevel, value, zScore, timestamp }`.
+Compatible n8n, Make, Zapier, Slack Incoming Webhooks.
 
 ### U4 — Export de session (rapport travailleur)
 
@@ -598,7 +593,7 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 | H4.3 | Vigie | 🟡 | Vue ECG — tracé temps réel + détection arythmie |
 | U1 | Vigie | ✅ | Alertes unifiées cross-modules (PTI + Fatigue + Thermique) |
 | U2 | Vigie | ✅ | Vue worker individuelle multi-capteur |
-| U3 | Vigie | 🔜 | Notifications webhook sortantes |
+| U3 | Vigie | ✅ | Notifications webhook sortantes |
 | U5 | Scripts | 🔜 | Mode démo — injection MQTT synthétique |
 | S10 | Sentinelle | ⏳ | Flash ESP32-CAM (MB de remplacement) |
 | Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |
