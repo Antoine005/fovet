@@ -52,6 +52,7 @@ interface SensorPayload {
   ts?: number;
   sensorType?: string;   // "IMU" | "HR" | "TEMP"
   level?: string;        // "SAFE" | "WARN" | "DANGER" | "COLD" | "CRITICAL"
+  ptiType?: string;      // "FALL" | "MOTIONLESS" | "SOS" — IMU module only
   value2?: number;       // secondary value (e.g. humidity %)
 }
 
@@ -60,6 +61,7 @@ interface WebhookPayload {
   deviceName:  string;
   alertModule: string | null;
   alertLevel:  string | null;
+  ptiType:     string | null;
   value:       number;
   zScore:      number;
   timestamp:   string;
@@ -198,7 +200,8 @@ export function startMqttIngestion(): void {
             zScore: data.zScore,
             threshold: 3.0,
             ...(alertModule && { alertModule }),
-            ...(data.level && { alertLevel: data.level }),
+            ...(data.level   && { alertLevel: data.level }),
+            ...(data.ptiType && { ptiType: data.ptiType }),
           },
         });
         console.log(
@@ -211,7 +214,8 @@ export function startMqttIngestion(): void {
           deviceId:    device.id,
           deviceName:  device.name,
           alertModule: alertModule,
-          alertLevel:  data.level ?? null,
+          alertLevel:  data.level   ?? null,
+          ptiType:     data.ptiType ?? null,
           value:       data.value,
           zScore:      data.zScore,
           timestamp:   timestamp.toISOString(),

@@ -207,9 +207,15 @@ data: heartbeat
 
 ### U5 — Mode démo MQTT ✅
 
-- `scripts/demo_mqtt.py` : 3 flux (IMU 1Hz / HR 0.5Hz / TEMP 0.33Hz)
-- Welford + EMA + WBGT Stull (2011) ; anomalies injectées périodiquement
-- Usage : `uv run --with paho-mqtt --with python-dotenv scripts/demo_mqtt.py`
+3 threads (IMU 1 Hz, HR 0.5 Hz, TEMP 0.33 Hz) publient des lectures Welford réalistes.
+Injection automatique d'anomalies toutes les 30 s.
+
+```bash
+uv run --with paho-mqtt --with python-dotenv scripts/demo_mqtt.py
+python scripts/demo_mqtt.py --device demo-001 --anomaly-period 20 --no-anomalies
+```
+
+**Corrige aussi** : `ptiType` propagé depuis le payload MQTT vers la table `alerts`.
 
 ---
 
