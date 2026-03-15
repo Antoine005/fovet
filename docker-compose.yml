@@ -39,16 +39,18 @@ services:
     ports:
       - "127.0.0.1:1883:1883"   # localhost only
 
-  # ── Redis — rate limiting (décommentez pour activer en prod) ─────────────
-  # redis:
-  #   image: redis:7-alpine
-  #   restart: unless-stopped
-  #   command: redis-server --save "" --appendonly no   # pas de persistance
-  #   ports:
-  #     - "127.0.0.1:6379:6379"
-  #
-  # Pour activer : décommenter redis + ajouter REDIS_URL dans .env.
-  # Voir src/lib/api.ts pour le guide de migration du rate limiter.
+  # ── Redis — rate limiting ─────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no   # pas de persistance
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   # ── Fovet Vigie dashboard ─────────────────────────────────────────────────
   dashboard:
@@ -61,6 +63,8 @@ services:
         condition: service_healthy
       mosquitto:
         condition: service_started
+      redis:
+        condition: service_healthy
     env_file:
       - ./platform-dashboard/.env
     ports:

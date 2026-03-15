@@ -13,6 +13,10 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { emitReading, subscribeToReadings } from "@/lib/event-bus";
+import { checkRateLimit, loginBucket } from "@/lib/rate-limiter";
+
+// Re-export loginBucket so api.test.ts can clear it between tests
+export { loginBucket };
 
 const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) {
@@ -64,37 +68,16 @@ app.use("/devices/*", cookieAuth);
 app.use("/alerts/*", cookieAuth);
 
 // -------------------------------------------------------------------------
-// In-memory rate limiter — /auth/token: max 5 attempts per 15 min per IP
+// Rate limiting — /auth/token: max 5 attempts per 15 min per IP
 //
-// NOTE (prod): replace with Redis-backed rate limiter before multi-instance
-// deployment. The in-memory Map is not shared across Node.js workers/pods.
-// Migration path:
-//   1. Add REDIS_URL to .env + docker-compose.yml
-//   2. Replace loginBucket with `ioredis` INCR + EXPIRE on key `rl:auth:<ip>`
-//   3. Remove the loginBucket.size > 500 cleanup loop
+// Implemented in src/lib/rate-limiter.ts:
+//   - Redis-backed (REDIS_URL set): INCR + EXPIRE — safe for multi-instance
+//   - In-memory fallback (no REDIS_URL): single-instance / dev only
+//
+// To enable Redis in production:
+//   1. Set REDIS_URL in .env (see .env.example)
+//   2. Uncomment the redis service in docker-compose.yml
 // -------------------------------------------------------------------------
-export const loginBucket = new Map<string, { count: number; expiresAt: number }>();
-
-function checkLoginRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const WINDOW_MS = 15 * 60 * 1000;
-  const MAX_ATTEMPTS = 5;
-
-  if (loginBucket.size > 500) {
-    for (const [k, v] of loginBucket) {
-      if (now > v.expiresAt) loginBucket.delete(k);
-    }
-  }
-
-  const entry = loginBucket.get(ip);
-  if (!entry || now > entry.expiresAt) {
-    loginBucket.set(ip, { count: 1, expiresAt: now + WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= MAX_ATTEMPTS) return false;
-  entry.count++;
-  return true;
-}
 
 // -------------------------------------------------------------------------
 // Zod schemas
@@ -124,7 +107,7 @@ app.post("/auth/token", async (c) => {
     c.req.header("x-real-ip") ??
     "unknown";
 
-  if (!checkLoginRateLimit(ip)) {
+  if (!await checkRateLimit(ip)) {
     return c.json({ error: "Too many attempts — retry in 15 minutes" }, 429);
   }
 
