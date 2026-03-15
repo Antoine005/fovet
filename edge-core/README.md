@@ -13,7 +13,7 @@ Zéro malloc. Zéro dépendance. Testable sur PC avant de toucher le hardware.
 cd edge-core/tests
 make
 # Résultats attendus :
-# test_zscore            : 41/41 passed
+# test_zscore            : 56/56 passed
 # test_drift             : 28/28 passed
 # test_forge_integration : 10/10 passed
 ```
@@ -47,7 +47,7 @@ edge-core/
 │   └── platform/
 │       └── platform_esp32.cpp ← Implémentation HAL pour ESP32/Arduino
 ├── tests/
-│   ├── test_zscore.c         ← 26 tests : Welford, warm-up, saturation, benchmark
+│   ├── test_zscore.c         ← 56 tests : Welford, warm-up, saturation, windowed mode
 │   ├── test_drift.c          ← 28 tests : EWMA, complémentarité zscore/drift
 │   └── test_forge_integration.c ← 10 tests : validation header Forge→Sentinelle
 ├── examples/
@@ -70,8 +70,9 @@ typedef struct {
     float    M2;              // Somme des carrés des écarts (Welford)
     float    threshold_sigma; // Seuil d'anomalie (ex: 3.0f = 3σ)
     uint32_t min_samples;     // Warm-up : détection suspendue avant ce nombre de samples
+    uint32_t window_size;     // Mode fenêtré : 0 = désactivé, N = reset toutes les N mesures
 } FovetZScore;
-// sizeof(FovetZScore) == 20 bytes
+// sizeof(FovetZScore) == 24 bytes
 ```
 
 ### Fonctions
@@ -89,8 +90,13 @@ float    fovet_zscore_get_mean(const FovetZScore *ctx);
 float    fovet_zscore_get_stddev(const FovetZScore *ctx);
 uint32_t fovet_zscore_get_count(const FovetZScore *ctx);
 
-// Réinitialiser les stats (conserve threshold_sigma et min_samples)
+// Réinitialiser les stats (conserve threshold_sigma, min_samples et window_size)
 void fovet_zscore_reset(FovetZScore *ctx);
+
+// Mode fenêtré (optionnel) : reset automatique toutes les window_size mesures
+// window_size == 0 désactive le mode fenêtré (comportement par défaut)
+// Retourne false si window_size > 0 et window_size < min_samples (invalide)
+bool fovet_zscore_set_window(FovetZScore *ctx, uint32_t window_size);
 ```
 
 ### Exemple minimal
@@ -108,6 +114,29 @@ while (1) {
     }
 }
 ```
+
+### Mode fenêtré — adaptation à la dérive lente
+
+Par défaut, Welford accumule un historique infini : la moyenne absorbe les dérives lentes et le détecteur devient aveugle. Le mode fenêtré force un reset périodique pour que la baseline suive le régime actuel.
+
+```c
+#include "fovet/zscore.h"
+
+FovetZScore detector;
+fovet_zscore_init(&detector, 3.0f, 30);      // seuil 3σ, warm-up 30 samples
+fovet_zscore_set_window(&detector, 500U);     // reset toutes les 500 mesures
+
+// La baseline s'adapte automatiquement toutes les 500 mesures.
+// Utile pour capteurs à longue durée de vie (température, pression ambiante).
+while (1) {
+    float sample = read_sensor();
+    if (fovet_zscore_update(&detector, sample)) {
+        trigger_alert();
+    }
+}
+```
+
+> **Note :** après chaque reset automatique il y a une période de warm-up (`min_samples` mesures sans détection). Pour un capteur à 10 Hz avec `window_size=500` et `min_samples=30`, la période aveugle est de 3 secondes toutes les 50 secondes.
 
 ---
 
@@ -207,6 +236,7 @@ static FovetZScore fovet_zscore_value = {
     .M2               = 1842.3f,
     .threshold_sigma  = 3.0f,
     .min_samples      = 0U,   // précalibré : détection active dès le premier sample
+    .window_size      = 0U,   // infini — Forge précalibre sur données propres
 };
 ```
 
@@ -259,7 +289,7 @@ La démo génère un signal sinus synthétique à 100 Hz, injecte une anomalie 5
 |---|---|
 | Norme C | C99 pur |
 | Malloc | Interdit dans les algos |
-| RAM / détecteur | < 4 KB (Z-Score : 20 bytes, Drift : 24 bytes) |
+| RAM / détecteur | < 4 KB (Z-Score : 24 bytes, Drift : 24 bytes) |
 | Latence | < 1 ms / sample @ 80 MHz (mesuré : ~0.04 µs) |
 | Préfixe fonctions | `fovet_` (public), `hal_` (HAL) |
 | Nommage fichiers | snake_case |

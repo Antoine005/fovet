@@ -46,6 +46,8 @@ static FovetZScore fovet_zscore_{safe_col} = {{
     .mean             = {mean:.6f}f,
     .M2               = {M2:.6f}f,
     .threshold_sigma  = {threshold:.6f}f,
+    .min_samples      = 0U,   /* pre-calibrated: detection active from first sample */
+    .window_size      = 0U,   /* infinite window: Forge pre-calibrates on clean data */
 }};"""
 
 

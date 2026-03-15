@@ -55,6 +55,7 @@ static void test_init(void)
     ASSERT_FLOAT_EQ(ctx.M2,   0.0f,   1e-6f,                    "init: M2 == 0");
     ASSERT_FLOAT_EQ(ctx.threshold_sigma, 3.0f, 1e-6f,           "init: threshold == 3");
     ASSERT(ctx.min_samples == 10U,                               "init: min_samples == 10");
+    ASSERT(ctx.window_size == 0U,                                "init: window_size == 0 (disabled)");
 }
 
 static void test_min_samples_enforced_to_2(void)
@@ -186,6 +187,111 @@ static void test_flat_signal_no_false_positive(void)
 }
 
 /* -------------------------------------------------------------------------
+ * Windowed mode — S3
+ * ------------------------------------------------------------------------- */
+
+static void test_window_disabled_by_default(void)
+{
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 2U);
+    ASSERT(ctx.window_size == 0U, "window_size == 0 after init (disabled)");
+}
+
+static void test_set_window_valid(void)
+{
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 2U);
+    bool ok = fovet_zscore_set_window(&ctx, 100U);
+    ASSERT(ok,                       "set_window(100) returns true");
+    ASSERT(ctx.window_size == 100U,  "window_size == 100 after set");
+}
+
+static void test_set_window_less_than_min_samples_rejected(void)
+{
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 30U);
+    bool ok = fovet_zscore_set_window(&ctx, 10U); /* 10 < min_samples=30 */
+    ASSERT(!ok,                    "set_window(10) rejected when min_samples=30");
+    ASSERT(ctx.window_size == 0U,  "window_size unchanged after rejection");
+}
+
+static void test_set_window_disable_with_zero(void)
+{
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 2U);
+    fovet_zscore_set_window(&ctx, 50U);
+    bool ok = fovet_zscore_set_window(&ctx, 0U);
+    ASSERT(ok,                    "set_window(0) succeeds (disables windowing)");
+    ASSERT(ctx.window_size == 0U, "window_size == 0 after disabling");
+}
+
+static void test_window_resets_stats_after_n_samples(void)
+{
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 2U);
+    fovet_zscore_set_window(&ctx, 50U);
+
+    for (int i = 0; i < 50; i++) {
+        fovet_zscore_update(&ctx, (float)i * 0.01f);
+    }
+    /* After 50 samples the auto-reset must have fired */
+    ASSERT(ctx.count == 0U, "window: count reset to 0 after 50 samples");
+}
+
+static void test_window_preserves_params_after_auto_reset(void)
+{
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 4.0f, 5U);
+    fovet_zscore_set_window(&ctx, 20U);
+
+    for (int i = 0; i < 20; i++) {
+        fovet_zscore_update(&ctx, (float)i);
+    }
+    ASSERT_FLOAT_EQ(ctx.threshold_sigma, 4.0f, 1e-6f, "auto-reset: threshold preserved");
+    ASSERT(ctx.min_samples == 5U,                      "auto-reset: min_samples preserved");
+    ASSERT(ctx.window_size == 20U,                     "auto-reset: window_size preserved");
+    ASSERT(ctx.count == 0U,                            "auto-reset: count == 0");
+}
+
+static void test_manual_reset_preserves_window_size(void)
+{
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 2U);
+    fovet_zscore_set_window(&ctx, 100U);
+    fovet_zscore_update(&ctx, 1.0f);
+    fovet_zscore_reset(&ctx);
+    ASSERT(ctx.window_size == 100U, "manual reset preserves window_size");
+}
+
+static void test_window_adapts_to_new_baseline(void)
+{
+    /* Phase 1 : 50 samples near 0.0 (tight distribution)
+     * Phase 2 : 50 samples near 100.0 → window resets twice
+     * Phase 3 : 11 warm-up samples near 100.0, then inject 0.0
+     *           → 0.0 should be a massive anomaly against the new baseline */
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 10U);
+    fovet_zscore_set_window(&ctx, 50U);
+
+    /* Phase 1 — original baseline */
+    for (int i = 0; i < 50; i++) {
+        fovet_zscore_update(&ctx, (float)(i % 2) * 0.001f);
+    }
+
+    /* Phase 2 — new regime: signal shifts to 100 */
+    for (int i = 0; i < 50; i++) {
+        fovet_zscore_update(&ctx, 100.0f + (float)(i % 2) * 0.001f);
+    }
+
+    /* Phase 3 — warm-up passes, then inject original baseline value */
+    for (int i = 0; i < 11; i++) {
+        fovet_zscore_update(&ctx, 100.0f + (float)(i % 2) * 0.001f);
+    }
+    bool detected = fovet_zscore_update(&ctx, 0.0f);
+    ASSERT(detected, "window: old baseline detected as anomaly after new regime established");
+}
+
+/* -------------------------------------------------------------------------
  * Entry point
  * ------------------------------------------------------------------------- */
 
@@ -203,6 +309,14 @@ int main(void)
     test_stddev_convergence();
     test_reset_preserves_threshold_and_min_samples();
     test_flat_signal_no_false_positive();
+    test_window_disabled_by_default();
+    test_set_window_valid();
+    test_set_window_less_than_min_samples_rejected();
+    test_set_window_disable_with_zero();
+    test_window_resets_stats_after_n_samples();
+    test_window_preserves_params_after_auto_reset();
+    test_manual_reset_preserves_window_size();
+    test_window_adapts_to_new_baseline();
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return (g_fail == 0) ? EXIT_SUCCESS : EXIT_FAILURE;

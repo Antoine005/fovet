@@ -21,7 +21,13 @@ extern "C" {
  * Uses Welford's online algorithm for numerically stable mean/variance
  * computation in a single pass. No dynamic allocation — stack or static only.
  *
- * RAM usage: sizeof(FovetZScore) = 20 bytes.
+ * Windowed mode (window_size > 0):
+ *   Stats automatically reset every window_size samples so the detector
+ *   adapts its baseline to the most recent regime. Useful for long-running
+ *   sensors where slow drift would otherwise corrupt the running mean.
+ *   Set window_size = 0 (default) to disable (infinite window).
+ *
+ * RAM usage: sizeof(FovetZScore) = 24 bytes.
  */
 typedef struct {
     uint32_t count;           /**< Number of samples processed (saturates at UINT32_MAX) */
@@ -29,6 +35,7 @@ typedef struct {
     float    M2;              /**< Running sum of squared deviations */
     float    threshold_sigma; /**< Anomaly threshold (e.g. 3.0f = 3σ) */
     uint32_t min_samples;     /**< Warm-up: detection suppressed until count >= min_samples */
+    uint32_t window_size;     /**< Auto-reset period: 0 = disabled (infinite window) */
 } FovetZScore;
 
 /**
@@ -77,10 +84,28 @@ uint32_t fovet_zscore_get_count(const FovetZScore *ctx);
 
 /**
  * @brief Reset detector stats to initial state.
- *        Preserves threshold_sigma and min_samples.
+ *        Preserves threshold_sigma, min_samples, and window_size.
  * @param ctx Pointer to detector context
  */
 void fovet_zscore_reset(FovetZScore *ctx);
+
+/**
+ * @brief Configure windowed (adaptive) mode.
+ *
+ * When window_size > 0, stats automatically reset every window_size samples
+ * so the baseline tracks the most recent signal regime. This prevents slow
+ * drift from being absorbed by the running mean.
+ *
+ * The reset fires AFTER the window_size-th sample is evaluated (no missed
+ * detection at the boundary). After a reset there is a brief warm-up gap
+ * of min_samples before detection resumes.
+ *
+ * @param ctx         Pointer to detector context
+ * @param window_size Samples per window. Must be 0 (disable) or >= min_samples.
+ * @return true  on success
+ * @return false if window_size > 0 and window_size < min_samples (invalid)
+ */
+bool fovet_zscore_set_window(FovetZScore *ctx, uint32_t window_size);
 
 #ifdef __cplusplus
 }

@@ -26,6 +26,7 @@ void fovet_zscore_init(FovetZScore *ctx, float threshold_sigma, uint32_t min_sam
     ctx->threshold_sigma = threshold_sigma;
     /* Enforce minimum of 2: variance is undefined with fewer than 2 samples */
     ctx->min_samples     = (min_samples >= 2U) ? min_samples : 2U;
+    ctx->window_size     = 0U; /* disabled by default — infinite window */
 }
 
 bool fovet_zscore_update(FovetZScore *ctx, float sample)
@@ -59,8 +60,18 @@ bool fovet_zscore_update(FovetZScore *ctx, float sample)
         return (fabsf(sample - ctx->mean) > 1e-10f);
     }
 
-    float z = fabsf(sample - ctx->mean) / stddev;
-    return (z > ctx->threshold_sigma);
+    float z      = fabsf(sample - ctx->mean) / stddev;
+    bool  result = (z > ctx->threshold_sigma);
+
+    /* Windowed mode: auto-reset stats after every window_size samples so
+     * the baseline tracks the most recent signal regime.
+     * Reset fires AFTER the anomaly check — the boundary sample is evaluated
+     * against the current window's statistics before the stats are discarded. */
+    if (ctx->window_size > 0U && ctx->count >= ctx->window_size) {
+        fovet_zscore_reset(ctx);
+    }
+
+    return result;
 }
 
 float fovet_zscore_get_mean(const FovetZScore *ctx)
@@ -86,5 +97,23 @@ void fovet_zscore_reset(FovetZScore *ctx)
 {
     float    saved_threshold   = ctx->threshold_sigma;
     uint32_t saved_min_samples = ctx->min_samples;
+    uint32_t saved_window_size = ctx->window_size;
     fovet_zscore_init(ctx, saved_threshold, saved_min_samples);
+    ctx->window_size = saved_window_size;
+}
+
+bool fovet_zscore_set_window(FovetZScore *ctx, uint32_t window_size)
+{
+    /* 0 always accepted — disables windowing */
+    if (window_size == 0U) {
+        ctx->window_size = 0U;
+        return true;
+    }
+    /* Non-zero window must be >= min_samples, otherwise detection would never
+     * trigger before the window resets (permanent warm-up). */
+    if (window_size < ctx->min_samples) {
+        return false;
+    }
+    ctx->window_size = window_size;
+    return true;
 }
