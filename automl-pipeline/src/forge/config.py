@@ -29,6 +29,7 @@ class DetectorType(str, Enum):
     zscore = "zscore"
     isolation_forest = "isolation_forest"
     autoencoder = "autoencoder"
+    ewma_drift = "ewma_drift"
 
 
 class ExportTarget(str, Enum):
@@ -124,8 +125,37 @@ class AutoEncoderDetectorConfig(BaseModel):
     threshold_percentile: float = Field(default=95.0, gt=50, le=100)
 
 
+class EWMADriftDetectorConfig(BaseModel):
+    """EWMA drift detector — double EMA for gradual shift detection.
+
+    Mirrors FovetDrift in edge-core/include/fovet/drift.h.
+    Threshold is auto-calibrated from training data (``threshold_percentile``),
+    or can be set explicitly with ``threshold``.
+
+    Typical parameters:
+        alpha_fast=0.10  →  ~10 sample memory
+        alpha_slow=0.01  →  ~100 sample memory
+        threshold_percentile=99.0  →  flag top 1% drifts in training data
+    """
+
+    type: Literal[DetectorType.ewma_drift]
+    alpha_fast: float = Field(default=0.1, gt=0, le=1.0)
+    alpha_slow: float = Field(default=0.01, gt=0, le=1.0)
+    threshold: float | None = Field(default=None, gt=0)
+    threshold_percentile: float = Field(default=99.0, gt=50, le=100)
+
+    @model_validator(mode="after")
+    def alpha_fast_must_exceed_alpha_slow(self) -> "EWMADriftDetectorConfig":
+        if self.alpha_slow >= self.alpha_fast:
+            raise ValueError(
+                f"alpha_slow ({self.alpha_slow}) must be strictly less than "
+                f"alpha_fast ({self.alpha_fast})"
+            )
+        return self
+
+
 DetectorConfig = Annotated[
-    ZScoreDetectorConfig | IsolationForestDetectorConfig | AutoEncoderDetectorConfig,
+    ZScoreDetectorConfig | IsolationForestDetectorConfig | AutoEncoderDetectorConfig | EWMADriftDetectorConfig,
     Field(discriminator="type"),
 ]
 

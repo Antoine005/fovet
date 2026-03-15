@@ -4,7 +4,7 @@ Detector factory -- builds the list of detectors from pipeline config.
 
 from __future__ import annotations
 
-from forge.config import DetectorConfig, DetectorType
+from forge.config import DetectorConfig, DetectorType, EWMADriftDetectorConfig
 from forge.detectors.base import Detector
 
 
@@ -21,6 +21,9 @@ def build_detectors(configs: list[DetectorConfig]) -> list[Detector]:
         elif cfg.type == DetectorType.autoencoder:
             from forge.detectors.autoencoder import AutoEncoderDetector
             detectors.append(AutoEncoderDetector(cfg))
+        elif cfg.type == DetectorType.ewma_drift:
+            from forge.detectors.ewma_drift import EWMADriftDetector
+            detectors.append(EWMADriftDetector(cfg))
         else:
             raise ValueError(f"Unknown detector type: {cfg.type}")
     return detectors

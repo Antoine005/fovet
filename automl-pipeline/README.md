@@ -49,6 +49,7 @@ automl-pipeline/
 │       ├── zscore.py       ← ZScoreDetector (algo de Welford) + export fovet_zscore_config.h
 │       ├── isolation_forest.py ← IsolationForestDetector (sklearn) + export JSON
 │       ├── autoencoder.py  ← AutoEncoderDetector (Keras Dense) + export TFLite + C header
+│       ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
 │       └── registry.py     ← build_detectors(configs) factory
 ├── configs/
 │   ├── demo_zscore.yaml        ← Démo synthétique sinus + Z-Score
@@ -60,7 +61,8 @@ automl-pipeline/
 │   ├── test_detectors.py       ← 21 tests ZScoreDetector + registry
 │   ├── test_isolation_forest.py ← 16 tests IsolationForestDetector
 │   ├── test_autoencoder.py     ← 19 tests AutoEncoderDetector (skip si TF absent)
-│   └── test_preprocessing.py  ← 17 tests Scaler (fit, transform, export JSON)
+│   ├── test_ewma_drift.py      ← 23 tests EWMADriftDetector + export + registry
+│   └── test_preprocessing.py  ← 23 tests Scaler (fit, transform, export JSON + C header)
 ├── models/                     ← Fichiers exportés (gitignored)
 ├── data/                       ← Datasets capteurs (gitignored)
 └── pyproject.toml
@@ -71,10 +73,13 @@ automl-pipeline/
 | Détecteur | Type YAML | Déploiement | Export |
 |---|---|---|---|
 | **Z-Score** | `zscore` | ESP32 / MCU | `fovet_zscore_config.h` (SDK C) |
+| **EWMA Drift** | `ewma_drift` | ESP32 / MCU | `fovet_drift_config.h` + `drift_config.json` |
 | **Isolation Forest** | `isolation_forest` | Cloud ou gateway uniquement | `isolation_forest_config.json` |
 | **AutoEncoder Dense** | `autoencoder` | ESP32 (TFLite Micro) | `autoencoder.tflite` + `fovet_autoencoder_model.h` |
 
 > **Note IsolationForest :** les structures d'arbres sont incompatibles avec les contraintes RAM d'un MCU. Ce détecteur est réservé à un usage cloud ou gateway (Raspberry Pi, serveur edge).
+
+> **Note EWMA Drift :** complémentaire au Z-Score. Le Z-Score détecte les pics soudains ; EWMA Drift détecte les glissements progressifs que Welford absorbe dans sa moyenne courante. À utiliser conjointement sur signaux physiques lents (température, pression).
 
 ## Prétraitement (optionnel)
 
@@ -85,14 +90,14 @@ preprocessing:
   normalize: true   # applique StandardScaler sur chaque colonne
 ```
 
-Quand activé, le pipeline exporte `scaler_params.json` dans le dossier de sortie :
+Quand activé, le pipeline exporte `scaler_params.json` et `fovet_scaler_params.h` dans le dossier de sortie :
 
-```json
-{
-  "columns": ["temperature", "humidity"],
-  "means": [23.8, 61.2],
-  "stds": [0.42, 3.1]
-}
+```c
+// fovet_scaler_params.h — inclure directement sur ESP32
+#define FOVET_SCALER_N_FEATURES 2
+static const float fovet_scaler_mean[2]  = { 23.847000f, 61.200000f };
+static const float fovet_scaler_scale[2] = {  0.420000f,  3.100000f };
+// Appliquer : normalized[i] = (raw[i] - fovet_scaler_mean[i]) / fovet_scaler_scale[i]
 ```
 
 ## Format de config YAML
@@ -111,6 +116,10 @@ data:
 detectors:
   - type: zscore
     threshold_sigma: 3.0
+  - type: ewma_drift
+    alpha_fast: 0.1          # ~10 sample memory
+    alpha_slow: 0.01         # ~100 sample memory (baseline)
+    threshold_percentile: 99.0  # auto-calibré à 99e percentile (ou threshold: 0.5)
   - type: isolation_forest
     contamination: 0.05
   - type: autoencoder
@@ -125,6 +134,8 @@ export:
 
 ## Boucle Forge → Sentinelle
 
+### Z-Score (pics soudains)
+
 ```
 Données capteurs (CSV / MQTT / synthétique)
     ↓
@@ -134,8 +145,6 @@ Export : fovet_zscore_config.h (avec min_samples = 0U)
     ↓
 ESP32 : #include "fovet_zscore_config.h" → détection dès le 1er sample
 ```
-
-Le header exporté initialise la struct `FovetZScore` avec les statistiques précalibrées :
 
 ```c
 static FovetZScore fovet_zscore_temperature = {
@@ -147,11 +156,34 @@ static FovetZScore fovet_zscore_temperature = {
 };
 ```
 
+### EWMA Drift (glissements progressifs)
+
+```
+Données capteurs (longue séquence stable)
+    ↓
+Forge : fit() → calibration double EWMA + seuil auto (99e percentile)
+    ↓
+Export : fovet_drift_config.h + drift_config.json
+    ↓
+ESP32 : #include "fovet_drift_config.h" → fovet_drift_update() dans HAL loop
+```
+
+```c
+static FovetDrift fovet_drift_temperature = {
+    .ewma_fast  = 23.847f,   // état post-calibration
+    .ewma_slow  = 23.851f,
+    .alpha_fast = 0.100000f,
+    .alpha_slow = 0.010000f,
+    .threshold  = 0.082500f, // auto-calibré à 99e percentile
+    .count      = 10000U,
+};
+```
+
 ## Tests
 
 ```bash
 uv run pytest -v
-# 109 tests (dont 19 skippés si TF absent)
+# 138 tests (dont 19 skippés si TF absent)
 ```
 
 ## Roadmap Forge

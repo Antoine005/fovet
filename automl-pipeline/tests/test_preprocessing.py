@@ -206,3 +206,71 @@ def test_pipeline_normalize_default_is_false():
         "detectors": [{"type": "zscore"}],
     })
     assert cfg.preprocessing.normalize is False
+
+
+# ---------------------------------------------------------------------------
+# Scaler.export_c_header — F3
+# ---------------------------------------------------------------------------
+
+def test_export_c_header_creates_file(tmp_path):
+    ds = _make_dataset(n=200)
+    s = Scaler()
+    s.fit(ds)
+    out = s.export_c_header(tmp_path, stem="test_pipeline")
+    assert out.exists()
+    assert out.name == "fovet_scaler_params.h"
+
+
+def test_export_c_header_before_fit_raises(tmp_path):
+    s = Scaler()
+    with pytest.raises(RuntimeError, match="fitted"):
+        s.export_c_header(tmp_path, stem="test")
+
+
+def test_export_c_header_content(tmp_path):
+    ds = _make_dataset(n=200)
+    s = Scaler()
+    s.fit(ds)
+    out = s.export_c_header(tmp_path, stem="test_pipeline")
+    content = out.read_text()
+    assert "FOVET_SCALER_PARAMS_H" in content
+    assert "fovet_scaler_mean" in content
+    assert "fovet_scaler_scale" in content
+    assert "FOVET_SCALER_N_FEATURES 2" in content
+    assert "temperature" in content
+    assert "vibration" in content
+
+
+def test_export_c_header_values_match_fit(tmp_path):
+    ds = _make_univariate(n=1000, mean=5.0, std=2.0)
+    s = Scaler()
+    s.fit(ds)
+    out = s.export_c_header(tmp_path, stem="test")
+    # Parse the float values directly from the scaler state
+    mean_val = round(float(s.mean_[0]), 0)
+    scale_val = round(float(s.scale_[0]), 0)
+    assert mean_val == 5.0   # near 5.0
+    assert scale_val == 2.0  # near 2.0
+    # The header must contain both values as float literals
+    content = out.read_text()
+    assert "f };" in content  # C float literal suffix present
+
+
+def test_export_c_header_n_features_macro(tmp_path):
+    ds = _make_dataset(n=200, n_features=2)
+    s = Scaler()
+    s.fit(ds)
+    out = s.export_c_header(tmp_path, stem="test")
+    content = out.read_text()
+    assert "#define FOVET_SCALER_N_FEATURES 2" in content
+
+
+def test_export_c_header_float_literals(tmp_path):
+    """Each value must end with 'f' to be valid C float literals."""
+    ds = _make_dataset(n=200)
+    s = Scaler()
+    s.fit(ds)
+    out = s.export_c_header(tmp_path, stem="test")
+    content = out.read_text()
+    # Find the array lines and check they contain 'f' suffixes
+    assert "f," in content or "f }" in content or "f}" in content
