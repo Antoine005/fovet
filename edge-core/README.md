@@ -14,12 +14,13 @@ cd edge-core/tests
 export PATH="/c/msys64/mingw64/bin:$PATH"   # MSYS2 / Windows uniquement
 make
 # Résultats attendus :
-# test_zscore            : 56/56 passed
+# test_zscore            : 41/41 passed
 # test_drift             : 28/28 passed
 # test_forge_integration : 10/10 passed
 # test_biosignal_hal     : 30/30 passed
 # test_mpu6050_hal       : 25/25 passed
 # test_pti_profile       : 24/24 passed
+# test_max30102_hal      : 23/23 passed
 ```
 
 ### Build PlatformIO ESP32-CAM
@@ -46,7 +47,8 @@ edge-core/
 │   │   ├── hal_adc.h         ← Interface ADC (read channel)
 │   │   ├── hal_time.h        ← Interface temps (ms, delay)
 │   │   ├── fovet_biosignal_hal.h ← Registre HAL biosignaux (IMU, HR, TEMP, ECG)
-│   │   └── mpu6050_hal.h     ← Driver HAL MPU-6050 (accéléromètre/gyroscope I2C)
+│   │   ├── mpu6050_hal.h     ← Driver HAL MPU-6050 (accéléromètre/gyroscope I2C)
+│   │   └── max30102_hal.h    ← Driver HAL MAX30102 (fréquence cardiaque + SpO₂)
 │   └── profiles/
 │       └── pti_profile.h     ← Profil PTI : détection chute/immobilité/SOS
 ├── src/
@@ -54,6 +56,7 @@ edge-core/
 │   ├── drift.c               ← Double EWMA fast/slow
 │   ├── biosignal_hal.c       ← Registre HAL biosignaux (4 slots statiques)
 │   ├── mpu6050_hal.c         ← Pilote MPU-6050 I2C via callbacks injectés
+│   ├── max30102_hal.c        ← Pilote MAX30102 I2C : Pan-Tompkins simplifié + SpO₂
 │   ├── profiles/
 │   │   └── pti_profile.c     ← Profil PTI (chute + immobilité + SOS)
 │   └── platform/
@@ -64,7 +67,8 @@ edge-core/
 │   ├── test_forge_integration.c ← 10 tests : validation header Forge→Sentinelle
 │   ├── test_biosignal_hal.c  ← 30 tests : registre, register/read/reset, 4 sources
 │   ├── test_mpu6050_hal.c    ← 25 tests : I2C mock, WHO_AM_I, ±2g, rate, magnitude
-│   └── test_pti_profile.c    ← 24 tests : chute/immobilité/SOS, debounce, callbacks
+│   ├── test_pti_profile.c    ← 24 tests : chute/immobilité/SOS, debounce, callbacks
+│   └── test_max30102_hal.c   ← 23 tests : init, FIFO, warmup, BPM 60/80, SpO₂, reset
 ├── examples/
 │   └── esp32/zscore_demo/    ← Demo PlatformIO : sinus + MQTT + Vigie
 └── library.json              ← Manifest PlatformIO (fovet-sentinelle)
@@ -253,10 +257,10 @@ void fovet_hal_biosignal_reset(void);
 
 ```c
 typedef union {
-    struct { float ax, ay, az, gx, gy, gz; } imu;   // 24 bytes
-    struct { float bpm, rr_ms; }             hr;     //  8 bytes
-    struct { float celsius; }                temp;   //  4 bytes
-    struct { float mv; }                     ecg;    //  4 bytes
+    struct { float ax, ay, az, gx, gy, gz; } imu;            // 24 bytes
+    struct { float bpm, spo2, rmssd; }        hr;             // 12 bytes
+    struct { float celsius; }                 temp;            //  4 bytes
+    struct { float mv; }                      ecg;             //  4 bytes
 } fovet_biosignal_value_t;
 
 typedef struct {
@@ -402,6 +406,110 @@ float my_fall_score_fn(const float *mag, uint32_t n) {
     // Lance l'inférence TFLite Micro sur les 10 features extraites
     // Retourne le score sigmoid [0.0, 1.0]
     return tflite_infer(mag, n);
+}
+```
+
+---
+
+## API publique — Driver MAX30102
+
+Pilote HAL pour le MAX30102 (capteur optique Maxim Integrated — fréquence cardiaque + SpO₂).
+Algorithme Pan-Tompkins simplifié sur fenêtre glissante de 100 samples (4 s @ 25 Hz).
+L'accès I2C est entièrement injecté via callbacks — même interface que le MPU-6050.
+
+### Constantes
+
+| Constante | Valeur | Description |
+|---|---|---|
+| `FOVET_MAX30102_I2C_ADDR` | `0x57` | Adresse I2C fixe |
+| `FOVET_MAX30102_PART_ID` | `0x15` | Valeur attendue du registre PART_ID (0xFF) |
+| `FOVET_MAX30102_WINDOW_SIZE` | `100` | Fenêtre glissante (4 s @ 25 Hz) |
+| `FOVET_MAX30102_SAMPLE_RATE` | `25` | Fréquence de sortie après moyennage FIFO (Hz) |
+
+### Codes d'erreur
+
+| Code | Valeur | Description |
+|---|---|---|
+| `FOVET_HR_ERR_I2C` | `-1` | Erreur de communication I2C |
+| `FOVET_HR_ERR_ID` | `-2` | PART_ID inattendu (≠ 0x15) |
+| `FOVET_HR_ERR_NODATA` | `-4` | FIFO vide ou fenêtre en cours de warm-up |
+
+### Fonctions
+
+```c
+#include "fovet/hal/max30102_hal.h"
+
+// Injecter les callbacks I2C (appeler avant fovet_max30102_init)
+void fovet_max30102_set_i2c(fovet_i2c_write_fn_t write_fn, fovet_i2c_read_fn_t read_fn);
+
+// Initialiser le MAX30102
+// Séquence : vérification PART_ID → reset logiciel → config SpO2 25 Hz →
+//            reset FIFO → enregistrement FOVET_SOURCE_HR dans le biosignal HAL
+// Retourne FOVET_HAL_OK, FOVET_HR_ERR_I2C (-1), FOVET_HR_ERR_ID (-2)
+int fovet_max30102_init(void);
+
+// Lire un sample depuis le FIFO et mettre à jour BPM / SpO₂
+// out->value.hr.bpm    = BPM courant (0 si pas encore de pics)
+// out->value.hr.spo2   = SpO₂ en % [0, 100]
+// out->value.hr.rmssd  = intervalle RR moyen en ms (0 si pas de pics)
+// Retourne FOVET_HAL_OK, FOVET_HR_ERR_NODATA, FOVET_HR_ERR_I2C
+int fovet_hal_hr_read(fovet_biosignal_sample_t *out);
+
+// Retourner le dernier SpO₂ calculé (0.0 avant la première computation)
+float fovet_max30102_get_spo2(void);
+
+// Réinitialiser l'état du driver (fenêtre, BPM, SpO₂) — pour les tests uniquement
+void fovet_max30102_reset(void);
+```
+
+### Algorithme interne
+
+**BPM — Pan-Tompkins simplifié :**
+1. Signal IR : suppression DC (moyenne Welford sur la fenêtre)
+2. Seuil adaptatif : `threshold = min_AC + 0.4 × (max_AC - min_AC)`
+3. Détection des maxima locaux au-dessus du seuil, période réfractaire 280 ms (7 samples)
+4. BPM = 60 000 / RR_moyen_ms, limité à [30, 220] BPM
+
+**SpO₂ — ratio des ratios :**
+```
+R = (RMS_red / DC_red) / (RMS_ir / DC_ir)
+SpO₂ = 110 - 25 × R     (formule empirique Maxim)
+SpO₂ ∈ [0, 100] %
+```
+
+### Exemple ESP32
+
+```c
+#include "fovet/hal/max30102_hal.h"
+
+// Callbacks Wire.h
+static int esp32_i2c_write(uint8_t addr, uint8_t reg, const uint8_t *buf, uint8_t len) {
+    Wire.beginTransmission(addr);
+    Wire.write(reg);
+    for (uint8_t i = 0; i < len; i++) Wire.write(buf[i]);
+    return Wire.endTransmission() == 0 ? 0 : -1;
+}
+static int esp32_i2c_read(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len) {
+    Wire.beginTransmission(addr);
+    Wire.write(reg);
+    Wire.endTransmission(false);
+    Wire.requestFrom(addr, len);
+    for (uint8_t i = 0; i < len; i++) buf[i] = Wire.read();
+    return 0;
+}
+
+// Initialisation
+Wire.begin();
+fovet_max30102_set_i2c(esp32_i2c_write, esp32_i2c_read);
+fovet_max30102_init();  // Enregistre automatiquement FOVET_SOURCE_HR
+
+// Lecture (dans la boucle principale ~25 Hz)
+fovet_biosignal_sample_t s;
+int rc = fovet_hal_biosignal_read(FOVET_SOURCE_HR, &s);
+if (rc == FOVET_HAL_OK) {
+    float bpm  = s.value.hr.bpm;    // BPM courant
+    float spo2 = s.value.hr.spo2;   // SpO₂ %
+    float rr   = s.value.hr.rmssd;  // RR moyen (ms)
 }
 ```
 
