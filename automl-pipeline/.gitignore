@@ -14,6 +14,9 @@ uv.lock
 data/
 models/
 reports/
+# Exception: source package directories with reserved names
+!src/forge/data/
+!src/forge/pipelines/
 
 # Notebooks checkpoints
 .ipynb_checkpoints/
