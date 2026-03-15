@@ -50,6 +50,11 @@ secrets/
 # Session notes (may contain private data)
 docs/session-*.md
 
+# Local-only files — use cases, private specs, scratch notes
+new_task.md
+*.local.md
+local/
+
 # Test coverage
 coverage/
 *.lcov
