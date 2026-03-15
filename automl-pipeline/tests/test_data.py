@@ -236,11 +236,17 @@ def test_load_data_csv(tmp_csv: Path):
     assert ds.n_samples == 3
 
 
-def test_load_data_mqtt_raises():
+def test_load_data_mqtt_raises_without_paho(monkeypatch):
+    """load_data(mqtt) raises ImportError when paho-mqtt is not installed."""
+    import sys
+    monkeypatch.setitem(sys.modules, "paho", None)
+    monkeypatch.setitem(sys.modules, "paho.mqtt", None)
+    monkeypatch.setitem(sys.modules, "paho.mqtt.client", None)
+
     cfg = PipelineConfig.model_validate({
         "name": "test",
         "data": {"source": "mqtt", "columns": ["v"]},
         "detectors": [{"type": "zscore"}],
     })
-    with pytest.raises(NotImplementedError, match="Forge-2b"):
+    with pytest.raises(ImportError, match="paho-mqtt"):
         load_data(cfg.data)
