@@ -102,6 +102,7 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `PATCH` | `/api/alerts/:id/ack` | JWT | Acquitter une alerte |
 | `GET` | `/api/fleet/health` | JWT | Santé flotte cross-module (alertes par module par dispositif) |
 | `GET` | `/api/workers/:deviceId/summary` | JWT | Résumé individuel cross-module (lectures HR + TEMP + alertes récentes) |
+| `GET` | `/api/devices/:id/report` | JWT | Rapport de session `?from=ISO&to=ISO&format=json\|csv` (défaut: 8h, cap 7j) |
 
 ### Pagination des lectures
 

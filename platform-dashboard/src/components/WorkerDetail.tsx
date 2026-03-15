@@ -10,7 +10,7 @@
  * La logique EMA/WBGT/classify est calquée sur FatigueCard / TempCard.
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/api-client";
 
 // -----------------------------------------------------------------
@@ -151,6 +151,130 @@ const ALERT_LEVEL_COLOR: Record<string, string> = {
   WARN:     "text-amber-400",
   COLD:     "text-blue-400",
 };
+
+// -----------------------------------------------------------------
+// ExportReport — download session report (JSON or CSV)
+// -----------------------------------------------------------------
+
+type Preset = "8h" | "today" | "custom";
+
+function toLocalDatetimeValue(d: Date): string {
+  // Returns "YYYY-MM-DDTHH:MM" in local time for datetime-local inputs
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function ExportReport({ deviceId }: { deviceId: string }) {
+  const [preset, setPreset]         = useState<Preset>("8h");
+  const [customFrom, setCustomFrom] = useState<string>(() => toLocalDatetimeValue(new Date(Date.now() - 8 * 3600_000)));
+  const [customTo,   setCustomTo]   = useState<string>(() => toLocalDatetimeValue(new Date()));
+  const [exporting,  setExporting]  = useState<"json" | "csv" | null>(null);
+  const [exportErr,  setExportErr]  = useState<string | null>(null);
+  const anchorRef = useRef<HTMLAnchorElement>(null);
+
+  function getDateRange(): { from: Date; to: Date } {
+    const to = new Date();
+    if (preset === "8h")    return { from: new Date(to.getTime() - 8 * 3600_000), to };
+    if (preset === "today") {
+      const from = new Date(to); from.setHours(0, 0, 0, 0);
+      return { from, to };
+    }
+    return {
+      from: new Date(customFrom),
+      to:   new Date(customTo),
+    };
+  }
+
+  async function download(format: "json" | "csv") {
+    setExporting(format);
+    setExportErr(null);
+    try {
+      const { from, to } = getDateRange();
+      const url = `/api/devices/${deviceId}/report?format=${format}&from=${from.toISOString()}&to=${to.toISOString()}`;
+      const res = await apiFetch(url);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const ext  = format === "csv" ? "csv" : "json";
+      const name = `fovet_report_${from.toISOString().slice(0, 10)}.${ext}`;
+      const objectUrl = URL.createObjectURL(blob);
+      const a = anchorRef.current!;
+      a.href     = objectUrl;
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+    } catch (e) {
+      setExportErr(e instanceof Error ? e.message : "Erreur export");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  const btnBase = "px-3 py-1.5 rounded text-xs font-medium transition-colors";
+  const presetBtn = (p: Preset) =>
+    `${btnBase} ${preset === p ? "bg-gray-700 text-white" : "text-gray-500 hover:text-gray-300"}`;
+
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-gray-500">Export rapport — U4</h3>
+
+      {/* Preset selector */}
+      <div className="flex gap-1 flex-wrap">
+        <button className={presetBtn("8h")}    onClick={() => setPreset("8h")}>8 h glissantes</button>
+        <button className={presetBtn("today")} onClick={() => setPreset("today")}>Aujourd&apos;hui</button>
+        <button className={presetBtn("custom")} onClick={() => setPreset("custom")}>Personnalisé</button>
+      </div>
+
+      {/* Custom date range */}
+      {preset === "custom" && (
+        <div className="flex flex-wrap gap-3 text-xs text-gray-400">
+          <label className="flex flex-col gap-1">
+            De
+            <input
+              type="datetime-local"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            À
+            <input
+              type="datetime-local"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs"
+            />
+          </label>
+        </div>
+      )}
+
+      {/* Download buttons */}
+      <div className="flex gap-2 items-center flex-wrap">
+        <button
+          onClick={() => void download("json")}
+          disabled={exporting !== null}
+          className={`${btnBase} bg-blue-900/40 text-blue-300 border border-blue-800 hover:bg-blue-800/40 disabled:opacity-50`}
+        >
+          {exporting === "json" ? "Export…" : "Rapport JSON"}
+        </button>
+        <button
+          onClick={() => void download("csv")}
+          disabled={exporting !== null}
+          className={`${btnBase} bg-green-900/40 text-green-300 border border-green-800 hover:bg-green-800/40 disabled:opacity-50`}
+        >
+          {exporting === "csv" ? "Export…" : "Données CSV"}
+        </button>
+        {exportErr && <span className="text-xs text-red-400">{exportErr}</span>}
+      </div>
+
+      {/* Hidden anchor for programmatic download */}
+      <a ref={anchorRef} className="hidden" aria-hidden />
+    </div>
+  );
+}
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -314,6 +438,9 @@ export default function WorkerDetail({ deviceId, onBack }: Props) {
           <p className="text-[10px] text-gray-600 mt-1">seuils 25/28 WBGT · froid ≤10°C</p>
         </SectionCard>
       </div>
+
+      {/* Export report */}
+      <ExportReport deviceId={deviceId} />
 
       {/* Recent alerts timeline */}
       <SectionCard title="Alertes récentes (20 dernières)">

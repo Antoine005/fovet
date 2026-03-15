@@ -201,9 +201,9 @@ data: heartbeat
 
 ### U4 — Export de session ✅
 
-- `GET /api/devices/:id/report?from=&to=&format=json|csv`
-- JSON : stats par module + liste alertes | CSV : lectures brutes
-- Cap 7 jours, défaut 8h
+- `GET /api/devices/:id/report?from=ISO&to=ISO&format=json|csv`
+- JSON : stats par module, alertsByLevel, liste alertes | CSV : lectures brutes
+- Cap 7 jours — défaut 8h ; `ExportReport` dans `WorkerDetail` (presets + download)
 
 ### U5 — Mode démo MQTT ✅
 
