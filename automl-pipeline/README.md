@@ -35,8 +35,9 @@ uv run forge version
 ```
 automl-pipeline/
 ├── src/forge/
-│   ├── config.py           ← Config Pydantic v2 — DataConfig, DetectorConfig, ExportConfig
-│   ├── pipeline.py         ← Pipeline.run() — chargement données + détecteurs + export
+│   ├── config.py           ← Config Pydantic v2 — DataConfig, DetectorConfig, PreprocessingConfig
+│   ├── pipeline.py         ← Pipeline.run() — données + normalisation + détecteurs + export
+│   ├── preprocessing.py    ← Scaler (StandardScaler wrapper) + export scaler_params.json
 │   ├── cli.py              ← CLI Typer : forge run / validate / version
 │   ├── data/
 │   │   ├── base.py         ← Dataset dataclass (samples, columns, labels, timestamps)
@@ -58,7 +59,8 @@ automl-pipeline/
 │   ├── test_data.py            ← 23 tests Dataset + synthetic + CSV
 │   ├── test_detectors.py       ← 21 tests ZScoreDetector + registry
 │   ├── test_isolation_forest.py ← 16 tests IsolationForestDetector
-│   └── test_autoencoder.py    ← 19 tests AutoEncoderDetector (skip si TF absent)
+│   ├── test_autoencoder.py     ← 19 tests AutoEncoderDetector (skip si TF absent)
+│   └── test_preprocessing.py  ← 17 tests Scaler (fit, transform, export JSON)
 ├── models/                     ← Fichiers exportés (gitignored)
 ├── data/                       ← Datasets capteurs (gitignored)
 └── pyproject.toml
@@ -66,17 +68,41 @@ automl-pipeline/
 
 ## Détecteurs disponibles
 
-| Détecteur | Type YAML | Cas d'usage | Export |
+| Détecteur | Type YAML | Déploiement | Export |
 |---|---|---|---|
-| **Z-Score** | `zscore` | Signal univarié gaussien (capteurs simples) | `fovet_zscore_config.h` (SDK C) |
-| **Isolation Forest** | `isolation_forest` | Multivarié, anomalies contextuelles | `isolation_forest_config.json` |
-| **AutoEncoder Dense** | `autoencoder` | Patterns complexes non-linéaires | `autoencoder.tflite` + `fovet_autoencoder_model.h` |
+| **Z-Score** | `zscore` | ESP32 / MCU | `fovet_zscore_config.h` (SDK C) |
+| **Isolation Forest** | `isolation_forest` | Cloud ou gateway uniquement | `isolation_forest_config.json` |
+| **AutoEncoder Dense** | `autoencoder` | ESP32 (TFLite Micro) | `autoencoder.tflite` + `fovet_autoencoder_model.h` |
+
+> **Note IsolationForest :** les structures d'arbres sont incompatibles avec les contraintes RAM d'un MCU. Ce détecteur est réservé à un usage cloud ou gateway (Raspberry Pi, serveur edge).
+
+## Prétraitement (optionnel)
+
+La normalisation StandardScaler peut être activée avant l'entraînement des détecteurs :
+
+```yaml
+preprocessing:
+  normalize: true   # applique StandardScaler sur chaque colonne
+```
+
+Quand activé, le pipeline exporte `scaler_params.json` dans le dossier de sortie :
+
+```json
+{
+  "columns": ["temperature", "humidity"],
+  "means": [23.8, 61.2],
+  "stds": [0.42, 3.1]
+}
+```
 
 ## Format de config YAML
 
 ```yaml
 name: mon-pipeline
 description: "Description optionnelle"
+
+preprocessing:
+  normalize: false  # true pour activer StandardScaler
 
 data:
   source: synthetic | csv | mqtt
@@ -102,18 +128,30 @@ export:
 ```
 Données capteurs (CSV / MQTT / synthétique)
     ↓
-Forge : fit() sur données propres → calibration
+Forge : fit() sur données propres → calibration Welford
     ↓
-Export : fovet_zscore_config.h / autoencoder.tflite
+Export : fovet_zscore_config.h (avec min_samples = 0U)
     ↓
-ESP32 : #include "fovet_zscore_config.h" → démarrage précalibré
+ESP32 : #include "fovet_zscore_config.h" → détection dès le 1er sample
+```
+
+Le header exporté initialise la struct `FovetZScore` avec les statistiques précalibrées :
+
+```c
+static FovetZScore fovet_zscore_temperature = {
+    .count            = 10000U,
+    .mean             = 23.847f,
+    .M2               = 1842.315f,
+    .threshold_sigma  = 3.0f,
+    .min_samples      = 0U,   // précalibré : pas de warm-up
+};
 ```
 
 ## Tests
 
 ```bash
 uv run pytest -v
-# 92 tests (dont 19 skippés si TF absent)
+# 109 tests (dont 19 skippés si TF absent)
 ```
 
 ## Roadmap Forge
@@ -125,5 +163,5 @@ uv run pytest -v
 | Forge-3a | ✅ | ZScoreDetector (Welford) + export `fovet_zscore_config.h` |
 | Forge-3b | ✅ | IsolationForestDetector (sklearn) + export JSON |
 | Forge-4 | ✅ | AutoEncoderDetector (Keras Dense) + export TFLite INT8 + C header |
-| Forge-5 | ⏳ | Rapport HTML/PDF (precision/recall, timeline anomalies, train/test split) |
-| Forge-6 | ⏳ | CI GitHub Actions + Scaleway GPU |
+| Forge-5 | ✅ | Rapport HTML/JSON + train/test split + métriques évaluation |
+| Forge-6 | ✅ | CI GitHub Actions + workflow GPU Scaleway |

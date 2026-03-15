@@ -1,7 +1,7 @@
 # Fovet Vigie — Dashboard de supervision
 
 Dashboard temps réel pour la supervision de flottes de capteurs embarqués.
-Reçoit les lectures MQTT des ESP32, stocke en PostgreSQL, expose une API REST sécurisée.
+Reçoit les lectures MQTT des ESP32, stocke en PostgreSQL, expose une API REST sécurisée et un flux SSE temps réel.
 
 ---
 
@@ -12,9 +12,10 @@ Reçoit les lectures MQTT des ESP32, stocke en PostgreSQL, expose une API REST s
 | Frontend | Next.js 16 (App Router), Recharts |
 | API | Hono 4 (route catch-all `/api/[[...route]]`) |
 | Base de données | PostgreSQL 18 + Prisma 7 (TimescaleDB en prod) |
-| MQTT ingestion | Paho MQTT → `startMqttIngestion()` au boot Next.js |
+| MQTT ingestion | mqtt.js → `startMqttIngestion()` au boot Next.js |
+| Temps réel | SSE via EventEmitter in-process (`event-bus.ts`) |
 | Auth | JWT HS256 — cookies httpOnly (pas de localStorage) |
-| Tests | Vitest 18 — 19 tests |
+| Tests | Vitest — 23 tests |
 
 ---
 
@@ -60,15 +61,20 @@ platform-dashboard/
 │   │   ├── login/page.tsx              ← Page de connexion
 │   │   ├── api/[[...route]]/route.ts   ← API Hono (toutes les routes REST)
 │   │   └── instrumentation.ts          ← Boot hook — démarre startMqttIngestion()
+│   ├── components/
+│   │   ├── ReadingChart.tsx            ← Graphe Recharts avec SSE + fallback polling
+│   │   ├── AlertList.tsx               ← Liste alertes + acquittement
+│   │   └── DeviceCard.tsx              ← Carte dispositif
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
-│       ├── mqtt-ingestion.ts           ← Subscribe MQTT → insertion PostgreSQL
+│       ├── event-bus.ts                ← EventEmitter singleton MQTT → SSE
+│       ├── mqtt-ingestion.ts           ← Subscribe MQTT → insertion PostgreSQL + emit
 │       └── prisma.ts                   ← PrismaClient singleton
 ├── prisma/
-│   └── schema.prisma                   ← Modèles Device, Reading, Alert
+│   └── schema.prisma                   ← Modèles Device, Reading (BigInt id), Alert
 ├── src/__tests__/
-│   └── api.test.ts                     ← 19 tests Vitest
+│   └── api.test.ts                     ← 23 tests Vitest
 └── .env.example                        ← Template variables d'environnement
 ```
 
@@ -76,27 +82,65 @@ platform-dashboard/
 
 ## API REST
 
-Toutes les routes sont préfixées `/api/`.
+Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent le cookie `fovet_token`.
 
 | Méthode | Route | Auth | Description |
 |---|---|---|---|
+| `GET` | `/api/health` | Non | État de l'API |
 | `POST` | `/api/auth/token` | Non | Login — retourne cookie httpOnly `fovet_token` |
 | `POST` | `/api/auth/logout` | Non | Supprime le cookie de session |
-| `GET` | `/api/health` | Non | État de l'API |
 | `GET` | `/api/devices` | JWT | Liste tous les dispositifs |
 | `POST` | `/api/devices` | JWT | Enregistrer un nouveau dispositif |
-| `GET` | `/api/devices/:id/readings` | JWT | Dernières lectures d'un dispositif |
-| `GET` | `/api/alerts` | JWT | Alertes récentes (anomalies) |
+| `GET` | `/api/devices/:id/readings` | JWT | Lectures paginées (cursor-based) |
+| `GET` | `/api/devices/:id/stream` | JWT | Flux SSE temps réel des nouvelles lectures |
+| `GET` | `/api/devices/:id/alerts` | JWT | Alertes non acquittées |
+| `PATCH` | `/api/alerts/:id/ack` | JWT | Acquitter une alerte |
 
-**Authentification :** cookie httpOnly `fovet_token` (JWT HS256, durée 7 jours).
+### Pagination des lectures
+
+```
+GET /api/devices/:id/readings?limit=100&cursor=<bigint-id>
+```
+
+Réponse :
+```json
+{
+  "data": [
+    { "id": "1234", "value": 23.4, "mean": 23.1, "zScore": 0.71, "isAnomaly": false, "timestamp": "..." }
+  ],
+  "pagination": {
+    "limit": 100,
+    "hasMore": true,
+    "nextCursor": "1133"
+  }
+}
+```
+
+- `cursor` : id de la dernière lecture reçue → retourne les lectures antérieures (ordre DESC)
+- `hasMore: true` → passer `nextCursor` comme `cursor` pour la page suivante
+- Les ids sont sérialisés en `String` (BigInt → JSON)
+
+### Flux SSE temps réel
+
+```
+GET /api/devices/:id/stream
+```
+
+Événements émis :
+- `event: reading` — nouvelle lecture reçue via MQTT (même format que `data[]`)
+- `event: ping` — heartbeat toutes les 30 s
+
+`ReadingChart` se connecte automatiquement en SSE et repasse en polling 5 s si la connexion échoue.
+
+**Authentification :**
 
 ```bash
-# Obtenir un token
+# Login
 curl -c cookies.txt -X POST http://localhost:3000/api/auth/token \
   -H "Content-Type: application/json" \
   -d '{"password":"monmotdepasse"}'
 
-# Appeler une route protégée
+# Route protégée
 curl -b cookies.txt http://localhost:3000/api/devices
 ```
 
@@ -104,12 +148,8 @@ curl -b cookies.txt http://localhost:3000/api/devices
 
 ## MQTT — Format des messages
 
-Les ESP32 publient sur le topic :
-```
-fovet/devices/<DEVICE_ID>/readings
-```
+Les ESP32 publient sur le topic `fovet/devices/<DEVICE_ID>/readings` :
 
-Payload JSON attendu :
 ```json
 {
   "value": 23.4,
@@ -120,7 +160,22 @@ Payload JSON attendu :
 }
 ```
 
-Vigie souscrit à `fovet/devices/+/readings`, insère chaque reading en base, et crée une alerte si `anomaly: true`.
+Vigie souscrit à `fovet/devices/+/readings`, insère chaque reading, crée une alerte si `anomaly: true`, et émet sur le bus interne pour diffuser aux clients SSE connectés.
+
+---
+
+## Architecture temps réel (SSE)
+
+```
+ESP32 → MQTT → mqtt-ingestion.ts → prisma.reading.create()
+                                  → emitReading() → EventEmitter (event-bus.ts)
+                                                          ↓
+                                GET /devices/:id/stream ← subscribeToReadings()
+                                          ↓
+                                   Browser EventSource (ReadingChart.tsx)
+```
+
+Le singleton `global.__fovetEventBus` survit aux hot-reloads Next.js en développement.
 
 ---
 
@@ -130,30 +185,34 @@ Vigie souscrit à `fovet/devices/+/readings`, insère chaque reading en base, et
 model Device {
   id           String    @id @default(cuid())
   mqttClientId String    @unique
-  name         String?
+  name         String
+  location     String?
+  active       Boolean   @default(true)
   readings     Reading[]
   alerts       Alert[]
   createdAt    DateTime  @default(now())
 }
 
 model Reading {
-  id        String   @id @default(cuid())
+  id        BigInt   @id @default(autoincrement())  // BigInt pour cursor pagination
   deviceId  String
   value     Float
-  mean      Float?
-  stddev    Float?
-  zScore    Float?
-  anomaly   Boolean  @default(false)
-  timestamp DateTime @default(now())
+  mean      Float
+  stddev    Float
+  zScore    Float
+  isAnomaly Boolean
+  timestamp DateTime
 }
 
 model Alert {
-  id        String   @id @default(cuid())
-  deviceId  String
-  value     Float
-  zScore    Float?
-  timestamp DateTime @default(now())
-  ack       Boolean  @default(false)
+  id             String    @id @default(cuid())
+  deviceId       String
+  value          Float
+  zScore         Float
+  threshold      Float
+  acknowledged   Boolean   @default(false)
+  acknowledgedAt DateTime?
+  timestamp      DateTime
 }
 ```
 
@@ -162,11 +221,11 @@ model Alert {
 ## Tests
 
 ```bash
-npm run test          # Vitest — 19 tests
+npm run test          # Vitest — 23 tests
 npm run test:coverage # Avec couverture
 ```
 
-Les tests couvrent : health, auth/login, rate limiting, JWT validation, Zod validation, CRUD devices/alerts, acknowledgement alertes.
+Tests couverts : health, auth/login, rate limiting (429), JWT validation, Zod validation, CRUD devices/alerts, pagination cursor (hasMore, nextCursor, erreur cursor invalide), acquittement alertes.
 
 ---
 
@@ -175,8 +234,8 @@ Les tests couvrent : health, auth/login, rate limiting, JWT validation, Zod vali
 | Mesure | Implémentation |
 |---|---|
 | Auth JWT | Cookie httpOnly — élimine le vol XSS |
-| Rate limiting | 5 req / 15 min sur `/auth/token` par IP |
+| Rate limiting | 5 req / 15 min sur `/auth/token` par IP (in-memory en dev, Redis prévu en prod) |
 | CORS | Restreint à `ALLOWED_ORIGIN` |
-| CSP | Headers stricts — `unsafe-eval` uniquement en dev |
+| CSP | Security headers stricts |
 | Validation | Zod sur `POST /devices` et `POST /auth/token` |
-| MQTT | Auth par login/mdp (Mosquitto) + ACL par topic |
+| MQTT | Auth login/mdp (Mosquitto) + ACL par topic |
