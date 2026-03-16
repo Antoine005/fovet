@@ -7,6 +7,11 @@ Simule trois flux capteurs réalistes pour un dispositif de démonstration :
   - HR   (sensorType=HR)   : fréquence cardiaque BPM, 0.5 Hz
   - TEMP (sensorType=TEMP) : température + humidité DHT22, 0.33 Hz
 
+Chaque lecture publie zScore (Welford) ET madScore (MAD fenêtré, win=32).
+Cela permet de comparer les deux détecteurs sur le même signal en temps réel :
+  - zScore : Welford — sensible aux outliers passés accumulés
+  - madScore : médiane glissante — robuste, insensible aux outliers précédents
+
 Publie sur le topic : fovet/devices/<mqttClientId>/readings
 
 Usage :
@@ -80,6 +85,54 @@ class Welford:
 
 
 # ---------------------------------------------------------------------------
+# StreamingMAD — miroir Python de fovet_mad C99 (mad.h / mad.c)
+#
+# Utilise un ring buffer de taille fixe (win_size).  Score calculé AVANT
+# insertion du sample, comme dans fovet_mad_update().
+# ---------------------------------------------------------------------------
+
+class StreamingMAD:
+    """Rolling MAD anomaly scorer.
+
+    Mirrors fovet_mad_update() exactly:
+    - score is computed against the CURRENT window (before inserting the new sample)
+    - returns 0.0 during warm-up (fewer than win_size samples)
+    score = |x - median| / (1.4826 * MAD)
+    """
+
+    def __init__(self, win_size: int = 32) -> None:
+        self._win  = win_size
+        self._buf: list[float] = []
+
+    def update(self, x: float) -> float:
+        """Add sample, return MAD score (0.0 during warm-up)."""
+        score = 0.0
+        if len(self._buf) >= self._win:
+            score = self._score(x, self._buf[-self._win:])
+        # Add to ring buffer
+        self._buf.append(x)
+        if len(self._buf) > self._win:
+            self._buf = self._buf[-self._win:]
+        return score
+
+    @staticmethod
+    def _score(value: float, window: list[float]) -> float:
+        n = len(window)
+        if n == 0:
+            return 0.0
+        sorted_w = sorted(window)
+        mid = n // 2
+        med = sorted_w[mid] if n % 2 == 1 else (sorted_w[mid - 1] + sorted_w[mid]) / 2.0
+        abs_devs = sorted([abs(v - med) for v in sorted_w])
+        mid2 = len(abs_devs) // 2
+        mad = abs_devs[mid2] if len(abs_devs) % 2 == 1 else (abs_devs[mid2 - 1] + abs_devs[mid2]) / 2.0
+        deviation = abs(value - med)
+        if mad < 1e-9:
+            return 0.0 if deviation < 1e-9 else 1e9
+        return deviation / (1.4826 * mad)
+
+
+# ---------------------------------------------------------------------------
 # WBGT Stull (2011) — identique à temp_profile.c et TempCard.tsx
 # ---------------------------------------------------------------------------
 
@@ -111,7 +164,8 @@ def ema_update(prev: Optional[float], x: float, alpha: float) -> float:
 
 @dataclass
 class SimState:
-    welford:      Welford = field(default_factory=Welford)
+    welford:      Welford      = field(default_factory=Welford)
+    mad:          StreamingMAD = field(default_factory=StreamingMAD)
     ema:          Optional[float] = None
     sample_count: int = 0
     anomaly_due:  bool = False      # inject anomaly on next tick
@@ -151,12 +205,13 @@ def publish(client: mqtt.Client, device_id: str, payload: dict, label: str) -> N
     module = payload.get("sensorType", "?")
     val    = payload.get("value", 0)
     z      = payload.get("zScore", 0.0)
+    mad_s  = payload.get("madScore", 0.0)
     extra  = f"  ptiType={payload['ptiType']}" if payload.get("ptiType") else ""
     print(
         f"{C_GRAY}{time.strftime('%H:%M:%S')}{C_RESET}  "
         f"{C_BOLD}{module:4s}{C_RESET}  "
         f"{label:<22s}  "
-        f"val={val:6.2f}  z={z:.2f}  "
+        f"val={val:6.2f}  z={z:.2f}  mad={mad_s:.2f}  "
         f"{color}{level}{C_RESET}{extra}"
     )
 
@@ -183,6 +238,7 @@ def run_imu(client: mqtt.Client, device_id: str, interval: float,
             state.anomaly_due = False
             state.pti_type_due = None
 
+        mad_score = state.mad.update(val)
         state.welford.update(val)
         z       = state.welford.zscore(val)
         anomaly = z > 3.0 or pti_type is not None
@@ -198,6 +254,7 @@ def run_imu(client: mqtt.Client, device_id: str, interval: float,
             "mean":       round(state.welford.mean, 4),
             "stddev":     round(state.welford.stddev, 4),
             "zScore":     round(z, 4),
+            "madScore":   round(mad_score, 4),
             "anomaly":    anomaly,
             "sensorType": "IMU",
             "level":      level,
@@ -225,6 +282,7 @@ def run_hr(client: mqtt.Client, device_id: str, interval: float,
             bpm              = random.uniform(88.0, 105.0)
             state.anomaly_due = False
 
+        mad_score    = state.mad.update(bpm)
         state.ema    = ema_update(state.ema, bpm, EMA_ALPHA)
         ema_bpm      = state.ema
         state.sample_count += 1
@@ -243,6 +301,7 @@ def run_hr(client: mqtt.Client, device_id: str, interval: float,
             "mean":       round(state.welford.mean, 2),
             "stddev":     round(state.welford.stddev, 2),
             "zScore":     round(z, 4),
+            "madScore":   round(mad_score, 4),
             "anomaly":    z > 3.0,
             "sensorType": "HR",
             "level":      level,
@@ -273,6 +332,7 @@ def run_temp(client: mqtt.Client, device_id: str, interval: float,
             humidity          = random.uniform(75.0, 90.0)
             state.anomaly_due = False
 
+        mad_score          = state.mad.update(celsius)
         state.ema          = ema_update(state.ema, celsius, EMA_ALPHA)
         ema_c              = state.ema
         state.sample_count += 1
@@ -295,6 +355,7 @@ def run_temp(client: mqtt.Client, device_id: str, interval: float,
             "mean":       round(state.welford.mean, 2),
             "stddev":     round(state.welford.stddev, 2),
             "zScore":     round(z, 4),
+            "madScore":   round(mad_score, 4),
             "anomaly":    z > 3.0,
             "sensorType": "TEMP",
             "level":      level,
