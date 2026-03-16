@@ -45,31 +45,39 @@ automl-pipeline/
 │   │   ├── csv_loader.py   ← Lecteur CSV (pandas)
 │   │   └── loader.py       ← Factory load_data(config)
 │   ├── detectors/
-│   │   ├── base.py         ← Detector ABC + DetectionResult
-│   │   ├── zscore.py       ← ZScoreDetector (algo de Welford) + export fovet_zscore_config.h
+│   │   ├── base.py             ← Detector ABC + DetectionResult
+│   │   ├── zscore.py           ← ZScoreDetector (algo de Welford) + export fovet_zscore_config.h
 │   │   ├── isolation_forest.py ← IsolationForestDetector (sklearn) + export JSON
-│   │   ├── autoencoder.py  ← AutoEncoderDetector (Keras Dense) + export TFLite + C header
-│   │   ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
-│   │   └── registry.py     ← build_detectors(configs) factory
+│   │   ├── autoencoder.py      ← AutoEncoderDetector (Keras Dense) + export TFLite + C header
+│   │   ├── lstm_autoencoder.py ← LSTMAutoEncoderDetector (Keras LSTM) + export TFLite + C header
+│   │   ├── ewma_drift.py       ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
+│   │   ├── mad.py              ← MADDetector (médiane glissante) + export fovet_mad_config.h
+│   │   └── registry.py         ← build_detectors(configs) factory
 │   └── pipelines/
-│       ├── fall_detection.py  ← FallDetectionPipeline — fenêtre glissante + Dense + TFLite INT8
-│       ├── fatigue_hrv.py     ← FatigueHRVPipeline — BVP → HRV features + Random Forest
-│       └── thermal_stress.py  ← ThermalStressPipeline — DHT22 → WBGT + Random Forest (H3.2)
+│       ├── fall_detection.py   ← FallDetectionPipeline — IMU fenêtre + Dense TFLite INT8 (H1.2)
+│       ├── fatigue_hrv.py      ← FatigueHRVPipeline — BVP → 7 HRV features + Random Forest (H2.2)
+│       └── thermal_stress.py   ← ThermalStressPipeline — DHT22 → WBGT + Random Forest (H3.2)
 ├── configs/
-│   ├── demo_zscore.yaml        ← Démo synthétique sinus + Z-Score
-│   ├── demo_autoencoder.yaml   ← Démo synthétique 2D + AutoEncoder TFLite
-│   └── client_vibration.yaml  ← Template client CSV + Z-Score + Isolation Forest
+│   ├── demo_zscore.yaml           ← Démo synthétique sinus + Z-Score
+│   ├── demo_mad.yaml              ← Démo synthétique sinus + MAD detector
+│   ├── demo_autoencoder.yaml      ← Démo synthétique 2D + AutoEncoder TFLite
+│   ├── client_vibration.yaml      ← Template client CSV + Z-Score + Isolation Forest
+│   └── benchmark_4detectors.yaml ← Benchmark comparatif 4 détecteurs (forge benchmark)
 ├── tests/
-│   ├── test_config.py          ← 13 tests config Pydantic
-│   ├── test_data.py            ← 23 tests Dataset + synthetic + CSV
-│   ├── test_detectors.py       ← 21 tests ZScoreDetector + registry
-│   ├── test_isolation_forest.py ← 16 tests IsolationForestDetector
-│   ├── test_autoencoder.py     ← 19 tests AutoEncoderDetector (skip si TF absent)
-│   ├── test_ewma_drift.py      ← 23 tests EWMADriftDetector + export + registry
-│   ├── test_preprocessing.py  ← 23 tests Scaler (fit, transform, export JSON + C header)
-│   ├── test_fall_detection.py ← 56 tests FallDetectionPipeline (skip si TF absent)
-│   ├── test_fatigue_hrv.py    ← 67 tests FatigueHRVPipeline (sklearn only, toujours actifs)
-│   └── test_thermal_stress.py ← 88 tests ThermalStressPipeline (WBGT, 4 niveaux, export)
+│   ├── test_config.py             ← 13 tests config Pydantic
+│   ├── test_data.py               ← 23 tests Dataset + synthetic + CSV
+│   ├── test_detectors.py          ← 21 tests ZScoreDetector + registry
+│   ├── test_isolation_forest.py   ← 16 tests IsolationForestDetector
+│   ├── test_autoencoder.py        ← 19 tests AutoEncoderDetector (skip si TF absent)
+│   ├── test_lstm_autoencoder.py   ← 26 tests LSTMAutoEncoderDetector (skip si TF absent)
+│   ├── test_ewma_drift.py         ← 23 tests EWMADriftDetector + export + registry
+│   ├── test_mad_detector.py       ← 34 tests MADDetector + export + registry
+│   ├── test_fall_detection.py     ← 56 tests FallDetectionPipeline (skip si TF absent)
+│   ├── test_fatigue_hrv.py        ← 67 tests FatigueHRVPipeline (sklearn only)
+│   ├── test_thermal_stress.py     ← 88 tests ThermalStressPipeline (WBGT, 4 niveaux)
+│   ├── test_mqtt_loader.py        ← 9 tests chargement données source MQTT
+│   ├── test_pipeline.py           ← 12 tests Pipeline end-to-end (normalise, split, export)
+│   └── test_preprocessing.py     ← 23 tests Scaler (fit, transform, export JSON + C header)
 ├── models/                     ← Fichiers exportés (gitignored)
 ├── data/                       ← Datasets capteurs (gitignored)
 └── pyproject.toml
@@ -83,6 +91,9 @@ automl-pipeline/
 | **EWMA Drift** | `ewma_drift` | ESP32 / MCU | `fovet_drift_config.h` + `drift_config.json` |
 | **Isolation Forest** | `isolation_forest` | Cloud ou gateway uniquement | `isolation_forest_config.json` |
 | **AutoEncoder Dense** | `autoencoder` | ESP32 (TFLite Micro) | `autoencoder.tflite` + `fovet_autoencoder_model.h` |
+| **LSTM AutoEncoder** | `lstm_autoencoder` | ESP32 (TFLite Micro) | `lstm_autoencoder.tflite` + `fovet_lstm_autoencoder_model.h` |
+
+> **Note LSTM AutoEncoder :** variante avec couche LSTM (séquences temporelles). Capture les corrélations entre échantillons successifs — meilleur sur signaux périodiques (vibrations, ECG). Requiert `window_size` samples glissants. `unroll=True` imposé pour compatibilité TFLite export.
 
 > **Note IsolationForest :** les structures d'arbres sont incompatibles avec les contraintes RAM d'un MCU. Ce détecteur est réservé à un usage cloud ou gateway (Raspberry Pi, serveur edge).
 
@@ -347,8 +358,9 @@ static FovetDrift fovet_drift_temperature = {
 
 ```bash
 uv run pytest -v
-# 261 tests (dont 75 skippés si TF absent — FallDetectionPipeline + AutoEncoder)
-# 186 tests toujours actifs (sklearn only)
+# ~470 tests au total (branch monitoring/human : +H1/H2/H3 pipelines)
+# 321 tests master (dont quelques-uns skippés si TF absent)
+# 186 tests toujours actifs (sklearn only, sans TF)
 ```
 
 ## Roadmap Forge
@@ -360,6 +372,7 @@ uv run pytest -v
 | Forge-3a | ✅ | ZScoreDetector (Welford) + export `fovet_zscore_config.h` |
 | Forge-3b | ✅ | IsolationForestDetector (sklearn) + export JSON |
 | Forge-4 | ✅ | AutoEncoderDetector (Keras Dense) + export TFLite INT8 + C header |
+| Forge-4b | ✅ | LSTMAutoEncoderDetector (Keras LSTM) + export TFLite + C header |
 | Forge-5 | ✅ | Rapport HTML/JSON + train/test split + métriques évaluation |
 | Forge-6 | ✅ | CI GitHub Actions + workflow GPU Scaleway |
 | H1.2 (monitoring/human) | ✅ | FallDetectionPipeline — détection chute IMU, TFLite INT8, 56 tests |
