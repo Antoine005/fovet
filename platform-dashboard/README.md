@@ -15,7 +15,7 @@ Reçoit les lectures MQTT des ESP32, stocke en PostgreSQL, expose une API REST s
 | MQTT ingestion | mqtt.js → `startMqttIngestion()` au boot Next.js |
 | Temps réel | SSE via EventEmitter in-process (`event-bus.ts`) |
 | Auth | JWT HS256 — cookies httpOnly (pas de localStorage) |
-| Tests | Vitest — 23 tests |
+| Tests | Vitest — 44 tests |
 
 ---
 
@@ -69,6 +69,7 @@ platform-dashboard/
 │   │   ├── DeviceCard.tsx              ← Carte dispositif (vue détail)
 │   │   ├── FleetPanel.tsx              ← Sparkline compacte + badge alerte (vue flotte)
 │   │   ├── FleetHealth.tsx             ← Santé flotte cross-module (alertes par module par dispositif)
+│   │   ├── FleetAlertTimeline.tsx      ← Chronologie alertes flotte (toutes sources, filtre sévérité, auto-refresh)
 │   │   └── WorkerDetail.tsx            ← Vue individuelle cross-module (résumé capteurs + export rapport)
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
@@ -79,7 +80,8 @@ platform-dashboard/
 ├── prisma/
 │   └── schema.prisma                   ← Modèles Device, Reading (BigInt id, sensorType, value2), Alert (ptiType, alertModule, alertLevel)
 ├── src/__tests__/
-│   └── api.test.ts                     ← 52 tests Vitest
+│   ├── api.test.ts                     ← 31 tests Vitest — routes REST, auth, pagination, report
+│   └── rate-limiter.test.ts            ← 13 tests Vitest — rate limiting IP
 └── .env.example                        ← Template variables d'environnement
 ```
 
@@ -93,6 +95,7 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 |---|---|---|---|
 | `GET` | `/api/health` | Non | État de l'API |
 | `POST` | `/api/auth/token` | Non | Login — retourne cookie httpOnly `fovet_token` |
+| `POST` | `/api/auth/refresh` | JWT | Renouvelle le token (sliding session) |
 | `POST` | `/api/auth/logout` | Non | Supprime le cookie de session |
 | `GET` | `/api/devices` | JWT | Liste tous les dispositifs |
 | `POST` | `/api/devices` | JWT | Enregistrer un nouveau dispositif |
@@ -101,6 +104,9 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `GET` | `/api/devices/:id/alerts` | JWT | Alertes non acquittées |
 | `PATCH` | `/api/alerts/:id/ack` | JWT | Acquitter une alerte |
 | `GET` | `/api/fleet/health` | JWT | Santé flotte cross-module (alertes par module par dispositif) |
+| `GET` | `/api/fleet/alerts/recent` | JWT | Alertes récentes toutes sources — `?limit=50&cursor=<id>` |
+| `GET` | `/api/pti/fleet` | JWT | État flotte PTI (chute/immobilité/SOS par dispositif) |
+| `GET` | `/api/pti/alerts/recent` | JWT | Alertes PTI récentes — `?limit=50&cursor=<id>` |
 | `GET` | `/api/workers/:deviceId/summary` | JWT | Résumé individuel cross-module (lectures HR + TEMP + alertes récentes) |
 | `GET` | `/api/devices/:id/report` | JWT | Rapport de session `?from=ISO&to=ISO&format=json\|csv` (défaut: 8h, cap 7j) |
 
@@ -160,15 +166,23 @@ Les ESP32 publient sur le topic `fovet/devices/<DEVICE_ID>/readings` :
 
 ```json
 {
-  "value": 23.4,
-  "mean": 23.1,
-  "stddev": 0.42,
-  "zScore": 0.71,
-  "anomaly": false
+  "value":      23.4,
+  "mean":       23.1,
+  "stddev":     0.42,
+  "zScore":     0.71,
+  "madScore":   0.31,
+  "anomaly":    false,
+  "sensorType": "TEMP",
+  "level":      "SAFE",
+  "value2":     61.0,
+  "ptiType":    null,
+  "ts":         1741876800000
 }
 ```
 
-Vigie souscrit à `fovet/devices/+/readings`, insère chaque reading, crée une alerte si `anomaly: true`, et émet sur le bus interne pour diffuser aux clients SSE connectés.
+Seuls `value`, `mean`, `stddev`, `zScore` et `anomaly` sont requis — tous les autres champs sont optionnels (firmwares existants sans modification). `ptiType` est exclusif au module IMU (`"FALL"` | `"MOTIONLESS"` | `"SOS"`).
+
+Vigie souscrit à `fovet/devices/+/readings`, insère chaque reading, crée une alerte si `anomaly: true` ou si `level ∈ {WARN, DANGER, COLD, CRITICAL}`, et émet sur le bus interne pour diffuser aux clients SSE connectés.
 
 ---
 
@@ -282,11 +296,11 @@ Les champs `sensorType`, `level`, `value2` sont optionnels — les firmwares exi
 ## Tests
 
 ```bash
-npm run test          # Vitest — 52 tests
+npm run test          # Vitest — 44 tests
 npm run test:coverage # Avec couverture
 ```
 
-Tests couverts : health, auth/login, rate limiting (429), JWT validation, Zod validation, CRUD devices/alerts, pagination cursor (hasMore, nextCursor, erreur cursor invalide), acquittement alertes.
+Tests couverts : health, auth/login, rate limiting (429), JWT validation, Zod validation, CRUD devices/alerts, pagination cursor (hasMore, nextCursor, erreur cursor invalide), acquittement alertes, limiter IP (in-memory).
 
 ---
 
