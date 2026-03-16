@@ -84,13 +84,16 @@ Fovet Forge
   │  5. Export vers models/
   ▼
 Artefacts exportés
-  ├── fovet_zscore_config.h       → firmware ESP32 (#include direct)
-  ├── fovet_mad_config.h          → firmware ESP32 (ring buffer pré-seedé)
-  ├── fovet_drift_config.h        → firmware ESP32 (état EWMA post-calibration)
-  ├── scaler_params.json          → paramètres normalisation (si normalize: true)
-  ├── isolation_forest_config.json → cloud/gateway uniquement
-  ├── autoencoder.tflite          → TFLite Micro sur ESP32
-  └── fovet_autoencoder_model.h   → C byte-array pour TFLite Micro
+  ├── fovet_zscore_config.h            → firmware ESP32 (#include direct)
+  ├── fovet_mad_config.h               → firmware ESP32 (ring buffer pré-seedé)
+  ├── fovet_drift_config.h             → firmware ESP32 (état EWMA post-calibration)
+  ├── scaler_params.json               → paramètres normalisation (si normalize: true)
+  ├── fovet_scaler_params.h            → normalisation C header (si normalize: true)
+  ├── isolation_forest_config.json     → cloud/gateway uniquement
+  ├── autoencoder.tflite               → TFLite Micro sur ESP32 (Dense)
+  ├── fovet_autoencoder_model.h        → C byte-array pour TFLite Micro (Dense)
+  ├── lstm_autoencoder.tflite          → TFLite Micro sur ESP32 (LSTM, unroll=True)
+  └── fovet_lstm_autoencoder_model.h   → C byte-array pour TFLite Micro (LSTM)
   ▼
 Firmware ESP32 mis à jour
   #include "fovet_zscore_config.h"
@@ -135,13 +138,25 @@ const float g_autoencoder_threshold = 0.042f;
 
 ```json
 {
-  "value": 23.41,
-  "mean": 23.18,
-  "stddev": 0.42,
-  "zScore": 0.55,
-  "anomaly": false
+  "value":      23.41,
+  "mean":       23.18,
+  "stddev":     0.42,
+  "zScore":     0.55,
+  "madScore":   0.31,
+  "anomaly":    false,
+  "sensorType": "TEMP",
+  "level":      "SAFE",
+  "value2":     61.0,
+  "ptiType":    null,
+  "ts":         1741876800000
 }
 ```
+
+Champs requis : `value`, `mean`, `stddev`, `zScore`, `anomaly`. Tous les autres sont optionnels.
+`sensorType` : `"IMU"` | `"HR"` | `"TEMP"` — identifie le module producteur.
+`level` : `"SAFE"` | `"WARN"` | `"DANGER"` | `"COLD"` | `"CRITICAL"` — niveau Sentinelle.
+`ptiType` : `"FALL"` | `"MOTIONLESS"` | `"SOS"` — exclusif au module IMU (PTI).
+`madScore` : score MAD fenêtré (win=32), 0 pendant warm-up — publié par demo_mqtt.py.
 
 Topic : `fovet/devices/<mqttClientId>/readings`
 
@@ -313,11 +328,13 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 
 | Session | Produit | Statut | Contenu |
 |---|---|---|---|
+| Forge-4b | Forge | ✅ | LSTMAutoEncoderDetector + export TFLite + C header (`fovet_lstm_autoencoder_model.h`) |
 | Forge-5 | Forge | ✅ | Rapport HTML/JSON + train/test split + métriques |
 | Forge-6 | Forge | ✅ | CI GitHub Actions + Scaleway GPU |
 | Forge-7 | Forge | ✅ | Benchmark CLI : `forge benchmark --config a.yaml --config b.yaml` |
 | Forge-8 | Forge | ✅ | MADDetector + export `fovet_mad_config.h` (miroir C99 `fovet_mad`) |
-| U1–U5 | Vigie/Scripts | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT |
+| Forge-9 | Forge | ✅ | Pipeline Scaler + export `fovet_scaler_params.h` (normalize: true) |
+| U1–U5 | Vigie/Scripts | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT (zScore + madScore) |
 | S10 | Sentinelle | ⏳ ~19/03 | Flash ESP32-CAM (nouvelle carte MB) |
 | S11 | Sentinelle | ⏳ | Capteurs réels : DHT22 (I2C) ou MPU-6050 (accéléromètre) |
 | Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |
