@@ -19,6 +19,7 @@ from rich.table import Table
 from forge import __version__
 from forge.config import PipelineConfig
 from forge.pipeline import Pipeline
+from forge.benchmark import run_benchmark
 
 app = typer.Typer(
     name="forge",
@@ -60,6 +61,58 @@ def validate(
 
     console.print(table)
     console.print("[green]âœ“ Config is valid.[/green]")
+
+
+@app.command()
+def benchmark(
+    configs: list[Path] = typer.Option(
+        ..., "--config", "-c", help="Config YAMLs to compare (pass multiple times)"
+    ),
+    output_dir: Path = typer.Option(
+        Path("reports"), "--output-dir", "-o", help="Report output directory"
+    ),
+) -> None:
+    """Compare multiple detector configs on the same dataset."""
+    if len(configs) < 2:
+        err_console.print("forge benchmark requires at least 2 --config options.")
+        raise typer.Exit(1)
+
+    loaded: list[PipelineConfig] = []
+    for path in configs:
+        cfg = _load_config(path)
+        if cfg is None:
+            raise typer.Exit(1)
+        loaded.append(cfg)
+
+    try:
+        all_metrics = run_benchmark(loaded, output_dir=output_dir)
+    except Exception as e:
+        err_console.print(f"Benchmark failed: {e}")
+        raise typer.Exit(1)
+
+    # Print Rich comparison table
+    table = Table(title="Benchmark Results", show_header=True, header_style="bold")
+    table.add_column("Detector", style="cyan")
+    table.add_column("Samples", justify="right")
+    table.add_column("Anomalies", justify="right")
+    table.add_column("Rate", justify="right")
+    table.add_column("Precision", justify="right")
+    table.add_column("Recall", justify="right")
+    table.add_column("F1", justify="right")
+
+    for m in all_metrics:
+        table.add_row(
+            m.detector_name,
+            str(m.n_samples),
+            str(m.n_anomalies_predicted),
+            f"{m.anomaly_rate:.1%}",
+            f"{m.precision:.2f}" if m.precision is not None else "—",
+            f"{m.recall:.2f}" if m.recall is not None else "—",
+            f"{m.f1:.2f}" if m.f1 is not None else "—",
+        )
+
+    console.print(table)
+    console.print(f"[green]Benchmark report written to: {output_dir}[/green]")
 
 
 @app.command()
