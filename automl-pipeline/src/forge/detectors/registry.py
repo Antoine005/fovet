@@ -27,6 +27,9 @@ def build_detectors(configs: list[DetectorConfig]) -> list[Detector]:
         elif cfg.type == DetectorType.ewma_drift:
             from forge.detectors.ewma_drift import EWMADriftDetector
             detectors.append(EWMADriftDetector(cfg))
+        elif cfg.type == DetectorType.mad:
+            from forge.detectors.mad import MADDetector
+            detectors.append(MADDetector(cfg))
         else:
             raise ValueError(f"Unknown detector type: {cfg.type}")
     return detectors

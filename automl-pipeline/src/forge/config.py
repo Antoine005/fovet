@@ -31,6 +31,7 @@ class DetectorType(str, Enum):
     autoencoder = "autoencoder"
     lstm_autoencoder = "lstm_autoencoder"
     ewma_drift = "ewma_drift"
+    mad = "mad"
 
 
 class ExportTarget(str, Enum):
@@ -175,8 +176,28 @@ class EWMADriftDetectorConfig(BaseModel):
         return self
 
 
+class MADDetectorConfig(BaseModel):
+    """MAD (Median Absolute Deviation) detector — robust, outlier-resistant streaming detector.
+
+    Mirrors FovetMAD in edge-core/include/fovet/mad.h.
+    Uses a fixed-size ring buffer; score = |x - median| / (1.4826 * MAD).
+    Threshold is auto-calibrated from training data (``threshold_percentile``),
+    or can be set explicitly with ``threshold_mad``.
+
+    Typical parameters:
+        win_size=32           →  ~32 sample memory
+        threshold_mad=3.5     →  flag samples > 3.5 MAD units from median
+        threshold_percentile=99.0  →  auto-flag top 1% in training data
+    """
+
+    type: Literal[DetectorType.mad]
+    win_size: int = Field(default=32, ge=1, le=128)
+    threshold_mad: float | None = Field(default=None, gt=0)
+    threshold_percentile: float = Field(default=99.0, gt=50, le=100)
+
+
 DetectorConfig = Annotated[
-    ZScoreDetectorConfig | IsolationForestDetectorConfig | AutoEncoderDetectorConfig | LSTMAutoEncoderDetectorConfig | EWMADriftDetectorConfig,
+    ZScoreDetectorConfig | IsolationForestDetectorConfig | AutoEncoderDetectorConfig | LSTMAutoEncoderDetectorConfig | EWMADriftDetectorConfig | MADDetectorConfig,
     Field(discriminator="type"),
 ]
 

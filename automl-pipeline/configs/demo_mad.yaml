@@ -1,0 +1,37 @@
+# Fovet Forge — Demo config: MAD detector on synthetic sine signal
+# Run: uv run forge run --config configs/demo_mad.yaml
+
+name: demo-mad-sine
+description: "Détection d'anomalies MAD (Median Absolute Deviation) sur signal sinusoïdal synthétique"
+
+data:
+  source: synthetic
+  signal: sine           # sine | random_walk | constant
+  n_samples: 1000        # nombre de points générés
+  frequency: 1.0         # fréquence du sinus (Hz normalisé)
+  noise_std: 0.1         # écart-type du bruit gaussien ajouté
+  anomaly_rate: 0.05     # fraction de points contenant une anomalie (0–0.5)
+  anomaly_magnitude: 5.0 # amplitude de l'anomalie en multiples de noise_std
+  columns: [value]
+  seed: 42
+
+detectors:
+  - type: mad
+    win_size: 32              # taille de la fenêtre glissante (1–128, capée par FOVET_MAD_MAX_WINDOW)
+    threshold_percentile: 99.0 # auto-calibration : flag le top 1% des scores d'entraînement
+    # threshold_mad: 3.5      # décommentez pour forcer un seuil explicite (sinon auto-calibré)
+
+# Train/test split : entraîner sur données propres, évaluer sur données avec anomalies
+split:
+  enabled: true
+  test_ratio: 0.2      # 80% entraînement, 20% évaluation
+  random_state: 42
+
+export:
+  targets: [c_header, json_config]
+  output_dir: models/demo_mad
+
+report:
+  enabled: true
+  format: html
+  output_dir: reports

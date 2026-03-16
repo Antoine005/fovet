@@ -50,9 +50,11 @@ automl-pipeline/
 │       ├── isolation_forest.py ← IsolationForestDetector (sklearn) + export JSON
 │       ├── autoencoder.py  ← AutoEncoderDetector (Keras Dense) + export TFLite + C header
 │       ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
+│       ├── mad.py          ← MADDetector (médiane glissante) + export fovet_mad_config.h
 │       └── registry.py     ← build_detectors(configs) factory
 ├── configs/
 │   ├── demo_zscore.yaml        ← Démo synthétique sinus + Z-Score
+│   ├── demo_mad.yaml           ← Démo synthétique sinus + MAD detector
 │   ├── demo_autoencoder.yaml   ← Démo synthétique 2D + AutoEncoder TFLite
 │   └── client_vibration.yaml  ← Template client CSV + Z-Score + Isolation Forest
 ├── tests/
@@ -62,6 +64,7 @@ automl-pipeline/
 │   ├── test_isolation_forest.py ← 16 tests IsolationForestDetector
 │   ├── test_autoencoder.py     ← 19 tests AutoEncoderDetector (skip si TF absent)
 │   ├── test_ewma_drift.py      ← 23 tests EWMADriftDetector + export + registry
+│   ├── test_mad_detector.py    ← 34 tests MADDetector + export + registry
 │   └── test_preprocessing.py  ← 23 tests Scaler (fit, transform, export JSON + C header)
 ├── models/                     ← Fichiers exportés (gitignored)
 ├── data/                       ← Datasets capteurs (gitignored)
@@ -73,6 +76,7 @@ automl-pipeline/
 | Détecteur | Type YAML | Déploiement | Export |
 |---|---|---|---|
 | **Z-Score** | `zscore` | ESP32 / MCU | `fovet_zscore_config.h` (SDK C) |
+| **MAD** | `mad` | ESP32 / MCU | `fovet_mad_config.h` + `mad_config.json` |
 | **EWMA Drift** | `ewma_drift` | ESP32 / MCU | `fovet_drift_config.h` + `drift_config.json` |
 | **Isolation Forest** | `isolation_forest` | Cloud ou gateway uniquement | `isolation_forest_config.json` |
 | **AutoEncoder Dense** | `autoencoder` | ESP32 (TFLite Micro) | `autoencoder.tflite` + `fovet_autoencoder_model.h` |
@@ -80,6 +84,8 @@ automl-pipeline/
 > **Note IsolationForest :** les structures d'arbres sont incompatibles avec les contraintes RAM d'un MCU. Ce détecteur est réservé à un usage cloud ou gateway (Raspberry Pi, serveur edge).
 
 > **Note EWMA Drift :** complémentaire au Z-Score. Le Z-Score détecte les pics soudains ; EWMA Drift détecte les glissements progressifs que Welford absorbe dans sa moyenne courante. À utiliser conjointement sur signaux physiques lents (température, pression).
+
+> **Note MAD :** alternative robuste au Z-Score. Contrairement à Welford dont la moyenne/variance sont contaminées par les outliers passés, la médiane et la MAD sont insensibles aux valeurs extrêmes. Préférer MAD sur signaux bruités ou avec outliers récurrents.
 
 ## Prétraitement (optionnel)
 
@@ -179,11 +185,34 @@ static FovetDrift fovet_drift_temperature = {
 };
 ```
 
+### MAD (signal bruité / outliers récurrents)
+
+```
+Données capteurs (signal bruité, outliers passés possibles)
+    ↓
+Forge : fit() sur données propres → ring buffer seedé + seuil auto (99e percentile)
+    ↓
+Export : fovet_mad_config.h + mad_config.json
+    ↓
+ESP32 : #include "fovet_mad_config.h" → fovet_mad_update() dans HAL loop
+```
+
+```c
+static FovetMAD fovet_mad_temperature = {
+    .window        = {23.85f, 23.91f, /* … 128 entrées … */},
+    .scratch       = {0},
+    .head          = 0U,
+    .count         = 32U,
+    .win_size      = 32U,
+    .threshold_mad = 3.500000f,   // auto-calibré à 99e percentile
+};
+```
+
 ## Tests
 
 ```bash
 uv run pytest -v
-# 138 tests (dont 19 skippés si TF absent)
+# 253 tests (dont 1 skippé si TF absent)
 ```
 
 ## Roadmap Forge
@@ -197,3 +226,5 @@ uv run pytest -v
 | Forge-4 | ✅ | AutoEncoderDetector (Keras Dense) + export TFLite INT8 + C header |
 | Forge-5 | ✅ | Rapport HTML/JSON + train/test split + métriques évaluation |
 | Forge-6 | ✅ | CI GitHub Actions + workflow GPU Scaleway |
+| Forge-7 | ✅ | Benchmark CLI : `forge benchmark --config a.yaml --config b.yaml` |
+| Forge-8 | ✅ | MADDetector + export `fovet_mad_config.h` (miroir C99 `fovet_mad`) |

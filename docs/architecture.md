@@ -18,13 +18,15 @@ Il est composé de trois couches indépendantes qui s'interfacent via des contra
 │   │Sentinelle│  WiFi/    │ Broker MQTT │                 │ Python AutoML│   │
 │   │ (C99)   │──MQTT──→  │ port 1883   │                 │              │   │
 │   │         │            └──────┬──────┘                 │ ZScore       │   │
-│   │ zscore.h│                   │ subscribe              │ IsoForest    │   │
-│   │ 20 bytes│                   ▼                        │ AutoEncoder  │   │
-│   │ drift.h │            ┌─────────────┐                 └──────┬───────┘   │
-│   │ 24 bytes│            │ Fovet Vigie │                        │           │
-│   └─────────┘            │ (Next.js)   │                 export ↓           │
-│         ▲                │ PostgreSQL  │          fovet_zscore_config.h     │
-│         │                │ REST + SSE  │          autoencoder.tflite        │
+│   │ zscore.h│                   │ subscribe              │ MAD          │   │
+│   │ 20 bytes│                   ▼                        │ EWMA Drift   │   │
+│   │ drift.h │            ┌─────────────┐                 │ IsoForest    │   │
+│   │ 24 bytes│            │ Fovet Vigie │                 │ AutoEncoder  │   │
+│   │ mad.h   │            │ (Next.js)   │                 └──────┬───────┘   │
+│   │ ~1 KB   │            │ PostgreSQL  │                 export ↓           │
+│   └─────────┘            │ REST + SSE  │          fovet_zscore_config.h     │
+│         ▲                │             │          fovet_mad_config.h        │
+│         │                │             │          autoencoder.tflite        │
 │         │                └─────────────┘                        │           │
 │         └──────────────────────────────────────────────────────-┘           │
 │              firmware mis à jour avec stats précalibrées                     │
@@ -83,6 +85,8 @@ Fovet Forge
   ▼
 Artefacts exportés
   ├── fovet_zscore_config.h       → firmware ESP32 (#include direct)
+  ├── fovet_mad_config.h          → firmware ESP32 (ring buffer pré-seedé)
+  ├── fovet_drift_config.h        → firmware ESP32 (état EWMA post-calibration)
   ├── scaler_params.json          → paramètres normalisation (si normalize: true)
   ├── isolation_forest_config.json → cloud/gateway uniquement
   ├── autoencoder.tflite          → TFLite Micro sur ESP32
@@ -252,6 +256,13 @@ python scripts/demo_mqtt.py --device demo-001 --anomaly-period 20 --no-anomalies
 - Dense : chaque sample est traité indépendamment, latence O(1)
 - LSTM possible en Forge-7+ si le modèle Dense s'avère insuffisant
 
+### Pourquoi MAD plutôt que Z-Score sur certains signaux ?
+
+- Le Z-Score (Welford) accumule moyenne et variance sur tout l'historique → un outlier passé contamine la baseline
+- Le MAD utilise la médiane glissante : insensible aux valeurs extrêmes précédentes
+- Sur des signaux physiologiques (HR, WBGT) où des pointes légitimes existent, MAD évite la sur-détection
+- Contrainte identique : O(1) amortie (tri par insertion sur fenêtre fixe ≤ 128), < 1 µs/sample
+
 ### Pourquoi IsolationForest cloud-only ?
 
 - Les structures d'arbres (dizaines d'arbres × centaines de nœuds) sont incompatibles avec < 4 KB RAM
@@ -304,6 +315,8 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 |---|---|---|---|
 | Forge-5 | Forge | ✅ | Rapport HTML/JSON + train/test split + métriques |
 | Forge-6 | Forge | ✅ | CI GitHub Actions + Scaleway GPU |
+| Forge-7 | Forge | ✅ | Benchmark CLI : `forge benchmark --config a.yaml --config b.yaml` |
+| Forge-8 | Forge | ✅ | MADDetector + export `fovet_mad_config.h` (miroir C99 `fovet_mad`) |
 | U1–U5 | Vigie/Scripts | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT |
 | S10 | Sentinelle | ⏳ ~19/03 | Flash ESP32-CAM (nouvelle carte MB) |
 | S11 | Sentinelle | ⏳ | Capteurs réels : DHT22 (I2C) ou MPU-6050 (accéléromètre) |
