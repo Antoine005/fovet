@@ -13,7 +13,7 @@ LDFLAGS = -lm
 SRC_DIR         = ..
 FORGE_MODELS    = ../../automl-pipeline/models/demo_zscore
 
-TESTS = test_zscore test_drift test_forge_integration
+TESTS = test_zscore test_drift test_forge_integration test_mad
 
 .PHONY: all build run clean $(addprefix run_,$(TESTS))
 
@@ -44,6 +44,13 @@ run_test_drift: test_drift
 
 run_test_forge_integration: test_forge_integration
 	@echo "--- test_forge_integration ---" && ./test_forge_integration
+
+# --- test_mad ---
+test_mad: $(SRC_DIR)/src/mad.c test_mad.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+run_test_mad: test_mad
+	@echo "--- test_mad ---" && ./test_mad
 
 clean:
 	rm -f $(TESTS) *.o
