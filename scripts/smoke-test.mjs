@@ -182,7 +182,7 @@ console.log("\n[7] GET /api/devices/:id/alerts");
   });
   assert("status 200", res.status === 200, `got ${res.status}`);
   const body = await res.json();
-  assert("at least 1 alert created", Array.isArray(body) && body.length >= 1, JSON.stringify(body));
+  assert("at least 1 alert created", Array.isArray(body.data) && body.data.length >= 1, JSON.stringify(body));
 }
 
 // ---------------------------------------------------------------------------
