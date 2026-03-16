@@ -15,6 +15,7 @@ import { TempCard } from "@/components/TempCard";
 import { TemperatureChart } from "@/components/TemperatureChart";
 import FleetHealth from "@/components/FleetHealth";
 import WorkerDetail from "@/components/WorkerDetail";
+import { FleetAlertTimeline } from "@/components/FleetAlertTimeline";
 
 interface Device {
   id: string;
@@ -163,19 +164,24 @@ export default function DashboardPage() {
         </p>
       )}
 
-      {/* Fleet view — all devices simultaneously */}
+      {/* Fleet view — devices + alert timeline */}
       {view === "fleet" && devices.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {devices.map((d) => (
-            <FleetPanel
-              key={d.id}
-              deviceId={d.id}
-              deviceName={d.name}
-              mqttClientId={d.mqttClientId}
-              location={d.location}
-              onSelect={() => selectDevice(d.id)}
-            />
-          ))}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          <div className="xl:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 content-start">
+            {devices.map((d) => (
+              <FleetPanel
+                key={d.id}
+                deviceId={d.id}
+                deviceName={d.name}
+                mqttClientId={d.mqttClientId}
+                location={d.location}
+                onSelect={() => selectDevice(d.id)}
+              />
+            ))}
+          </div>
+          <div className="xl:col-span-1 min-h-[400px]">
+            <FleetAlertTimeline />
+          </div>
         </div>
       )}
 
