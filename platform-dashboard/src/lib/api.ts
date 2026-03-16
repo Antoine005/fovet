@@ -191,7 +191,7 @@ app.post("/auth/logout", (c) => {
 // -------------------------------------------------------------------------
 // GET /api/devices — list all active devices
 // -------------------------------------------------------------------------
-app.get("/devices", async (c) => {
+app.get("/devices", cookieAuth, async (c) => {
   const devices = await prisma.device.findMany({
     where: { active: true },
     orderBy: { createdAt: "desc" },
@@ -202,7 +202,7 @@ app.get("/devices", async (c) => {
 // -------------------------------------------------------------------------
 // POST /api/devices — register a new device
 // -------------------------------------------------------------------------
-app.post("/devices", async (c) => {
+app.post("/devices", cookieAuth, async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = DeviceSchema.safeParse(body);
   if (!parsed.success) {
@@ -217,7 +217,7 @@ app.post("/devices", async (c) => {
 // GET /api/devices/:id/readings — last N readings with cursor pagination
 // ?limit=100&cursor=<bigint-id>  (cursor = last id from previous page, desc order)
 // -------------------------------------------------------------------------
-app.get("/devices/:id/readings", async (c) => {
+app.get("/devices/:id/readings", cookieAuth, async (c) => {
   const { id } = c.req.param();
   const rawLimit = parseInt(c.req.query("limit") ?? "100", 10);
   const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 100, 1000);
@@ -294,7 +294,7 @@ app.get("/devices/:id/stream", cookieAuth, async (c) => {
 // ?limit=50  (default 50, max 200)
 // ?cursor=<alert-id>  (cuid of last item received, for next page)
 // -------------------------------------------------------------------------
-app.get("/devices/:id/alerts", async (c) => {
+app.get("/devices/:id/alerts", cookieAuth, async (c) => {
   const { id } = c.req.param();
   const rawLimit  = parseInt(c.req.query("limit") ?? "50", 10);
   const limit     = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
@@ -326,7 +326,7 @@ app.get("/devices/:id/alerts", async (c) => {
 // GET /api/fleet/alerts/recent — most recent alerts across all devices
 // ?limit=50 (max 200)  ?cursor=<alert-id> (cuid, for pagination)
 // -------------------------------------------------------------------------
-app.get("/fleet/alerts/recent", async (c) => {
+app.get("/fleet/alerts/recent", cookieAuth, async (c) => {
   const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
   const limit    = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
   const cursorId = c.req.query("cursor");
@@ -422,7 +422,7 @@ app.get("/fleet/health", cookieAuth, async (c) => {
 // -------------------------------------------------------------------------
 // GET /api/pti/fleet — all active workers + their unacknowledged PTI alerts
 // -------------------------------------------------------------------------
-app.get("/pti/fleet", async (c) => {
+app.get("/pti/fleet", cookieAuth, async (c) => {
   const devices = await prisma.device.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
@@ -454,7 +454,7 @@ app.get("/pti/fleet", async (c) => {
 // GET /api/pti/alerts/recent — recent PTI alerts across all workers
 // ?limit=50 (max 200)
 // -------------------------------------------------------------------------
-app.get("/pti/alerts/recent", async (c) => {
+app.get("/pti/alerts/recent", cookieAuth, async (c) => {
   const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
   const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
 
@@ -488,7 +488,7 @@ app.get("/pti/alerts/recent", async (c) => {
 // JSON response: device info, session stats per module, full alert list
 // CSV  response: flat table of all readings in the window (for Excel/import)
 // -------------------------------------------------------------------------
-app.get("/devices/:id/report", async (c) => {
+app.get("/devices/:id/report", cookieAuth, async (c) => {
   const { id }   = c.req.param();
   const format   = (c.req.query("format") ?? "json").toLowerCase();
   const fromStr  = c.req.query("from");
@@ -620,7 +620,7 @@ app.get("/devices/:id/report", async (c) => {
 //  - THERMAL: last 50 readings with sensorType TEMP (for EMA + WBGT on client)
 //  - Recent alerts (last 20, any module) for timeline
 // -------------------------------------------------------------------------
-app.get("/workers/:deviceId/summary", async (c) => {
+app.get("/workers/:deviceId/summary", cookieAuth, async (c) => {
   const { deviceId } = c.req.param();
 
   const device = await prisma.device.findUnique({
@@ -687,7 +687,7 @@ app.get("/workers/:deviceId/summary", async (c) => {
 // -------------------------------------------------------------------------
 // PATCH /api/alerts/:id/ack — acknowledge an alert
 // -------------------------------------------------------------------------
-app.patch("/alerts/:id/ack", async (c) => {
+app.patch("/alerts/:id/ack", cookieAuth, async (c) => {
   const { id } = c.req.param();
   const existing = await prisma.alert.findUnique({ where: { id }, select: { id: true } });
   if (!existing) return c.json({ error: "Alert not found" }, 404);
