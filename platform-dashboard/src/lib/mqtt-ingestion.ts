@@ -159,6 +159,24 @@ export function startMqttIngestion(): void {
       });
       if (!device || !device.active) return;
 
+      // Validate optional enum fields — reject unknown values to prevent DB pollution
+      const VALID_SENSOR_TYPES = new Set(["IMU", "HR", "TEMP"]);
+      const VALID_LEVELS        = new Set(["SAFE", "WARN", "DANGER", "COLD", "CRITICAL"]);
+      const VALID_PTI_TYPES     = new Set(["FALL", "MOTIONLESS", "SOS"]);
+
+      if (data.sensorType !== undefined && !VALID_SENSOR_TYPES.has(data.sensorType)) {
+        console.warn(`[MQTT] Unknown sensorType "${data.sensorType}" from ${mqttClientId} — ignored`);
+        data.sensorType = undefined;
+      }
+      if (data.level !== undefined && !VALID_LEVELS.has(data.level)) {
+        console.warn(`[MQTT] Unknown level "${data.level}" from ${mqttClientId} — ignored`);
+        data.level = undefined;
+      }
+      if (data.ptiType !== undefined && !VALID_PTI_TYPES.has(data.ptiType)) {
+        console.warn(`[MQTT] Unknown ptiType "${data.ptiType}" from ${mqttClientId} — ignored`);
+        data.ptiType = undefined;
+      }
+
       // Validate optional numeric fields
       if (data.value2 !== undefined && (typeof data.value2 !== "number" || !isFinite(data.value2))) {
         console.warn(`[MQTT] Invalid value2 from ${mqttClientId}`);
