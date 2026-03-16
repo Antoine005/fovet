@@ -323,6 +323,48 @@ app.get("/devices/:id/alerts", async (c) => {
 });
 
 // -------------------------------------------------------------------------
+// GET /api/fleet/alerts/recent — most recent alerts across all devices
+// ?limit=50 (max 200)  ?cursor=<alert-id> (cuid, for pagination)
+// -------------------------------------------------------------------------
+app.get("/fleet/alerts/recent", async (c) => {
+  const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
+  const limit    = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
+  const cursorId = c.req.query("cursor");
+
+  if (cursorId) {
+    const exists = await prisma.alert.findUnique({ where: { id: cursorId }, select: { id: true } });
+    if (!exists) return c.json({ error: "Cursor not found" }, 400);
+  }
+
+  const rows = await prisma.alert.findMany({
+    orderBy: { timestamp: "desc" },
+    take: limit + 1,
+    ...(cursorId && { cursor: { id: cursorId }, skip: 1 }),
+    include: { device: { select: { name: true } } },
+  });
+
+  const hasMore    = rows.length > limit;
+  const data       = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? data[data.length - 1].id : null;
+
+  return c.json({
+    data: data.map((a) => ({
+      id:           a.id,
+      deviceId:     a.deviceId,
+      deviceName:   a.device.name,
+      timestamp:    a.timestamp,
+      value:        a.value,
+      zScore:       a.zScore,
+      threshold:    a.threshold,
+      alertModule:  a.alertModule,
+      alertLevel:   a.alertLevel,
+      acknowledged: a.acknowledged,
+    })),
+    pagination: { limit, hasMore, nextCursor },
+  });
+});
+
+// -------------------------------------------------------------------------
 // GET /api/fleet/health — aggregated cross-module health per active device
 //
 // Returns for each device the count of unacknowledged alerts per module

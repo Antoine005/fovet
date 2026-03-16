@@ -14,6 +14,7 @@ from forge.data import Dataset, load_data
 from forge.detectors import DetectionResult, build_detectors
 from forge.detectors.base import Detector
 from forge.evaluation import compute_metrics, EvaluationMetrics
+from forge.preprocessing import Scaler
 from forge.report import generate_report
 
 console = Console()
@@ -28,6 +29,7 @@ class Pipeline:
         self.detectors: list[Detector] = []
         self.results: list[DetectionResult] = []
         self.metrics: list[EvaluationMetrics] = []
+        self.scaler: Scaler | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "Pipeline":
@@ -65,6 +67,17 @@ class Pipeline:
         else:
             self.train_dataset = self.dataset
             self.test_dataset = self.dataset
+
+        # --- Preprocessing --------------------------------------------------
+        if self.config.preprocessing.normalize:
+            console.print("\n[cyan]Preprocessing (StandardScaler)...[/cyan]")
+            self.scaler = Scaler()
+            self.train_dataset = self.scaler.fit_transform(self.train_dataset)
+            self.test_dataset = self.scaler.transform(self.test_dataset)
+            console.print(
+                f"  Normalized {len(self.scaler.columns_)} feature(s): "
+                f"{', '.join(self.scaler.columns_)}"
+            )
 
         # --- Detectors ------------------------------------------------------
         console.print("\n[cyan]Training detectors...[/cyan]")
@@ -129,6 +142,13 @@ class Pipeline:
         """Write detector artifacts to the configured output directory."""
         output_dir = self.config.export.output_dir
         targets = set(self.config.export.targets)
+
+        # Scaler params (exported whenever normalization was applied)
+        if self.scaler is not None:
+            p = self.scaler.export(Path(output_dir), stem=self.config.name)
+            console.print(f"  Wrote: {p}")
+            p2 = self.scaler.export_c_header(Path(output_dir), stem=self.config.name)
+            console.print(f"  Wrote: {p2}")
 
         for detector in self.detectors:
             if targets & {ExportTarget.c_header, ExportTarget.json_config, ExportTarget.tflite_micro}:
