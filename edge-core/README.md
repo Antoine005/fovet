@@ -16,6 +16,7 @@ make
 # test_zscore            : 56/56 passed
 # test_drift             : 28/28 passed
 # test_forge_integration : 12/12 passed
+# test_mad               : 28/28 passed
 ```
 
 ### Build PlatformIO ESP32-CAM
@@ -36,6 +37,7 @@ edge-core/
 ├── include/fovet/
 │   ├── zscore.h              ← API publique Z-Score detector
 │   ├── drift.h               ← API publique EWMA Drift detector
+│   ├── mad.h                 ← API publique MAD detector
 │   └── hal/
 │       ├── hal_uart.h        ← Interface UART (print, init)
 │       ├── hal_gpio.h        ← Interface GPIO (mode, read, write)
@@ -44,12 +46,14 @@ edge-core/
 ├── src/
 │   ├── zscore.c              ← Algorithme de Welford (C99 pur)
 │   ├── drift.c               ← Double EWMA fast/slow
+│   ├── mad.c                 ← MAD detector (ring buffer + tri par insertion)
 │   └── platform/
 │       └── platform_esp32.cpp ← Implémentation HAL pour ESP32/Arduino
 ├── tests/
 │   ├── test_zscore.c         ← 56 tests : Welford, warm-up, saturation, windowed mode
 │   ├── test_drift.c          ← 28 tests : EWMA, complémentarité zscore/drift
-│   └── test_forge_integration.c ← 10 tests : validation header Forge→Sentinelle
+│   ├── test_forge_integration.c ← 12 tests : validation header Forge→Sentinelle
+│   └── test_mad.c            ← 28 tests : ring buffer, médiane, MAD, score, détection
 ├── examples/
 │   └── esp32/zscore_demo/    ← Demo PlatformIO : sinus + MQTT + Vigie
 └── library.json              ← Manifest PlatformIO (fovet-sentinelle)
@@ -204,6 +208,101 @@ while (1) {
 
 ---
 
+## API publique — MAD detector
+
+Détecte les anomalies ponctuelles de manière robuste : contrairement au Z-Score basé sur la moyenne/variance (sensibles aux outliers), le MAD utilise la médiane et la déviation absolue médiane — insensibles aux valeurs extrêmes passées.
+
+**Quand utiliser MAD vs Z-Score :**
+- **Z-Score** : signal propre, Gaussien, peu d'outliers passés → moyenne/variance fiables
+- **MAD** : signal bruité ou avec outliers récurrents → médiane robuste, pas de contamination historique
+
+### Struct
+
+```c
+#include "fovet/mad.h"
+
+typedef struct {
+    float    window[FOVET_MAD_MAX_WINDOW]; // ring buffer des derniers samples (128 max)
+    float    scratch[FOVET_MAD_MAX_WINDOW];// zone de tri temporaire — ne pas toucher
+    uint16_t head;                          // prochain index d'écriture
+    uint16_t count;                         // samples reçus (plafonne à win_size)
+    uint16_t win_size;                      // taille effective de la fenêtre
+    float    threshold_mad;                 // seuil d'anomalie en unités MAD (ex: 3.5f)
+} FovetMAD;
+// sizeof(FovetMAD) ≈ 1040 bytes pour win_size=128 (configurable via FOVET_MAD_MAX_WINDOW)
+```
+
+### Fonctions
+
+```c
+// Initialiser le détecteur
+// win_size : taille de la fenêtre glissante (1 … 128)
+// threshold_mad : seuil d'anomalie (3.5 ≈ 3σ pour données Gaussiennes)
+void fovet_mad_init(FovetMAD *ctx, uint16_t win_size, float threshold_mad);
+
+// Ajouter un sample — retourne true si anomalie détectée
+// Pas de détection pendant le warm-up (< win_size samples)
+bool fovet_mad_update(FovetMAD *ctx, float sample);
+
+// Accesseurs — utiles pour debug ou export série
+float fovet_mad_get_median(const FovetMAD *ctx);
+float fovet_mad_get_mad(const FovetMAD *ctx);
+
+// Score brut : |value - médiane| / (1.4826 * MAD)
+// Signal constant : retourne 0.0f si value == médiane, 1e9f sinon
+float fovet_mad_score(const FovetMAD *ctx, float value);
+```
+
+### Exemple minimal
+
+```c
+#include "fovet/mad.h"
+
+FovetMAD detector;
+fovet_mad_init(&detector, 32, 3.5f);  // fenêtre 32 samples, seuil 3.5 MAD
+
+while (1) {
+    float sample = read_sensor();
+    if (fovet_mad_update(&detector, sample)) {
+        trigger_alert();
+    }
+}
+```
+
+### Réduire la RAM — `FOVET_MAD_MAX_WINDOW`
+
+La taille du ring buffer est fixée à la compilation par `FOVET_MAD_MAX_WINDOW` (défaut : 128).
+Pour économiser de la RAM sur un microcontrôleur avec peu de mémoire :
+
+```c
+// Avant d'inclure le header, réduire la taille max :
+#define FOVET_MAD_MAX_WINDOW 32
+#include "fovet/mad.h"
+// FovetMAD occupe désormais ~264 bytes au lieu de ~1040 bytes
+```
+
+### Démarrage précalibré (Forge → Sentinelle)
+
+Fovet Forge calibre le seuil hors-ligne et exporte un header prêt à l'emploi :
+
+```c
+// Généré par : uv run forge run --config configs/mon_capteur.yaml
+// Fichier    : models/fovet_mad_config.h
+
+#include "fovet/mad.h"
+
+static FovetMAD fovet_mad_value = {
+    .window        = {23.85f, 23.91f, /* … 128 entrées … */},
+    .scratch       = {0},
+    .head          = 0U,
+    .count         = 32U,
+    .win_size      = 32U,
+    .threshold_mad = 3.500000f,
+};
+```
+
+---
+
 ## Algorithme de Welford
 
 Calcul de la moyenne et de la variance en un seul passage, sans malloc, numériquement stable :
@@ -316,7 +415,7 @@ index,value,mean,stddev,drift_mag,spike_det,drift_det,event
 |---|---|
 | Norme C | C99 pur |
 | Malloc | Interdit dans les algos |
-| RAM / détecteur | < 4 KB (Z-Score : 24 bytes, Drift : 24 bytes) |
+| RAM / détecteur | < 4 KB (Z-Score : 24 bytes, Drift : 24 bytes, MAD : ~1040 bytes @ win=128) |
 | Latence | < 1 ms / sample @ 80 MHz (mesuré : ~0.04 µs) |
 | Préfixe fonctions | `fovet_` (public), `hal_` (HAL) |
 | Nommage fichiers | snake_case |
