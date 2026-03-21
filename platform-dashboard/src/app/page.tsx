@@ -25,6 +25,13 @@ export default function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [view, setView] = useState<"fleet" | "detail" | "sante" | "worker">("fleet");
+  const [clock, setClock] = useState<string>("");
+
+  useEffect(() => {
+    setClock(new Date().toLocaleString("fr-FR"));
+    const id = setInterval(() => setClock(new Date().toLocaleString("fr-FR")), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     apiFetch("/api/devices")
@@ -100,7 +107,7 @@ export default function DashboardPage() {
             </div>
           )}
           <span className="text-xs text-gray-500 font-mono">
-            {new Date().toLocaleString("fr-FR")}
+            {clock}
           </span>
           <button
             onClick={() => {

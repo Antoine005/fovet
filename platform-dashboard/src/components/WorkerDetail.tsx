@@ -166,11 +166,17 @@ function toLocalDatetimeValue(d: Date): string {
 
 function ExportReport({ deviceId }: { deviceId: string }) {
   const [preset, setPreset]         = useState<Preset>("8h");
-  const [customFrom, setCustomFrom] = useState<string>(() => toLocalDatetimeValue(new Date(Date.now() - 8 * 3600_000)));
-  const [customTo,   setCustomTo]   = useState<string>(() => toLocalDatetimeValue(new Date()));
+  const [customFrom, setCustomFrom] = useState<string>("");
+  const [customTo,   setCustomTo]   = useState<string>("");
   const [exporting,  setExporting]  = useState<"json" | "csv" | null>(null);
   const [exportErr,  setExportErr]  = useState<string | null>(null);
   const anchorRef = useRef<HTMLAnchorElement>(null);
+
+  // Initialise date fields client-side only to avoid SSR/hydration mismatch
+  useEffect(() => {
+    setCustomFrom(toLocalDatetimeValue(new Date(Date.now() - 8 * 3600_000)));
+    setCustomTo(toLocalDatetimeValue(new Date()));
+  }, []);
 
   function getDateRange(): { from: Date; to: Date } {
     const to = new Date();
