@@ -13,13 +13,25 @@ Zéro malloc. Zéro dépendance. Testable sur PC avant de toucher le hardware.
 cd edge-core/tests
 make
 # Résultats attendus :
-# test_zscore            : 56/56 passed
+# test_zscore            : 59/59 passed
 # test_drift             : 28/28 passed
 # test_forge_integration : 12/12 passed
 # test_mad               : 28/28 passed
 ```
 
 ### Build PlatformIO ESP32-CAM
+
+**Smoke test (premier flash — sans WiFi/MQTT)** :
+
+```bash
+cd edge-core/examples/esp32/smoke_test
+pio run -e smoke --target upload
+pio device monitor -e smoke   # 115200 baud, COM4
+```
+
+Vérifie que le SDK tourne sur le hardware : sinus 1 Hz, détections ±5σ toutes les 200 samples, LED clignote, CSV sur UART.
+
+**Demo complète (Z-Score + Drift + MQTT → Vigie)** :
 
 ```bash
 cd edge-core/examples/esp32/zscore_demo
@@ -50,12 +62,14 @@ edge-core/
 │   └── platform/
 │       └── platform_esp32.cpp ← Implémentation HAL pour ESP32/Arduino
 ├── tests/
-│   ├── test_zscore.c         ← 56 tests : Welford, warm-up, saturation, windowed mode
+│   ├── test_zscore.c         ← 59 tests : Welford, warm-up, saturation, windowed mode, ±5σ sinus
 │   ├── test_drift.c          ← 28 tests : EWMA, complémentarité zscore/drift
 │   ├── test_forge_integration.c ← 12 tests : validation header Forge→Sentinelle
 │   └── test_mad.c            ← 28 tests : ring buffer, médiane, MAD, score, détection
 ├── examples/
-│   └── esp32/zscore_demo/    ← Demo PlatformIO : sinus + MQTT + Vigie
+│   └── esp32/
+│       ├── smoke_test/       ← Premier flash : sinus + ±5σ, sans WiFi/MQTT
+│       └── zscore_demo/      ← Demo complète : sinus + MQTT + Vigie
 └── library.json              ← Manifest PlatformIO (fovet-sentinelle)
 ```
 

@@ -9,6 +9,6 @@
   "build": {
     "includeDir": "include",
     "srcDir": "src",
-    "srcFilter": ["+<zscore.c>", "+<drift.c>", "+<platform/platform_esp32.cpp>"]
+    "srcFilter": ["+<zscore.c>", "+<drift.c>", "+<mad.c>", "+<platform/platform_esp32.cpp>"]
   }
 }
