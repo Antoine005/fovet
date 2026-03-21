@@ -1,0 +1,32 @@
+/*
+ * Fovet SDK — Sentinelle
+ * Copyright (C) 2026 Antoine Porte. All rights reserved.
+ * LGPL v3 for non-commercial use.
+ * Commercial licensing: contact@fovet.eu
+ *
+ * config.h.example — Copier vers config.h et remplir les credentials.
+ * config.h est gitignored et ne doit JAMAIS être commité.
+ */
+
+#ifndef FOVET_CONFIG_H
+#define FOVET_CONFIG_H
+
+/* WiFi credentials */
+#define WIFI_SSID      "your_wifi_ssid"
+#define WIFI_PASSWORD  "your_wifi_password"
+
+/* MQTT broker — Mosquitto local (port 1883) ou VPS Scaleway */
+#define MQTT_BROKER    "192.168.1.x"   /* IP de la machine qui exécute Mosquitto */
+#define MQTT_PORT      1883
+#define MQTT_USER      "fovet-device"
+#define MQTT_PASSWORD  "change_me"
+
+/* Identité du device — doit correspondre au mqttClientId enregistré dans Vigie */
+#define DEVICE_ID      "esp32-cam-001"
+
+/* Score minimum (0.0–1.0) pour qu'une détection soit publiée sur MQTT.
+ * En dessous de ce seuil, le résultat est loggé en UART uniquement.
+ * Valeur recommandée : 0.6 (60% confiance) */
+#define PERSON_PUBLISH_THRESHOLD  0.6f
+
+#endif /* FOVET_CONFIG_H */

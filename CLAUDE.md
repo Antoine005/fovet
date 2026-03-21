@@ -66,7 +66,8 @@ fovet/
 │       └── esp32/
 │           ├── smoke_test/        ← Smoke test SDK complet (HAL + Z-Score + LED)
 │           ├── zscore_demo/       ← Z-Score + Drift + MQTT → Vigie
-│           └── fire_detection/    ← Détection feu/fumée OV2640 (3×Z-Score sur RGB565)
+│           ├── fire_detection/    ← Détection feu/fumée OV2640 (3×Z-Score sur RGB565)
+│           └── person_detection/  ← VWW TFLite Micro + Z-Score temporel → Vigie MQTT
 ├── automl-pipeline/               ← Fovet Forge (Python AutoML)
 ├── platform-dashboard/            ← Fovet Vigie (Next.js/Hono)
 ├── docs/
@@ -121,6 +122,7 @@ Critère de sortie Phase 1 atteint : détecte une anomalie ±5σ injectée dans 
 - [x] HAL ESP32 opérationnel (UART GPIO1/3, GPIO, time) — `platform_esp32.cpp`
 - [x] zscore_demo (Z-Score + Drift + MQTT → Vigie) compilé et prêt à flasher
 - [x] fire_detection (OV2640 QQVGA RGB565 — 3×Z-Score sur R_mean/ratio_rb/variance) ✅
+- [x] person_detection (VWW TFLite Micro — OV2640 96×96 GRAY → MobileNetV1 0.25× → Z-Score → Vigie MQTT) ✅
 
 **Tests natifs gcc (master) — 115 tests, 0 failing**
 

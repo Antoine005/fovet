@@ -1,0 +1,516 @@
+/*
+ * Fovet SDK — Sentinelle
+ * Copyright (C) 2026 Antoine Porte. All rights reserved.
+ * LGPL v3 for non-commercial use.
+ * Commercial licensing: contact@fovet.eu
+ *
+ * person_detection/src/main.cpp
+ * Visual Wake Words — détection de personne via TFLite Micro + OV2640 + Z-Score.
+ *
+ * Modèle : person_detect (MobileNetV1 0.25×, Visual Wake Words)
+ *   Input  : 96×96×1 grayscale, int8 [-128, 127]
+ *   Output : 2 scores int8 — index 0 = no_person, index 1 = person
+ *   Taille : ~250 KB stockés en flash
+ *
+ * Pipeline :
+ *   OV2640 GRAYSCALE 96×96 ──► TFLite Micro ──► person_score
+ *                                                     │
+ *                                               FovetZScore ──► MQTT → Vigie
+ *
+ * Le FovetZScore modélise le score "personne" sur les WARMUP_FRAMES premières
+ * inférences (scène vide) et signale une anomalie lorsque le score dépasse
+ * ZSCORE_THRESHOLD sigmas — i.e., une personne entre dans le champ.
+ *
+ * MQTT topic : fovet/devices/<DEVICE_ID>/readings
+ * Payload :
+ *   { "value": 0.87, "mean": 0.43, "stddev": 0.22, "zScore": 2.8,
+ *     "anomaly": true, "ts": 1700000000000,
+ *     "sensorType": "VIS", "level": "WARN" }
+ *
+ * CSV UART (115200) :
+ *   frame_id, person_score, no_person_score, z_score, anomaly, mean, stddev
+ *
+ * Prérequis :
+ *   1. python scripts/get_person_model.py   → génère src/model_data.cpp
+ *   2. Copier config.h.example → config.h et remplir credentials
+ *   3. pio run -e person_detection --target upload
+ *
+ * Hardware : ESP32-CAM AI-Thinker, board=esp32dev, CH340 COM4
+ */
+
+#include "config.h"
+
+/* --- TFLite Micro -------------------------------------------------------- */
+#include <TensorFlowLite.h>
+#include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/schema/schema_generated.h"
+
+/* --- Fovet SDK ----------------------------------------------------------- */
+extern "C" {
+#include "fovet/zscore.h"
+#include "fovet/hal/hal_uart.h"
+#include "fovet/hal/hal_gpio.h"
+#include "fovet/hal/hal_time.h"
+}
+
+/* --- Modèle -------------------------------------------------------------- */
+#include "model_data.h"
+
+/* --- ESP32 / Arduino ----------------------------------------------------- */
+#include "esp_camera.h"
+#include <Arduino.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+
+/* =========================================================================
+ * Pinout AI-Thinker ESP32-CAM
+ * ========================================================================= */
+
+#define CAM_PIN_PWDN   32
+#define CAM_PIN_RESET  -1
+#define CAM_PIN_XCLK    0
+#define CAM_PIN_SIOD   26
+#define CAM_PIN_SIOC   27
+#define CAM_PIN_D7     35
+#define CAM_PIN_D6     34
+#define CAM_PIN_D5     39
+#define CAM_PIN_D4     36
+#define CAM_PIN_D3     21
+#define CAM_PIN_D2     19
+#define CAM_PIN_D1     18
+#define CAM_PIN_D0      5
+#define CAM_PIN_VSYNC  25
+#define CAM_PIN_HREF   23
+#define CAM_PIN_PCLK   22
+
+/* LED flash GPIO4, active LOW (transistor inverseur sur ESP32-CAM) */
+#define LED_PIN  4U
+
+/* =========================================================================
+ * Paramètres de détection
+ * ========================================================================= */
+
+/* Indices de sortie du modèle */
+static constexpr int kNoPersonIndex = 0;
+static constexpr int kPersonIndex   = 1;
+
+/* Warmup : nombre d'inférences pour calibrer le Z-Score (scène vide) */
+static constexpr uint32_t WARMUP_FRAMES   = 30U;
+
+/* Seuil Z-Score pour déclencher l'anomalie "personne détectée" */
+static constexpr float ZSCORE_THRESHOLD   = 3.0f;
+
+/* Intervalle d'inférence en ms (~5 fps; la capture + inférence prennent ~150 ms) */
+static constexpr uint32_t INFERENCE_MS    = 200U;
+
+/* =========================================================================
+ * TFLite Micro — arena statique (DRAM, zéro malloc custom)
+ *
+ * 100 KB couvre confortablement le modèle person_detect sur ESP32.
+ * Augmenter si AllocateTensors() retourne kTfLiteError.
+ * ========================================================================= */
+static constexpr int kTensorArenaSize = 100 * 1024;
+static uint8_t tensor_arena[kTensorArenaSize];
+
+/* =========================================================================
+ * Globals
+ * ========================================================================= */
+
+static tflite::AllOpsResolver      resolver;
+static tflite::MicroInterpreter   *interpreter  = nullptr;
+static TfLiteTensor               *input_tensor = nullptr;
+static TfLiteTensor               *output_tensor = nullptr;
+
+static FovetZScore g_zs_person;   /* suivi temporel du score "personne" */
+
+static WiFiClient   wifi_client;
+static PubSubClient mqtt_client(wifi_client);
+
+static uint32_t g_frame_id = 0U;
+static char     g_buf[384];       /* tampon printf pour UART/MQTT */
+
+/* =========================================================================
+ * Caméra : OV2640, GRAYSCALE, 96×96 — DRAM uniquement
+ * ========================================================================= */
+
+static bool camera_init(void)
+{
+    camera_config_t cfg = {};
+
+    cfg.ledc_channel = LEDC_CHANNEL_0;
+    cfg.ledc_timer   = LEDC_TIMER_0;
+    cfg.pin_d0       = CAM_PIN_D0;
+    cfg.pin_d1       = CAM_PIN_D1;
+    cfg.pin_d2       = CAM_PIN_D2;
+    cfg.pin_d3       = CAM_PIN_D3;
+    cfg.pin_d4       = CAM_PIN_D4;
+    cfg.pin_d5       = CAM_PIN_D5;
+    cfg.pin_d6       = CAM_PIN_D6;
+    cfg.pin_d7       = CAM_PIN_D7;
+    cfg.pin_xclk     = CAM_PIN_XCLK;
+    cfg.pin_pclk     = CAM_PIN_PCLK;
+    cfg.pin_vsync    = CAM_PIN_VSYNC;
+    cfg.pin_href     = CAM_PIN_HREF;
+    cfg.pin_sccb_sda = CAM_PIN_SIOD;
+    cfg.pin_sccb_scl = CAM_PIN_SIOC;
+    cfg.pin_pwdn     = CAM_PIN_PWDN;
+    cfg.pin_reset    = CAM_PIN_RESET;
+
+    cfg.xclk_freq_hz = 20000000;
+    cfg.pixel_format = PIXFORMAT_GRAYSCALE; /* 1 octet/pixel — format natif du modèle */
+    cfg.frame_size   = FRAMESIZE_96X96;     /* 96×96 = 9216 octets, tient en DRAM */
+    cfg.jpeg_quality = 12;
+    cfg.fb_count     = 1;
+    cfg.fb_location  = CAMERA_FB_IN_DRAM;  /* board=esp32dev : pas de PSRAM fiable */
+    cfg.grab_mode    = CAMERA_GRAB_WHEN_EMPTY;
+
+    esp_err_t err = esp_camera_init(&cfg);
+    if (err != ESP_OK) {
+        snprintf(g_buf, sizeof(g_buf),
+                 "[CAM] esp_camera_init failed: 0x%04x\r\n", (unsigned)err);
+        hal_uart_print(g_buf);
+        return false;
+    }
+
+    /* AEC + AWB automatiques pour s'adapter à la luminosité ambiante */
+    sensor_t *s = esp_camera_sensor_get();
+    if (s) {
+        s->set_exposure_ctrl(s, 1);
+        s->set_awb_gain(s, 1);
+        s->set_brightness(s, 0);
+        s->set_contrast(s, 0);
+    }
+
+    hal_uart_print("[CAM] OV2640 GRAYSCALE 96×96 OK\r\n");
+    return true;
+}
+
+/* =========================================================================
+ * TFLite Micro : chargement du modèle et allocation des tenseurs
+ * ========================================================================= */
+
+static bool tflite_init(void)
+{
+    /* Vérification de la version du schéma FlatBuffer */
+    const tflite::Model *model = tflite::GetModel(g_person_detect_model_data);
+    if (model->version() != TFLITE_SCHEMA_VERSION) {
+        snprintf(g_buf, sizeof(g_buf),
+                 "[TFL] Schema version mismatch: got %lu, expected %d\r\n",
+                 (unsigned long)model->version(), TFLITE_SCHEMA_VERSION);
+        hal_uart_print(g_buf);
+        return false;
+    }
+
+    /* L'interpréteur est alloué statiquement dans tensor_arena — zéro heap */
+    static tflite::MicroInterpreter static_interpreter(
+        model, resolver, tensor_arena, kTensorArenaSize);
+    interpreter = &static_interpreter;
+
+    TfLiteStatus status = interpreter->AllocateTensors();
+    if (status != kTfLiteOk) {
+        snprintf(g_buf, sizeof(g_buf),
+                 "[TFL] AllocateTensors() failed (arena trop petit ? actual=%u)\r\n",
+                 (unsigned)interpreter->arena_used_bytes());
+        hal_uart_print(g_buf);
+        return false;
+    }
+
+    input_tensor  = interpreter->input(0);
+    output_tensor = interpreter->output(0);
+
+    snprintf(g_buf, sizeof(g_buf),
+             "[TFL] OK — arena utilisée: %u / %u octets\r\n",
+             (unsigned)interpreter->arena_used_bytes(), kTensorArenaSize);
+    hal_uart_print(g_buf);
+
+    /* Vérifications de compatibilité avec le modèle person_detect */
+    if (input_tensor->dims->size != 4 ||
+        input_tensor->dims->data[1] != 96 ||
+        input_tensor->dims->data[2] != 96 ||
+        input_tensor->dims->data[3] != 1) {
+        hal_uart_print("[TFL] Dimensions d'entrée inattendues (attendu 1×96×96×1)\r\n");
+        return false;
+    }
+    if (input_tensor->type != kTfLiteInt8) {
+        hal_uart_print("[TFL] Type d'entrée inattendu (attendu int8)\r\n");
+        return false;
+    }
+
+    return true;
+}
+
+/* =========================================================================
+ * WiFi : connexion avec timeout
+ * ========================================================================= */
+
+static bool wifi_connect(void)
+{
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    hal_uart_print("[WiFi] Connexion");
+
+    uint32_t t0 = hal_time_ms();
+    while (WiFi.status() != WL_CONNECTED) {
+        if ((hal_time_ms() - t0) > 15000U) {
+            hal_uart_print("\r\n[WiFi] TIMEOUT — mode UART seul\r\n");
+            return false;
+        }
+        hal_delay_ms(500);
+        hal_uart_print(".");
+    }
+
+    snprintf(g_buf, sizeof(g_buf),
+             "\r\n[WiFi] Connecté — IP : %s\r\n",
+             WiFi.localIP().toString().c_str());
+    hal_uart_print(g_buf);
+    return true;
+}
+
+/* =========================================================================
+ * MQTT : connexion et reconnexion
+ * ========================================================================= */
+
+static bool mqtt_connect(void)
+{
+    mqtt_client.setServer(MQTT_BROKER, MQTT_PORT);
+    mqtt_client.setKeepAlive(30);
+
+    snprintf(g_buf, sizeof(g_buf), "[MQTT] Connexion à %s:%d...\r\n",
+             MQTT_BROKER, MQTT_PORT);
+    hal_uart_print(g_buf);
+
+    if (mqtt_client.connect(DEVICE_ID, MQTT_USER, MQTT_PASSWORD)) {
+        hal_uart_print("[MQTT] Connecté\r\n");
+        return true;
+    }
+
+    snprintf(g_buf, sizeof(g_buf),
+             "[MQTT] Échec (state=%d) — mode UART seul\r\n",
+             mqtt_client.state());
+    hal_uart_print(g_buf);
+    return false;
+}
+
+static void mqtt_ensure_connected(void)
+{
+    if (!mqtt_client.connected()) {
+        uint32_t t0 = hal_time_ms();
+        while (!mqtt_client.connected() && (hal_time_ms() - t0) < 5000U) {
+            if (mqtt_client.connect(DEVICE_ID, MQTT_USER, MQTT_PASSWORD)) {
+                hal_uart_print("[MQTT] Reconnecté\r\n");
+            } else {
+                hal_delay_ms(1000);
+            }
+        }
+    }
+}
+
+/* =========================================================================
+ * Publication du résultat vers Vigie
+ *
+ * Format JSON compatible mqtt-ingestion.ts :
+ *   { "value", "mean", "stddev", "zScore", "anomaly", "ts",
+ *     "sensorType": "VIS", "level" }
+ * ========================================================================= */
+
+static void mqtt_publish(float person_score, float mean, float stddev,
+                         float z_score, bool anomaly)
+{
+    if (!mqtt_client.connected()) return;
+
+    /* Seuil de publication : évite de flooder MQTT avec des scores nuls */
+    if (person_score < PERSON_PUBLISH_THRESHOLD && !anomaly) return;
+
+    /* "level" : WARN si anomalie, sinon absent (SAFE n'est pas stocké en BDD) */
+    const char *level = anomaly ? "\"WARN\"" : "null";
+
+    snprintf(g_buf, sizeof(g_buf),
+             "{"
+             "\"value\":%.3f,"
+             "\"mean\":%.3f,"
+             "\"stddev\":%.3f,"
+             "\"zScore\":%.3f,"
+             "\"anomaly\":%s,"
+             "\"ts\":%lu,"
+             "\"sensorType\":\"VIS\","
+             "\"level\":%s"
+             "}",
+             person_score, mean, stddev, z_score,
+             anomaly ? "true" : "false",
+             (unsigned long)hal_time_ms(),   /* timestamp relatif — Vigie utilise server time */
+             level);
+
+    /* Topic : fovet/devices/<DEVICE_ID>/readings */
+    char topic[64];
+    snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+
+    mqtt_client.publish(topic, g_buf);
+}
+
+/* =========================================================================
+ * Inférence : charge le frame dans le tenseur et exécute le modèle
+ *
+ * Conversion uint8 [0,255] → int8 [-128,127] : val - 128
+ * Cette soustraction correspond au zero_point=-128 du tenseur quantisé.
+ * ========================================================================= */
+
+static bool run_inference(const uint8_t *frame_buf, size_t len,
+                          float *out_person, float *out_no_person)
+{
+    if (len < 96U * 96U) {
+        hal_uart_print("[INF] Frame trop courte\r\n");
+        return false;
+    }
+
+    /* Copie dans le tenseur d'entrée avec conversion de quantisation */
+    int8_t *dst = input_tensor->data.int8;
+    for (int i = 0; i < 96 * 96; i++) {
+        dst[i] = (int8_t)((int16_t)frame_buf[i] - 128);
+    }
+
+    /* Inférence */
+    TfLiteStatus status = interpreter->Invoke();
+    if (status != kTfLiteOk) {
+        hal_uart_print("[INF] Invoke() failed\r\n");
+        return false;
+    }
+
+    /* Déquantisation de la sortie int8 → float [0, 1]
+     * Formule : (raw - zero_point) * scale
+     * Pour person_detect : zero_point=-128, scale≈1/255 → (raw+128)/255 */
+    const float scale      = output_tensor->params.scale;
+    const int   zero_point = output_tensor->params.zero_point;
+    int8_t *out = output_tensor->data.int8;
+
+    *out_no_person = (out[kNoPersonIndex] - zero_point) * scale;
+    *out_person    = (out[kPersonIndex]   - zero_point) * scale;
+
+    /* Clamp [0, 1] au cas où la déquantisation dépasse légèrement */
+    if (*out_person    < 0.0f) *out_person    = 0.0f;
+    if (*out_person    > 1.0f) *out_person    = 1.0f;
+    if (*out_no_person < 0.0f) *out_no_person = 0.0f;
+    if (*out_no_person > 1.0f) *out_no_person = 1.0f;
+
+    return true;
+}
+
+/* =========================================================================
+ * setup()
+ * ========================================================================= */
+
+void setup(void)
+{
+    hal_uart_init(115200);
+    hal_delay_ms(2000);   /* attendre l'énumération CH340 et l'ouverture du moniteur */
+
+    hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
+    hal_gpio_write(LED_PIN, HAL_GPIO_HIGH);  /* LED éteinte (active LOW) */
+
+    hal_uart_print("\r\n");
+    hal_uart_print("╔══════════════════════════════════════════════════╗\r\n");
+    hal_uart_print("║  Fovet Sentinelle — Person Detection (TFLite)   ║\r\n");
+    hal_uart_print("╚══════════════════════════════════════════════════╝\r\n\r\n");
+
+    /* Caméra */
+    if (!camera_init()) {
+        hal_uart_print("[FATAL] Caméra non initialisée — arrêt.\r\n");
+        while (true) { hal_delay_ms(1000); }
+    }
+
+    /* TFLite Micro */
+    if (!tflite_init()) {
+        hal_uart_print("[FATAL] TFLite non initialisé — arrêt.\r\n");
+        while (true) { hal_delay_ms(1000); }
+    }
+
+    /* FovetZScore pour la détection temporelle d'anomalie sur person_score */
+    fovet_zscore_init(&g_zs_person, ZSCORE_THRESHOLD, WARMUP_FRAMES);
+
+    /* WiFi + MQTT (optionnels — si timeout, le firmware tourne en UART seul) */
+    if (wifi_connect()) {
+        mqtt_connect();
+    }
+
+    /* Drainer quelques frames pour laisser AEC/AWB converger */
+    hal_uart_print("[CAM] Stabilisation AEC/AWB (5 frames)...\r\n");
+    for (int i = 0; i < 5; i++) {
+        camera_fb_t *fb = esp_camera_fb_get();
+        if (fb) esp_camera_fb_return(fb);
+        hal_delay_ms(150);
+    }
+
+    snprintf(g_buf, sizeof(g_buf),
+             "Modèle  : person_detect (MobileNetV1 0.25×, VWW)\r\n"
+             "Warmup  : %u frames | Seuil Z-Score : %.1f σ\r\n"
+             "MQTT    : %s\r\n"
+             "CSV     : frame_id,person_score,no_person_score,z_score,anomaly,mean,stddev\r\n\r\n",
+             WARMUP_FRAMES, ZSCORE_THRESHOLD,
+             mqtt_client.connected() ? "connecté → Vigie" : "désactivé (UART only)");
+    hal_uart_print(g_buf);
+    hal_uart_print("[PRET] Calibration en cours sur scène vide...\r\n\r\n");
+}
+
+/* =========================================================================
+ * loop()
+ * ========================================================================= */
+
+void loop(void)
+{
+    static uint32_t last_ms = 0U;
+    uint32_t now = hal_time_ms();
+    if ((now - last_ms) < INFERENCE_MS) {
+        mqtt_client.loop();  /* maintenir la connexion MQTT */
+        return;
+    }
+    last_ms = now;
+
+    /* --- Capture ---------------------------------------------------------- */
+
+    camera_fb_t *fb = esp_camera_fb_get();
+    if (!fb) {
+        hal_uart_print("[CAM] Capture échouée\r\n");
+        return;
+    }
+
+    /* --- Inférence TFLite ------------------------------------------------- */
+
+    float person_score = 0.0f, no_person_score = 0.0f;
+    bool ok = run_inference(fb->buf, fb->len, &person_score, &no_person_score);
+    esp_camera_fb_return(fb);
+
+    if (!ok) return;
+
+    /* --- Z-Score temporel ------------------------------------------------- */
+
+    bool anomaly = fovet_zscore_update(&g_zs_person, person_score);
+
+    float mean   = fovet_zscore_get_mean  (&g_zs_person);
+    float stddev = fovet_zscore_get_stddev(&g_zs_person);
+    float z_score = (stddev > 1e-6f)
+                    ? (person_score - mean) / stddev
+                    : 0.0f;
+
+    /* --- LED -------------------------------------------------------------- */
+
+    hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
+
+    /* --- CSV UART --------------------------------------------------------- */
+
+    snprintf(g_buf, sizeof(g_buf),
+             "%lu,%.3f,%.3f,%.3f,%d,%.3f,%.3f%s\r\n",
+             (unsigned long)g_frame_id,
+             person_score, no_person_score,
+             z_score, (int)anomaly,
+             mean, stddev,
+             anomaly ? "  <PERSON DETECTED>" : "");
+    hal_uart_print(g_buf);
+
+    /* --- MQTT → Vigie ----------------------------------------------------- */
+
+    if (mqtt_client.connected()) {
+        mqtt_ensure_connected();
+        mqtt_publish(person_score, mean, stddev, z_score, anomaly);
+    }
+
+    g_frame_id++;
+}
