@@ -4,54 +4,131 @@
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@fovet.eu
  *
- * smoke_test/main.cpp — diagnostic série exhaustif.
+ * smoke_test/main.cpp — SDK smoke test : Z-Score sur sinus synthétique.
  *
- * Le baud rate est paramétré par build_flag -DBAUD_RATE=xxx dans chaque env.
- * Aucune dépendance Fovet — Arduino brut uniquement.
+ * Validé sur ESP32-CAM (AI-Thinker) avec adaptateur CH340 (COM4).
+ * Compilé avec board=esp32dev — voir CLAUDE.md "Hardware gotchas".
+ *
+ * Comportement :
+ *   - 100 Hz : lit un sinus 1 Hz synthétique, passe dans fovet_zscore_update()
+ *   - Toutes les 200 samples : injection alternée ±5σ → détection + LED
+ *   - Warm-up 30 samples : pas de détection pendant la calibration
+ *   - CSV sur UART : idx,value,mean,stddev,zscore,anomaly,event
+ *
+ * Résultat attendu (extrait) :
+ *   0,0.0000,0.0000,0.0000,0.0000,0,
+ *   ...
+ *   200,<spike>,<mean>,<stddev>,<z>,1,<+5SIGMA>
+ *   ...
+ *
+ * Flash:   pio run -e smoke --target upload
+ * Monitor: pio device monitor -e smoke   (ouvrir avant RST)
  */
 
-#include <Arduino.h>
-
-#ifndef BAUD_RATE
-#define BAUD_RATE 115200
-#endif
-
-/* HardwareSerial explicite sur UART0 (GPIO1=TX, GPIO3=RX).
- * Équivalent à Serial sur ESP32 Arduino, mais sans ambiguïté. */
-static HardwareSerial uart0(0);
-
-void setup()
-{
-    /* UART0 explicite : GPIO1 TX, GPIO3 RX — pins du CH340 sur ESP32-CAM */
-    uart0.begin(BAUD_RATE, SERIAL_8N1, 3 /*RX*/, 1 /*TX*/);
-
-    /* Délai généreux : CH340 enumération + ouverture moniteur.
-     * Pendant ces 4 s, si CORE_DEBUG_LEVEL=5 est actif, des messages
-     * IDF apparaîtront ici avant même le premier println(). */
-    delay(4000);
-
-    uart0.println();
-    uart0.print("=== Fovet smoke test — HELLO === baud=");
-    uart0.println(BAUD_RATE);
-    uart0.print("board=");
-#if defined(ARDUINO_ESP32CAM_DEV)
-    uart0.println("esp32cam");
-#elif defined(ARDUINO_ESP32_DEV)
-    uart0.println("esp32dev");
-#else
-    uart0.println("unknown");
-#endif
-    uart0.println("setup() OK");
-    uart0.flush();
+extern "C" {
+#include "fovet/zscore.h"
+#include "fovet/hal/hal_uart.h"
+#include "fovet/hal/hal_time.h"
+#include "fovet/hal/hal_gpio.h"
 }
 
-void loop()
+#include <Arduino.h>
+#include <math.h>
+#include <stdio.h>
+
+/* -------------------------------------------------------------------------
+ * Hardware — board=esp32dev physiquement sur ESP32-CAM AI-Thinker
+ * LED flash (GPIO4) : transistor entre GPIO4 et la LED, active LOW.
+ * ------------------------------------------------------------------------- */
+
+#define LED_PIN           4U
+
+/* -------------------------------------------------------------------------
+ * Detector
+ * ------------------------------------------------------------------------- */
+
+#define ZSCORE_THRESHOLD  3.0f
+#define ZSCORE_MIN_SAMP   30U
+#define SAMPLE_PERIOD_MS  10U   /* 100 Hz */
+#define SPIKE_EVERY       200U
+
+/* -------------------------------------------------------------------------
+ * Globals
+ * ------------------------------------------------------------------------- */
+
+static FovetZScore g_zscore;
+static uint32_t   g_idx = 0;
+static char       g_buf[128];
+
+/* -------------------------------------------------------------------------
+ * Arduino entry points
+ * ------------------------------------------------------------------------- */
+
+void setup(void)
 {
-    static uint32_t last = 0;
-    if (millis() - last >= 1000) {
-        last = millis();
-        uart0.print("tick ms=");
-        uart0.println(millis());
-        uart0.flush();
+    hal_uart_init(115200);
+
+    /* 2 s : CH340 enumeration + moniteur ready avant le premier print.
+     * Avec monitor_rts=0/dtr=0 dans platformio.ini, le moniteur n'envoie
+     * pas de reset — ouvrir le moniteur AVANT de presser RST. */
+    hal_delay_ms(2000);
+
+    hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
+    hal_gpio_write(LED_PIN, HAL_GPIO_HIGH); /* LED off (active LOW) */
+
+    fovet_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMP);
+
+    hal_uart_print("\r\n=== Fovet Sentinelle — Smoke Test ===\r\n");
+    hal_uart_print("board  : esp32dev (CH340 COM4 115200)\r\n");
+    hal_uart_print("signal : sinus 1 Hz @ 100 Hz\r\n");
+    hal_uart_print("spikes : +-5sigma toutes les 200 samples\r\n");
+    hal_uart_print("CSV    : idx,value,mean,stddev,zscore,anomaly,event\r\n\r\n");
+}
+
+void loop(void)
+{
+    static uint32_t last_ms = 0;
+    uint32_t now = hal_time_ms();
+
+    if ((now - last_ms) < SAMPLE_PERIOD_MS) return;
+    last_ms = now;
+
+    /* --- Signal synthétique : sinus 1 Hz --------------------------------- */
+
+    float t      = (float)g_idx * (SAMPLE_PERIOD_MS * 0.001f);
+    float sample = sinf(2.0f * (float)M_PI * 1.0f * t);
+
+    const char *event = "";
+
+    /* Injection ±5σ alternée après warm-up */
+    if (g_idx >= ZSCORE_MIN_SAMP && (g_idx % SPIKE_EVERY) == 0U) {
+        float mean   = fovet_zscore_get_mean(&g_zscore);
+        float stddev = fovet_zscore_get_stddev(&g_zscore);
+        float amp    = 5.0f * stddev + 0.1f;
+        bool  pos    = (g_idx / SPIKE_EVERY % 2U) == 0U;
+        sample += pos ? amp : -amp;
+        event   = pos ? "<+5SIGMA>" : "<-5SIGMA>";
     }
+
+    /* --- Détecteur -------------------------------------------------------- */
+
+    bool anomaly = fovet_zscore_update(&g_zscore, sample);
+    float mean   = fovet_zscore_get_mean(&g_zscore);
+    float stddev = fovet_zscore_get_stddev(&g_zscore);
+    float z      = (stddev > 1e-6f) ? ((sample - mean) / stddev) : 0.0f;
+
+    /* --- LED -------------------------------------------------------------- */
+
+    hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
+
+    /* --- CSV sur UART ----------------------------------------------------- */
+
+    snprintf(g_buf, sizeof(g_buf),
+             "%lu,%.4f,%.4f,%.4f,%.4f,%d,%s\r\n",
+             (unsigned long)g_idx,
+             sample, mean, stddev, z,
+             (int)anomaly, event);
+    hal_uart_print(g_buf);
+
+    g_idx++;
 }
