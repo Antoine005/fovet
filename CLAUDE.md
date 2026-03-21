@@ -43,7 +43,9 @@ fovet/
 ├── edge-core/
 │   ├── include/
 │   │   └── fovet/
-│   │       ├── zscore.h          ← API publique Z-Score detector
+│   │       ├── zscore.h           ← API publique Z-Score detector
+│   │       ├── drift.h            ← API publique Drift detector (EWMA)
+│   │       ├── mad.h              ← API publique MAD detector (Streaming MAD)
 │   │       └── hal/
 │   │           ├── hal_adc.h
 │   │           ├── hal_uart.h
@@ -51,16 +53,24 @@ fovet/
 │   │           └── hal_time.h
 │   ├── src/
 │   │   ├── zscore.c
+│   │   ├── drift.c
+│   │   ├── mad.c
 │   │   └── platform/
-│   │       └── platform_esp32.c  ← Implémentation HAL ESP32
-│   ├── tests/                    ← Tests unitaires compilés en natif (gcc)
+│   │       └── platform_esp32.cpp ← Implémentation HAL ESP32
+│   ├── tests/                     ← Tests unitaires compilés en natif (gcc)
+│   │   ├── test_zscore.c          ← 59 tests (master) / 56 (physio branch)
+│   │   ├── test_drift.c           ← 28 tests
+│   │   └── test_mad.c             ← 28 tests
+│   ├── library.json               ← PlatformIO manifest (fovet-sentinelle)
 │   └── examples/
 │       └── esp32/
-│           └── zscore_demo/      ← Demo PlatformIO ESP32-CAM
-├── automl-pipeline/
-├── platform-dashboard/
+│           ├── smoke_test/        ← Smoke test SDK complet (HAL + Z-Score + LED)
+│           ├── zscore_demo/       ← Z-Score + Drift + MQTT → Vigie
+│           └── fire_detection/    ← Détection feu/fumée OV2640 (3×Z-Score sur RGB565)
+├── automl-pipeline/               ← Fovet Forge (Python AutoML)
+├── platform-dashboard/            ← Fovet Vigie (Next.js/Hono)
 ├── docs/
-├── CLAUDE.md                     ← Ce fichier
+├── CLAUDE.md                      ← Ce fichier
 └── README.md
 ```
 
@@ -110,6 +120,15 @@ Critère de sortie Phase 1 atteint : détecte une anomalie ±5σ injectée dans 
 - [x] Smoke test SDK complet : `edge-core/examples/esp32/smoke_test/`
 - [x] HAL ESP32 opérationnel (UART GPIO1/3, GPIO, time) — `platform_esp32.cpp`
 - [x] zscore_demo (Z-Score + Drift + MQTT → Vigie) compilé et prêt à flasher
+- [x] fire_detection (OV2640 QQVGA RGB565 — 3×Z-Score sur R_mean/ratio_rb/variance) ✅
+
+**Tests natifs gcc (master) — 115 tests, 0 failing**
+
+| Suite | Tests | Détecteur |
+|---|---|---|
+| test_zscore | 59 | Z-Score Welford + warm-up + windowed |
+| test_drift | 28 | EWMA drift bilatéral |
+| test_mad | 28 | Streaming MAD (médiane glissante) |
 
 **Phase 3 — Capteur réel (prochaine étape)**
 - [ ] Brancher MPU-6050 sur I2C : SDA=GPIO13, SCL=GPIO14 sur ESP32-CAM
@@ -124,7 +143,7 @@ Critère de sortie Phase 1 atteint : détecte une anomalie ±5σ injectée dans 
 
 ---
 
-## Algorithme de Welford (à implémenter en Phase 1)
+## Algorithme de Welford — API publique
 
 Calcule moyenne et variance en ligne (one-pass), zéro malloc, numériquement stable.
 
@@ -133,14 +152,30 @@ typedef struct {
     uint32_t count;
     float mean;
     float M2;
-    float threshold_sigma;  // ex: 3.0f
+    float threshold_sigma;
+    uint32_t warmup_samples;
 } FovetZScore;
 
-void fovet_zscore_init(FovetZScore* ctx, float threshold_sigma);
-bool fovet_zscore_update(FovetZScore* ctx, float sample); // retourne true si anomalie
-float fovet_zscore_get_mean(const FovetZScore* ctx);
+void  fovet_zscore_init    (FovetZScore* ctx, float threshold_sigma, uint32_t warmup);
+bool  fovet_zscore_update  (FovetZScore* ctx, float sample);   // true si anomalie
+float fovet_zscore_get_mean  (const FovetZScore* ctx);
 float fovet_zscore_get_stddev(const FovetZScore* ctx);
 ```
+
+---
+
+## Branche `monitoring/human` (local only — JAMAIS pushée sur GitHub)
+
+Contient tout master + modules physiologiques H1–H3 :
+
+| Module | Capteur | Tests natifs |
+|---|---|---|
+| H1 — PTI (chute/immobilité/SOS) | MPU-6050 I2C | 24 (pti) + 25 (mpu6050) + 30 (biosignal) |
+| H2 — Fatigue cardiaque | MAX30102 HR/SpO₂ | 27 (fatigue) + 23 (max30102) |
+| H3 — Stress thermique | DHT22 WBGT | 40 (temp) + 43 (dht22) |
+| H4 — ECG / Stress combiné | AD8232 | standby (matériel non commandé) |
+
+**Total tests monitoring/human : 212/212 ✅** (vérifié 2026-03-21)
 
 ---
 
