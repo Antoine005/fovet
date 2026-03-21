@@ -56,6 +56,24 @@ interface SensorPayload {
   value2?: number;       // secondary value (e.g. humidity %)
 }
 
+/**
+ * Detect if the raw JSON is a camera payload (ESP32-CAM format) and normalise
+ * it into the standard SensorPayload. Returns null if it is not a camera payload.
+ */
+function normaliseCameraPayload(raw: Record<string, unknown>): SensorPayload | null {
+  if (typeof raw.score !== "number" || typeof raw.label !== "string") return null;
+  const score = raw.score as number;
+  const label = raw.label as string;
+  return {
+    value: score,
+    mean: 0,
+    stddev: 1,
+    zScore: 0,
+    anomaly: label === "person",
+    // ts is device uptime — ignore it, use server time instead
+  };
+}
+
 interface WebhookPayload {
   deviceId:    string;
   deviceName:  string;
@@ -118,13 +136,17 @@ export function startMqttIngestion(): void {
       if (!mqttClientId || parts.length !== 4) return;
 
       // Parse and validate payload
-      let data: SensorPayload;
+      let raw: Record<string, unknown>;
       try {
-        data = JSON.parse(payload.toString());
+        raw = JSON.parse(payload.toString());
       } catch {
         console.warn(`[MQTT] Invalid JSON from ${mqttClientId}`);
         return;
       }
+
+      // Normalise camera payloads (ESP32-CAM format: label/score) to SensorPayload
+      const camera = normaliseCameraPayload(raw);
+      let data: SensorPayload = camera ?? (raw as unknown as SensorPayload);
 
       if (
         typeof data.value !== "number" || !isFinite(data.value) ||
@@ -133,17 +155,18 @@ export function startMqttIngestion(): void {
         typeof data.zScore !== "number" || !isFinite(data.zScore) ||
         typeof data.anomaly !== "boolean"
       ) {
-        console.warn(`[MQTT] Invalid payload fields from ${mqttClientId}`);
+        console.warn(`[MQTT] Invalid payload fields from ${mqttClientId}`, raw);
         return;
       }
 
-      // Constrain timestamp to ±5 minutes from server time
+      // Timestamp: use server time if field is absent or looks like device uptime
+      // (device uptime ms is tiny — Unix ms timestamps are > 1 trillion)
+      const UNIX_MS_MIN = 1_000_000_000_000;
       const now = Date.now();
       const FIVE_MIN = 5 * 60 * 1000;
       let timestamp: Date;
-      if (data.ts !== undefined) {
-        if (typeof data.ts !== "number" || !isFinite(data.ts) ||
-            data.ts < now - FIVE_MIN || data.ts > now + FIVE_MIN) {
+      if (data.ts !== undefined && typeof data.ts === "number" && data.ts > UNIX_MS_MIN) {
+        if (!isFinite(data.ts) || data.ts < now - FIVE_MIN || data.ts > now + FIVE_MIN) {
           console.warn(`[MQTT] Rejected timestamp from ${mqttClientId}: ${data.ts}`);
           return;
         }
@@ -152,12 +175,23 @@ export function startMqttIngestion(): void {
         timestamp = new Date();
       }
 
-      // Lookup device
-      const device = await prisma.device.findUnique({
+      // Lookup device — auto-create if first time seen
+      let device = await prisma.device.findUnique({
         where: { mqttClientId },
         select: { id: true, name: true, active: true },
       });
-      if (!device || !device.active) return;
+      if (!device) {
+        console.log(`[MQTT] Auto-registering new device: ${mqttClientId}`);
+        device = await prisma.device.create({
+          data: {
+            name: mqttClientId,
+            mqttClientId,
+            active: true,
+          },
+          select: { id: true, name: true, active: true },
+        });
+      }
+      if (!device.active) return;
 
       // Validate optional enum fields — reject unknown values to prevent DB pollution
       const VALID_SENSOR_TYPES = new Set(["IMU", "HR", "TEMP"]);
