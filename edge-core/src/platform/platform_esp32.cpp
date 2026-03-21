@@ -54,7 +54,10 @@ uint16_t hal_adc_to_mv(uint16_t raw, uint16_t vref_mv)
 void hal_uart_init(uint32_t baud_rate)
 {
     Serial.begin((unsigned long)baud_rate);
-    while (!Serial) { /* wait for USB-UART */ }
+    /* NOTE: do NOT use while (!Serial) here — on ESP32 with CH340 (UART bridge),
+     * Serial is always truthy and this guard is only meaningful for boards with
+     * native USB (e.g. Arduino Leonardo). Caller must add a startup delay if
+     * the monitor needs time to connect before the first print. */
 }
 
 void hal_uart_write(const char *data, uint32_t len)

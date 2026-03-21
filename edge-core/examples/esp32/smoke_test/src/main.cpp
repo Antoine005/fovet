@@ -70,6 +70,10 @@ static char       g_buf[128];
 void setup(void)
 {
     hal_uart_init(115200);
+    /* 2-second window for the CH340 to enumerate and the monitor to connect
+     * before printing the header — without this, the first lines are lost. */
+    hal_delay_ms(2000);
+
     hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
     hal_gpio_write(LED_PIN, HAL_GPIO_HIGH); /* LED off (active LOW) */
 
