@@ -292,6 +292,67 @@ static void test_window_adapts_to_new_baseline(void)
 }
 
 /* -------------------------------------------------------------------------
+ * Phase 1 exit criterion — sinusoidal stream + ±5σ injection
+ * CLAUDE.md: "détecte une anomalie +5σ injectée dans un signal sinusoïdal"
+ * ------------------------------------------------------------------------- */
+
+static void test_sinusoidal_positive_5sigma_anomaly(void)
+{
+    /* Feed 100 samples of sin(i * 0.1) to establish baseline, then inject
+     * a +5σ spike and verify detection. */
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 10U);
+
+    for (int i = 0; i < 100; i++) {
+        fovet_zscore_update(&ctx, sinf((float)i * 0.1f));
+    }
+
+    float mean   = fovet_zscore_get_mean(&ctx);
+    float stddev = fovet_zscore_get_stddev(&ctx);
+
+    /* Inject +5σ spike above the sine baseline */
+    float spike  = mean + 5.0f * stddev;
+    bool  result = fovet_zscore_update(&ctx, spike);
+    ASSERT(result, "sinusoidal stream: +5σ spike detected as anomaly");
+}
+
+static void test_sinusoidal_negative_5sigma_anomaly(void)
+{
+    /* Same as above but inject a -5σ spike (downward outlier). */
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 10U);
+
+    for (int i = 0; i < 100; i++) {
+        fovet_zscore_update(&ctx, sinf((float)i * 0.1f));
+    }
+
+    float mean   = fovet_zscore_get_mean(&ctx);
+    float stddev = fovet_zscore_get_stddev(&ctx);
+
+    /* Inject -5σ spike below the sine baseline */
+    float spike  = mean - 5.0f * stddev;
+    bool  result = fovet_zscore_update(&ctx, spike);
+    ASSERT(result, "sinusoidal stream: -5σ spike detected as anomaly");
+}
+
+static void test_sinusoidal_no_false_positive(void)
+{
+    /* 200 samples of a clean sine wave must produce zero anomalies after
+     * warm-up, verifying the detector does not over-trigger on a periodic
+     * signal whose variance is well within threshold_sigma. */
+    FovetZScore ctx;
+    fovet_zscore_init(&ctx, 3.0f, 10U);
+
+    int anomaly_count = 0;
+    for (int i = 0; i < 200; i++) {
+        if (fovet_zscore_update(&ctx, sinf((float)i * 0.1f))) {
+            anomaly_count++;
+        }
+    }
+    ASSERT(anomaly_count == 0, "sinusoidal stream: no false positives over 200 samples");
+}
+
+/* -------------------------------------------------------------------------
  * Entry point
  * ------------------------------------------------------------------------- */
 
@@ -317,6 +378,11 @@ int main(void)
     test_window_preserves_params_after_auto_reset();
     test_manual_reset_preserves_window_size();
     test_window_adapts_to_new_baseline();
+
+    printf("\n--- Phase 1 exit criterion (sinusoidal ±5σ) ---\n");
+    test_sinusoidal_positive_5sigma_anomaly();
+    test_sinusoidal_negative_5sigma_anomaly();
+    test_sinusoidal_no_false_positive();
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return (g_fail == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
