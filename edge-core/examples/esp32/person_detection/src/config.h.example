@@ -22,11 +22,6 @@
 #define MQTT_PASSWORD  "change_me"
 
 /* Identité du device — doit correspondre au mqttClientId enregistré dans Vigie */
-#define DEVICE_ID      "esp32-cam-001"
-
-/* Score minimum (0.0–1.0) pour qu'une détection soit publiée sur MQTT.
- * En dessous de ce seuil, le résultat est loggé en UART uniquement.
- * Valeur recommandée : 0.6 (60% confiance) */
-#define PERSON_PUBLISH_THRESHOLD  0.6f
+#define DEVICE_ID      "esp32cam_001"
 
 #endif /* FOVET_CONFIG_H */
