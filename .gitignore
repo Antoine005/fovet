@@ -47,6 +47,9 @@ Thumbs.db
 .env.production
 secrets/
 
+# ESP32 credentials — filet de sécurité global (chaque exemple a son .gitignore local aussi)
+**/src/config.h
+
 # Session notes (may contain private data)
 docs/session-*.md
 
