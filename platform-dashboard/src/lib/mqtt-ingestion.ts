@@ -83,6 +83,10 @@ interface SensorPayload {
   level?: string;        // "SAFE" | "WARN" | "DANGER" | "COLD" | "CRITICAL"
   ptiType?: string;      // "FALL" | "MOTIONLESS" | "SOS" — IMU module only
   value2?: number;       // secondary value (e.g. humidity %)
+  // Legacy / normalised fields (0 for canonical v2)
+  mean?: number;
+  stddev?: number;
+  zScore?: number;
 }
 
 /**
@@ -201,24 +205,21 @@ export function startMqttIngestion(): void {
       if (!mqttClientId || parts.length !== 4) return;
 
       // Parse and validate payload
-      let data: SensorPayload;
+      let raw: Record<string, unknown>;
       try {
-        data = JSON.parse(payload.toString());
+        raw = JSON.parse(payload.toString());
       } catch {
         console.warn(`[MQTT] Invalid JSON from ${mqttClientId}`);
         return;
       }
 
-      if (
-        typeof data.value !== "number" || !isFinite(data.value) ||
-        typeof data.mean !== "number" || !isFinite(data.mean) ||
-        typeof data.stddev !== "number" || !isFinite(data.stddev) || data.stddev < 0 ||
-        typeof data.zScore !== "number" || !isFinite(data.zScore) ||
-        typeof data.anomaly !== "boolean"
-      ) {
+      const data = normalisePayload(raw);
+      if (!data) {
         console.warn(`[MQTT] Invalid payload fields from ${mqttClientId}`);
         return;
       }
+
+      const isCanonical = typeof data.firmware === "string";
 
       // Constrain timestamp to ±5 minutes from server time
       const now = Date.now();
