@@ -48,21 +48,35 @@ if not exist "%FIRMWARE_DIR%\" (
     exit /b 1
 )
 
-:: Verification de PlatformIO
+:: Localisation de PlatformIO
+:: 1. Essai via PATH (VS Code terminal, shell configure)
+set "PIO_CMD=pio"
 where pio >nul 2>&1
 if errorlevel 1 (
-    echo [ERREUR] PlatformIO (pio) introuvable dans le PATH.
-    echo          Installez PlatformIO : https://platformio.org/install/cli
-    echo          Ou ouvrez ce script depuis VS Code avec l'extension PlatformIO.
-    pause
-    exit /b 1
+    :: 2. Emplacement par defaut de l'installeur PlatformIO Core
+    set "PIO_LOCAL=%USERPROFILE%\.platformio\penv\Scripts\pio.exe"
+    if exist "!PIO_LOCAL!" (
+        set "PIO_CMD=!PIO_LOCAL!"
+        echo [INFO] PlatformIO trouve : !PIO_LOCAL!
+    ) else (
+        echo [ERREUR] PlatformIO (pio) introuvable.
+        echo          Chemins testes :
+        echo            - PATH systeme
+        echo            - %USERPROFILE%\.platformio\penv\Scripts\pio.exe
+        echo.
+        echo          Solutions :
+        echo            - Installez PlatformIO VS Code extension et relancez
+        echo            - Ou lancez ce script depuis un terminal VS Code
+        pause
+        exit /b 1
+    )
 )
 
 :: Flash
 echo [FLASH] Compilation + upload en cours...
 echo.
 cd /d "%FIRMWARE_DIR%"
-pio run -e %PIO_ENV% --target upload
+"%PIO_CMD%" run -e %PIO_ENV% --target upload
 set "FLASH_CODE=%errorlevel%"
 
 if not "%FLASH_CODE%"=="0" (
@@ -81,9 +95,11 @@ echo.
 set /p MONITOR="Ouvrir le moniteur serie ? (O/N) : "
 if /i "%MONITOR%"=="O" (
     echo [INFO] Ouverture du moniteur serie (Ctrl+C pour quitter)...
-    pio device monitor -e %PIO_ENV%
+    "%PIO_CMD%" device monitor -e %PIO_ENV%
 )
 
 echo.
 echo [OK] Termine.
+echo.
+pause
 endlocal
