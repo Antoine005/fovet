@@ -45,6 +45,8 @@ model Reading {
   isAnomaly  Boolean   @default(false)
   // Module that produced this reading: "IMU" | "HR" | "TEMP" | null (legacy/unknown)
   sensorType String?
+  // Firmware that published this reading: "person_detection" | "fire_detection" | "zscore_demo" | "smoke_test" | null
+  firmware   String?
 
   device    Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 

@@ -22,10 +22,10 @@
  * ZSCORE_THRESHOLD sigmas — i.e., une personne entre dans le champ.
  *
  * MQTT topic : fovet/devices/<DEVICE_ID>/readings
- * Payload :
- *   { "value": 0.87, "mean": 0.43, "stddev": 0.22, "zScore": 2.8,
- *     "anomaly": true, "ts": 1700000000000,
- *     "sensorType": "VIS", "level": "WARN" }
+ * Payload (format canonique multi-modèle) :
+ *   { "device_id": "esp32cam_001", "firmware": "person_detection",
+ *     "sensor": "camera", "value": 0.87, "label": "person",
+ *     "unit": "score", "anomaly": true, "ts": 1700000000000 }
  *
  * CSV UART (115200) :
  *   frame_id, person_score, no_person_score, z_score, anomaly, mean, stddev
@@ -325,28 +325,29 @@ static void mqtt_ensure_connected(void)
  * Publication MQTT → Vigie
  * ========================================================================= */
 
-static void mqtt_publish(float person_score, float mean, float stddev,
-                         float z_score, bool anomaly)
+static void mqtt_publish(float person_score)
 {
     if (!mqtt_client.connected()) return;
 
-    const char *level = anomaly ? "\"WARN\"" : "null";
+    bool        anomaly = person_score > 0.75f;
+    const char *label   = anomaly ? "person" : "no_person";
 
     snprintf(g_buf, sizeof(g_buf),
              "{"
+             "\"device_id\":\"%s\","
+             "\"firmware\":\"person_detection\","
+             "\"sensor\":\"camera\","
              "\"value\":%.3f,"
-             "\"mean\":%.3f,"
-             "\"stddev\":%.3f,"
-             "\"zScore\":%.3f,"
+             "\"label\":\"%s\","
+             "\"unit\":\"score\","
              "\"anomaly\":%s,"
-             "\"ts\":%lu,"
-             "\"sensorType\":\"VIS\","
-             "\"level\":%s"
+             "\"ts\":%lu"
              "}",
-             person_score, mean, stddev, z_score,
+             DEVICE_ID,
+             person_score,
+             label,
              anomaly ? "true" : "false",
-             (unsigned long)hal_time_ms(),
-             level);
+             (unsigned long)hal_time_ms());
 
     char topic[64];
     snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
@@ -489,7 +490,7 @@ void loop(void)
 
     if (mqtt_client.connected()) {
         mqtt_ensure_connected();
-        mqtt_publish(person_score, mean, stddev, z_score, anomaly);
+        mqtt_publish(person_score);
     }
 
     g_frame_id++;
