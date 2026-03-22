@@ -25,6 +25,8 @@
  * Monitor: pio device monitor -e smoke   (ouvrir avant RST)
  */
 
+#include "config.h"     /* WiFi/MQTT credentials — DO NOT COMMIT */
+
 extern "C" {
 #include "fovet/zscore.h"
 #include "fovet/hal/hal_uart.h"
@@ -33,6 +35,8 @@ extern "C" {
 }
 
 #include <Arduino.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
 #include <math.h>
 #include <stdio.h>
 
@@ -56,9 +60,65 @@ extern "C" {
  * Globals
  * ------------------------------------------------------------------------- */
 
-static FovetZScore g_zscore;
-static uint32_t   g_idx = 0;
-static char       g_buf[128];
+static FovetZScore  g_zscore;
+static uint32_t     g_idx = 0;
+static char         g_buf[192];
+
+static WiFiClient   g_wifi_client;
+static PubSubClient g_mqtt(g_wifi_client);
+
+/* -------------------------------------------------------------------------
+ * WiFi + MQTT helpers
+ * ------------------------------------------------------------------------- */
+
+static void wifi_connect(void)
+{
+    hal_uart_print("[WiFi] Connecting to " WIFI_SSID " ...\r\n");
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    uint32_t start = hal_time_ms();
+    while (WiFi.status() != WL_CONNECTED) {
+        if ((hal_time_ms() - start) > 15000U) {
+            hal_uart_print("[WiFi] Timeout — UART only\r\n");
+            return;
+        }
+        hal_delay_ms(500);
+        hal_uart_print(".");
+    }
+    hal_uart_print("\r\n[WiFi] Connected\r\n");
+}
+
+static void mqtt_ensure_connected(void)
+{
+    static uint32_t last_ms = 0;
+    if (g_mqtt.connected()) return;
+    if (WiFi.status() != WL_CONNECTED) return;
+    if ((hal_time_ms() - last_ms) < 5000U) return;
+    last_ms = hal_time_ms();
+    g_mqtt.connect(DEVICE_ID, MQTT_USER, MQTT_PASSWORD);
+}
+
+static void mqtt_publish(float z_score)
+{
+    if (!g_mqtt.connected()) return;
+
+    snprintf(g_buf, sizeof(g_buf),
+             "{"
+             "\"device_id\":\"%s\","
+             "\"firmware\":\"smoke_test\","
+             "\"sensor\":\"synthetic\","
+             "\"value\":%.4f,"
+             "\"ts\":%lu"
+             "}",
+             DEVICE_ID,
+             z_score,
+             (unsigned long)hal_time_ms());
+
+    char topic[64];
+    snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+    g_mqtt.publish(topic, g_buf);
+}
 
 /* -------------------------------------------------------------------------
  * Arduino entry points
@@ -78,6 +138,11 @@ void setup(void)
 
     fovet_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMP);
 
+    wifi_connect();
+    g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
+    g_mqtt.setKeepAlive(30);
+    mqtt_ensure_connected();
+
     hal_uart_print("\r\n=== Fovet Sentinelle — Smoke Test ===\r\n");
     hal_uart_print("board  : esp32dev (CH340 COM4 115200)\r\n");
     hal_uart_print("signal : sinus 1 Hz @ 100 Hz\r\n");
@@ -89,6 +154,9 @@ void loop(void)
 {
     static uint32_t last_ms = 0;
     uint32_t now = hal_time_ms();
+
+    g_mqtt.loop();
+    mqtt_ensure_connected();
 
     if ((now - last_ms) < SAMPLE_PERIOD_MS) return;
     last_ms = now;
@@ -129,6 +197,8 @@ void loop(void)
              sample, mean, stddev, z,
              (int)anomaly, event);
     hal_uart_print(g_buf);
+
+    mqtt_publish(z);
 
     g_idx++;
 }

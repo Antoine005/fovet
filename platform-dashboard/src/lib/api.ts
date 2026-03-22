@@ -203,6 +203,27 @@ app.get("/devices", cookieAuth, async (c) => {
 });
 
 // -------------------------------------------------------------------------
+// GET /api/devices/:id — single device detail
+// -------------------------------------------------------------------------
+app.get("/devices/:id", cookieAuth, async (c) => {
+  const { id } = c.req.param();
+  const device = await prisma.device.findUnique({
+    where: { id },
+    include: {
+      readings: {
+        take: 1,
+        orderBy: { timestamp: "desc" },
+        select: { timestamp: true },
+      },
+      _count: { select: { readings: true } },
+    },
+  });
+  if (!device) return c.json({ error: "Device not found" }, 404);
+  const { readings, _count, ...d } = device;
+  return c.json({ ...d, lastReadingAt: readings[0]?.timestamp ?? null, readingCount: _count.readings });
+});
+
+// -------------------------------------------------------------------------
 // POST /api/devices — register a new device
 // -------------------------------------------------------------------------
 app.post("/devices", cookieAuth, async (c) => {

@@ -4,17 +4,29 @@
  * Subscribes to fovet/devices/+/readings and persists incoming
  * sensor data from Fovet Sentinelle nodes into PostgreSQL.
  *
- * MQTT message format (JSON):
+ * Canonical MQTT message format (JSON) — all ESP32 firmwares:
+ * {
+ *   "device_id":  "esp32cam_001",          // optional (also in topic)
+ *   "firmware":   "person_detection",      // canonical: identifies the firmware
+ *   "sensor":     "camera",                // canonical: "camera" | "synthetic"
+ *   "value":      0.87,                    // required: primary numeric value
+ *   "label":      "person",               // optional: human-readable category
+ *   "unit":       "score",                // optional: value unit
+ *   "anomaly":    true,                   // optional: anomaly flag
+ *   "ts":         1704067200000,          // optional: Unix ms (defaults to server time)
+ * }
+ *
+ * Legacy format (monitoring/human branch — still supported):
  * {
  *   "value":      1.2345,
  *   "mean":       0.0012,
  *   "stddev":     0.5432,
  *   "zScore":     2.275,
  *   "anomaly":    false,
- *   "ts":         1704067200000,   // Unix ms (optional, defaults to server time)
- *   "sensorType": "TEMP",          // optional: "IMU" | "HR" | "TEMP"
- *   "level":      "WARN",          // optional: "SAFE" | "WARN" | "DANGER" | "COLD" | "CRITICAL"
- *   "value2":     65.0             // optional: secondary value (e.g. humidity % for TEMP)
+ *   "ts":         1704067200000,
+ *   "sensorType": "TEMP",          // "IMU" | "HR" | "TEMP"
+ *   "level":      "WARN",          // "SAFE" | "WARN" | "DANGER" | "COLD" | "CRITICAL"
+ *   "value2":     65.0             // secondary value (e.g. humidity % for TEMP)
  * }
  *
  * Topic pattern: fovet/devices/<mqttClientId>/readings
@@ -53,11 +65,18 @@ const CAMERA_ALERT_THRESHOLD = 0.75;
 
 interface SensorPayload {
   value: number;
-  mean: number;
-  stddev: number;
-  zScore: number;
-  anomaly: boolean;
+  // Canonical fields
+  firmware?: string;     // "person_detection" | "fire_detection" | "zscore_demo" | "smoke_test"
+  sensor?: string;       // "camera" | "synthetic"
+  label?: string;        // "person" | "fire" | "anomaly" | "normal" | ...
+  unit?: string;         // "score" | "z_score" | "r_mean"
+  // Fields present in both canonical and legacy
+  anomaly?: boolean;
   ts?: number;
+  // Legacy fields (monitoring/human branch)
+  mean?: number;
+  stddev?: number;
+  zScore?: number;
   sensorType?: string;   // "IMU" | "HR" | "TEMP"
   level?: string;        // "SAFE" | "WARN" | "DANGER" | "COLD" | "CRITICAL"
   ptiType?: string;      // "FALL" | "MOTIONLESS" | "SOS" — IMU module only
@@ -65,21 +84,49 @@ interface SensorPayload {
 }
 
 /**
- * Detect if the raw JSON is a camera payload (ESP32-CAM format) and normalise
- * it into the standard SensorPayload. Returns null if it is not a camera payload.
+ * Normalise any incoming MQTT payload into a SensorPayload.
+ *
+ * Handles three formats:
+ *   1. Canonical (firmware field present) — all ESP32 Sentinelle firmwares
+ *   2. Legacy camera (score + label fields) — pre-canonical ESP32-CAM
+ *   3. Standard legacy — monitoring/human branch (mean/stddev/zScore required)
+ *
+ * Returns null if the payload cannot be normalised (missing required fields).
  */
-function normaliseCameraPayload(raw: Record<string, unknown>): SensorPayload | null {
-  if (typeof raw.score !== "number" || typeof raw.label !== "string") return null;
-  const score = raw.score as number;
-  const label = raw.label as string;
-  return {
-    value: score,
-    mean: 0,
-    stddev: 1,
-    zScore: 0,
-    anomaly: label === "person",
-    // ts is device uptime — ignore it, use server time instead
-  };
+function normalisePayload(raw: Record<string, unknown>): SensorPayload | null {
+  // --- 1. Canonical format: firmware field is present ---
+  if (typeof raw.firmware === "string") {
+    if (typeof raw.value !== "number" || !isFinite(raw.value as number)) return null;
+    return {
+      firmware: raw.firmware as string,
+      sensor:   typeof raw.sensor  === "string"  ? raw.sensor  as string  : undefined,
+      label:    typeof raw.label   === "string"  ? raw.label   as string  : undefined,
+      unit:     typeof raw.unit    === "string"  ? raw.unit    as string  : undefined,
+      value:    raw.value as number,
+      anomaly:  typeof raw.anomaly === "boolean" ? raw.anomaly as boolean : false,
+      ts:       typeof raw.ts      === "number"  ? raw.ts      as number  : undefined,
+      // Defaults for DB fields that require a value
+      mean:   0,
+      stddev: 0,
+      zScore: 0,
+    };
+  }
+
+  // --- 2. Legacy camera format: score + label (pre-canonical) ---
+  if (typeof raw.score === "number" && typeof raw.label === "string") {
+    return {
+      value:   raw.score as number,
+      label:   raw.label as string,
+      mean:    0,
+      stddev:  1,
+      zScore:  0,
+      anomaly: (raw.label as string) === "person",
+    };
+  }
+
+  // --- 3. Standard legacy format: value required, mean/stddev/zScore optional ---
+  if (typeof raw.value !== "number" || !isFinite(raw.value as number)) return null;
+  return raw as unknown as SensorPayload;
 }
 
 interface WebhookPayload {
@@ -152,21 +199,27 @@ export function startMqttIngestion(): void {
         return;
       }
 
-      // Normalise camera payloads (ESP32-CAM format: label/score) to SensorPayload
-      const cameraNorm = normaliseCameraPayload(raw);
-      const isCamera = cameraNorm !== null;
-      let data: SensorPayload = cameraNorm ?? (raw as unknown as SensorPayload);
-
-      if (
-        typeof data.value !== "number" || !isFinite(data.value) ||
-        typeof data.mean !== "number" || !isFinite(data.mean) ||
-        typeof data.stddev !== "number" || !isFinite(data.stddev) || data.stddev < 0 ||
-        typeof data.zScore !== "number" || !isFinite(data.zScore) ||
-        typeof data.anomaly !== "boolean"
-      ) {
+      // Normalise payload to SensorPayload (canonical, legacy camera, or legacy standard)
+      const norm = normalisePayload(raw);
+      if (!norm) {
         console.warn(`[MQTT] Invalid payload fields from ${mqttClientId}`, raw);
         return;
       }
+      let data: SensorPayload = norm;
+
+      // Validate primary value
+      if (!isFinite(data.value)) {
+        console.warn(`[MQTT] Non-finite value from ${mqttClientId}`);
+        return;
+      }
+
+      // Validate optional legacy numeric fields if present
+      if (data.mean   !== undefined && (typeof data.mean   !== "number" || !isFinite(data.mean)))   { data.mean   = 0; }
+      if (data.stddev !== undefined && (typeof data.stddev !== "number" || !isFinite(data.stddev) || data.stddev < 0)) { data.stddev = 0; }
+      if (data.zScore !== undefined && (typeof data.zScore !== "number" || !isFinite(data.zScore))) { data.zScore  = 0; }
+
+      // Determine if this is a canonical firmware payload (vs legacy)
+      const isCanonical = typeof data.firmware === "string";
 
       // Timestamp: use server time if field is absent or looks like device uptime
       // (device uptime ms is tiny — Unix ms timestamps are > 1 trillion)
@@ -236,11 +289,12 @@ export function startMqttIngestion(): void {
           timestamp,
           value: data.value,
           ...(data.value2 !== undefined && { value2: data.value2 }),
-          mean: data.mean,
-          stddev: data.stddev,
-          zScore: data.zScore,
-          isAnomaly: data.anomaly,
+          mean:      data.mean   ?? 0,
+          stddev:    data.stddev ?? 0,
+          zScore:    data.zScore ?? 0,
+          isAnomaly: data.anomaly ?? false,
           ...(data.sensorType && { sensorType: data.sensorType }),
+          ...(data.firmware   && { firmware:   data.firmware }),
         },
       });
 
@@ -248,21 +302,23 @@ export function startMqttIngestion(): void {
       emitReading(device.id, { ...reading, id: String(reading.id) });
 
       // Determine whether to create an alert and at what severity:
-      //   a) Camera (ESP32-CAM person detection): only if score >= CAMERA_ALERT_THRESHOLD → INFO
+      //   a) Canonical firmware payload: anomaly=true → WARN (or CRITICAL if value thresholds)
       //   b) Sentinelle profile level (PTI/FATIGUE/THERMAL): WARN/DANGER/COLD/CRITICAL from payload
       //   c) Generic z-score anomaly: derive severity from |zScore|
       let shouldAlert = false;
       let alertLevel: string | null = null;
 
-      if (isCamera) {
-        shouldAlert = data.value >= CAMERA_ALERT_THRESHOLD;
-        alertLevel  = "INFO";
+      if (isCanonical) {
+        if (data.anomaly) {
+          shouldAlert = true;
+          alertLevel  = "WARN";
+        }
       } else if (data.level !== undefined && ALERT_LEVELS.has(data.level)) {
         shouldAlert = true;
         alertLevel  = data.level;
       } else if (data.anomaly) {
         shouldAlert = true;
-        alertLevel  = Math.abs(data.zScore) >= 5 ? "CRITICAL" : "WARN";
+        alertLevel  = Math.abs(data.zScore ?? 0) >= 5 ? "CRITICAL" : "WARN";
       }
 
       // Throttle: skip if another alert was emitted for this device in the last 60 s
@@ -282,18 +338,19 @@ export function startMqttIngestion(): void {
             deviceId: device.id,
             timestamp,
             value: data.value,
-            zScore: data.zScore,
-            threshold: isCamera ? CAMERA_ALERT_THRESHOLD : 3.0,
+            zScore: data.zScore ?? 0,
+            threshold: isCanonical ? CAMERA_ALERT_THRESHOLD : 3.0,
             ...(alertModule  && { alertModule }),
             ...(alertLevel   && { alertLevel }),
             ...(data.ptiType && { ptiType: data.ptiType }),
           },
         });
+        const zStr = (data.zScore ?? 0).toFixed(2);
         console.log(
           `[MQTT] Alert on ${mqttClientId}` +
-          (alertModule ? ` [${alertModule}]` : "") +
-          ` level=${alertLevel ?? "—"}` +
-          (isCamera ? ` score=${data.value.toFixed(2)}` : ` z=${data.zScore.toFixed(2)}`)
+          (alertModule  ? ` [${alertModule}]`          : "") +
+          (data.firmware ? ` fw=${data.firmware}`       : "") +
+          ` level=${alertLevel ?? "—"} z=${zStr}`
         );
 
         fireWebhook({
@@ -303,7 +360,7 @@ export function startMqttIngestion(): void {
           alertLevel:  alertLevel,
           ptiType:     data.ptiType ?? null,
           value:       data.value,
-          zScore:      data.zScore,
+          zScore:      data.zScore ?? 0,
           timestamp:   timestamp.toISOString(),
         });
       }

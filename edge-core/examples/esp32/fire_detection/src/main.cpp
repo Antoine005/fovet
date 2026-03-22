@@ -38,6 +38,8 @@
  * Monitor  : pio device monitor -e fire_detection  (ouvrir avant RST)
  */
 
+#include "config.h"     /* WiFi/MQTT credentials — DO NOT COMMIT */
+
 extern "C" {
 #include "fovet/zscore.h"
 #include "fovet/hal/hal_uart.h"
@@ -47,6 +49,8 @@ extern "C" {
 
 #include "esp_camera.h"
 #include <Arduino.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
 #include <math.h>
 #include <stdio.h>
 
@@ -90,8 +94,82 @@ static FovetZScore g_zs_r;       /* suivi R_mean   inter-frames */
 static FovetZScore g_zs_ratio;   /* suivi ratio_rb inter-frames */
 static FovetZScore g_zs_var;     /* suivi variance inter-frames */
 
-static uint32_t g_frame_id = 0;
-static char     g_buf[256];
+static uint32_t    g_frame_id = 0;
+static char        g_buf[256];
+
+static WiFiClient   g_wifi_client;
+static PubSubClient g_mqtt(g_wifi_client);
+
+/* -------------------------------------------------------------------------
+ * WiFi + MQTT helpers
+ * ------------------------------------------------------------------------- */
+
+static void wifi_connect(void)
+{
+    hal_uart_print("[WiFi] Connecting to " WIFI_SSID " ...\r\n");
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    uint32_t start = hal_time_ms();
+    while (WiFi.status() != WL_CONNECTED) {
+        if ((hal_time_ms() - start) > 15000U) {
+            hal_uart_print("[WiFi] Timeout — continuing without network\r\n");
+            return;
+        }
+        hal_delay_ms(500);
+        hal_uart_print(".");
+    }
+    hal_uart_print("\r\n[WiFi] Connected, IP: ");
+    hal_uart_print(WiFi.localIP().toString().c_str());
+    hal_uart_print("\r\n");
+}
+
+static void mqtt_ensure_connected(void)
+{
+    static uint32_t last_attempt_ms = 0;
+    if (g_mqtt.connected()) return;
+    if (WiFi.status() != WL_CONNECTED) return;
+
+    uint32_t now = hal_time_ms();
+    if ((now - last_attempt_ms) < 5000U) return;
+    last_attempt_ms = now;
+
+    if (g_mqtt.connect(DEVICE_ID, MQTT_USER, MQTT_PASSWORD)) {
+        hal_uart_print("[MQTT] Connected\r\n");
+    } else {
+        snprintf(g_buf, sizeof(g_buf),
+                 "[MQTT] Failed, rc=%d — will retry\r\n", g_mqtt.state());
+        hal_uart_print(g_buf);
+    }
+}
+
+static void mqtt_publish(float r_mean, bool anomaly)
+{
+    if (!g_mqtt.connected()) return;
+
+    const char *label = anomaly ? "fire" : "normal";
+
+    snprintf(g_buf, sizeof(g_buf),
+             "{"
+             "\"device_id\":\"%s\","
+             "\"firmware\":\"fire_detection\","
+             "\"sensor\":\"camera\","
+             "\"value\":%.2f,"
+             "\"label\":\"%s\","
+             "\"unit\":\"r_mean\","
+             "\"anomaly\":%s,"
+             "\"ts\":%lu"
+             "}",
+             DEVICE_ID,
+             r_mean,
+             label,
+             anomaly ? "true" : "false",
+             (unsigned long)hal_time_ms());
+
+    char topic[64];
+    snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+    g_mqtt.publish(topic, g_buf);
+}
 
 /* -------------------------------------------------------------------------
  * Initialisation caméra
@@ -249,6 +327,11 @@ void setup(void)
     }
 
     /* Drainer 5 frames : laisser AEC/AWB converger avant la calibration */
+    wifi_connect();
+    g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
+    g_mqtt.setKeepAlive(30);
+    mqtt_ensure_connected();
+
     hal_uart_print("[CAM] AEC/AWB stabilisation (5 frames)...\r\n");
     for (int i = 0; i < 5; i++) {
         camera_fb_t *fb = esp_camera_fb_get();
@@ -262,6 +345,10 @@ void loop(void)
 {
     static uint32_t last_ms = 0;
     uint32_t now = hal_time_ms();
+
+    g_mqtt.loop();
+    mqtt_ensure_connected();
+
     if ((now - last_ms) < CAPTURE_MS) return;
     last_ms = now;
 
@@ -316,6 +403,8 @@ void loop(void)
              z_r, z_ratio, z_var,
              (int)anomaly, event);
     hal_uart_print(g_buf);
+
+    mqtt_publish(r_mean, anomaly);
 
     g_frame_id++;
 }

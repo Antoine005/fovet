@@ -126,22 +126,29 @@ static void mqtt_ensure_connected(void)
     }
 }
 
-static void mqtt_publish_reading(float value, float mean, float stddev,
-                                  float zscore_val, float drift_mag,
-                                  bool spike, bool drift_alert)
+static void mqtt_publish_reading(float zscore_val, bool spike, bool drift_alert)
 {
     if (!g_mqtt.connected()) return;
 
-    /* JSON payload — core fields consumed by mqtt-ingestion.ts,
-     * drift fields forwarded as metadata for Vigie display */
-    bool anomaly = spike || drift_alert;
+    bool        anomaly = spike || drift_alert;
+    const char *label   = anomaly ? "anomaly" : "normal";
+
     int len = snprintf(g_log_buf, sizeof(g_log_buf),
-        "{\"value\":%.4f,\"mean\":%.4f,\"stddev\":%.4f,"
-        "\"zScore\":%.4f,\"anomaly\":%s,"
-        "\"driftMag\":%.4f,\"driftAlert\":%s}",
-        value, mean, stddev,
-        zscore_val, anomaly ? "true" : "false",
-        drift_mag, drift_alert ? "true" : "false");
+        "{"
+        "\"device_id\":\"%s\","
+        "\"firmware\":\"zscore_demo\","
+        "\"sensor\":\"synthetic\","
+        "\"value\":%.4f,"
+        "\"label\":\"%s\","
+        "\"unit\":\"z_score\","
+        "\"anomaly\":%s,"
+        "\"ts\":%lu"
+        "}",
+        DEVICE_ID,
+        zscore_val,
+        label,
+        anomaly ? "true" : "false",
+        (unsigned long)hal_time_ms());
 
     char topic[64];
     snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
@@ -257,8 +264,7 @@ void loop(void)
     /* --- MQTT publish at reduced rate ------------------------------------ */
 
     if ((g_sample_index % MQTT_PUBLISH_EVERY) == 0U) {
-        mqtt_publish_reading(signal, mean, stddev, zscore_val,
-                             drift_mag, spike_detected, drift_detected);
+        mqtt_publish_reading(zscore_val, spike_detected, drift_detected);
     }
 
     g_sample_index++;
