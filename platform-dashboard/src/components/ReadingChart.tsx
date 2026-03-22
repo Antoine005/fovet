@@ -16,6 +16,7 @@ import { fr } from "date-fns/locale";
 
 const MAX_READINGS = 500; // large buffer — sliding window does the actual trimming
 const WINDOW_MS = 100_000; // display only the last 100 seconds
+const CONNECTED_THRESHOLD_MS = 30_000; // freeze the window if no reading for 30s
 
 interface Reading {
   id: string;
@@ -44,10 +45,13 @@ export function ReadingChart({ deviceId }: Props) {
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountedRef = useRef(false);
+  const isConnectedRef = useRef(false);
 
-  // 1-second tick to slide the time window
+  // 1-second tick — only slides the window when the device is connected
   useEffect(() => {
-    const interval = setInterval(() => setNowMs(Date.now()), 1_000);
+    const interval = setInterval(() => {
+      if (isConnectedRef.current) setNowMs(Date.now());
+    }, 1_000);
     return () => clearInterval(interval);
   }, []);
 
@@ -143,7 +147,14 @@ export function ReadingChart({ deviceId }: Props) {
     return () => clearInterval(interval);
   }, [mode, fetchInitial]);
 
-  // Keep only the last 100 seconds; re-evaluated every second via nowMs
+  // Freeze the window when no reading has arrived in the last 30s
+  const latestReading = readings[readings.length - 1];
+  const isConnected =
+    latestReading !== undefined &&
+    Date.now() - new Date(latestReading.timestamp).getTime() < CONNECTED_THRESHOLD_MS;
+  isConnectedRef.current = isConnected;
+
+  // Keep only the last 100 seconds; re-evaluated every second via nowMs (frozen when disconnected)
   const windowed = readings.filter(
     (r) => nowMs - new Date(r.timestamp).getTime() <= WINDOW_MS
   );
@@ -176,46 +187,55 @@ export function ReadingChart({ deviceId }: Props) {
             : "En attente de données MQTT…"}
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis
-              dataKey="ts"
-              tick={{ fontSize: 10, fill: "#6b7280" }}
-              interval="preserveStartEnd"
-            />
-            <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} />
-            <Tooltip
-              contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151" }}
-              labelStyle={{ color: "#9ca3af" }}
-            />
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke="#3b82f6"
-              dot={false}
-              strokeWidth={1.5}
-              name="Valeur"
-            />
-            <Line
-              type="monotone"
-              dataKey="mean"
-              stroke="#6b7280"
-              dot={false}
-              strokeWidth={1}
-              strokeDasharray="4 2"
-              name="Moyenne"
-            />
-            <Line
-              type="monotone"
-              dataKey="anomaly"
-              stroke="#ef4444"
-              dot={{ r: 4, fill: "#ef4444" }}
-              strokeWidth={0}
-              name="Anomalie"
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <div className="relative">
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+              <XAxis
+                dataKey="ts"
+                tick={{ fontSize: 10, fill: "#6b7280" }}
+                interval="preserveStartEnd"
+              />
+              <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151" }}
+                labelStyle={{ color: "#9ca3af" }}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#3b82f6"
+                dot={false}
+                strokeWidth={1.5}
+                name="Valeur"
+              />
+              <Line
+                type="monotone"
+                dataKey="mean"
+                stroke="#6b7280"
+                dot={false}
+                strokeWidth={1}
+                strokeDasharray="4 2"
+                name="Moyenne"
+              />
+              <Line
+                type="monotone"
+                dataKey="anomaly"
+                stroke="#ef4444"
+                dot={{ r: 4, fill: "#ef4444" }}
+                strokeWidth={0}
+                name="Anomalie"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+          {!isConnected && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className="text-xs text-gray-500 bg-gray-900/70 px-3 py-1 rounded">
+                Capteur déconnecté
+              </span>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
