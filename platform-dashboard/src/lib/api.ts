@@ -14,6 +14,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { emitReading, subscribeToReadings } from "@/lib/event-bus";
 import { checkRateLimit, loginBucket } from "@/lib/rate-limiter";
+import { getMqttStatus } from "@/lib/mqtt-ingestion";
 
 // Re-export loginBucket so api.test.ts can clear it between tests
 export { loginBucket };
@@ -86,9 +87,36 @@ const DeviceSchema = z.object({
 });
 
 // -------------------------------------------------------------------------
-// GET /api/health — public
+// GET /api/health — public (lightweight ping)
 // -------------------------------------------------------------------------
 app.get("/health", (c) => c.json({ status: "ok", service: "fovet-vigie" }));
+
+// -------------------------------------------------------------------------
+// GET /api/healthz — extended health check (MQTT + DB) — public
+// Used by Nginx upstream check and monitoring tools.
+// Returns 200 if all subsystems are up, 503 otherwise.
+// -------------------------------------------------------------------------
+app.get("/healthz", async (c) => {
+  const mqtt = getMqttStatus();
+
+  let db: "ok" | "error" = "error";
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    db = "ok";
+  } catch {
+    // db remains "error"
+  }
+
+  const healthy = mqtt.connected && db === "ok";
+  return c.json(
+    {
+      status: healthy ? "ok" : "degraded",
+      mqtt: { connected: mqtt.connected, broker: mqtt.broker },
+      db,
+    },
+    healthy ? 200 : 503,
+  );
+});
 
 // -------------------------------------------------------------------------
 // POST /api/auth/token — exchange dashboard password for JWT
@@ -188,7 +216,7 @@ app.get("/devices", cookieAuth, async (c) => {
       readings: {
         take: 1,
         orderBy: { timestamp: "desc" },
-        select: { timestamp: true },
+        select: { timestamp: true, firmware: true, modelId: true, unit: true, label: true },
       },
       _count: { select: { readings: true } },
     },
@@ -196,8 +224,12 @@ app.get("/devices", cookieAuth, async (c) => {
   return c.json(
     devices.map(({ readings, _count, ...d }) => ({
       ...d,
-      lastReadingAt: readings[0]?.timestamp ?? null,
-      readingCount: _count.readings,
+      lastReadingAt:    readings[0]?.timestamp ?? null,
+      readingCount:     _count.readings,
+      latestFirmware:   readings[0]?.firmware  ?? null,
+      latestModelId:    readings[0]?.modelId   ?? null,
+      latestUnit:       readings[0]?.unit      ?? null,
+      latestLabel:      readings[0]?.label     ?? null,
     }))
   );
 });
@@ -354,11 +386,19 @@ app.get("/devices/:id/alerts", cookieAuth, async (c) => {
 // -------------------------------------------------------------------------
 // GET /api/fleet/alerts/recent — most recent alerts across all devices
 // ?limit=50 (max 200)  ?cursor=<alert-id> (cuid, for pagination)
+// ?level=DANGER  → only DANGER|CRITICAL alerts
+// ?level=WARN    → only WARN|COLD alerts
 // -------------------------------------------------------------------------
 app.get("/fleet/alerts/recent", cookieAuth, async (c) => {
   const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
   const limit    = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
   const cursorId = c.req.query("cursor");
+  const levelFilter = c.req.query("level");  // "DANGER" | "WARN" | undefined
+
+  const levelWhere =
+    levelFilter === "DANGER" ? { alertLevel: { in: ["DANGER", "CRITICAL"] } } :
+    levelFilter === "WARN"   ? { alertLevel: { in: ["WARN",   "COLD"]     } } :
+    undefined;
 
   if (cursorId) {
     const exists = await prisma.alert.findUnique({ where: { id: cursorId }, select: { id: true } });
@@ -366,6 +406,7 @@ app.get("/fleet/alerts/recent", cookieAuth, async (c) => {
   }
 
   const rows = await prisma.alert.findMany({
+    where: levelWhere,
     orderBy: { timestamp: "desc" },
     take: limit + 1,
     ...(cursorId && { cursor: { id: cursorId }, skip: 1 }),

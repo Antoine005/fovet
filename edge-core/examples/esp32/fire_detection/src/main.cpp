@@ -38,7 +38,8 @@
  * Monitor  : pio device monitor -e fire_detection  (ouvrir avant RST)
  */
 
-#include "config.h"     /* WiFi/MQTT credentials — DO NOT COMMIT */
+#include "config.h"              /* WiFi/MQTT credentials — DO NOT COMMIT */
+#include "fovet_model_manifest.h" /* Forge-generated model metadata       */
 
 extern "C" {
 #include "fovet/zscore.h"
@@ -95,7 +96,7 @@ static FovetZScore g_zs_ratio;   /* suivi ratio_rb inter-frames */
 static FovetZScore g_zs_var;     /* suivi variance inter-frames */
 
 static uint32_t    g_frame_id = 0;
-static char        g_buf[256];
+static char        g_buf[384];
 
 static WiFiClient   g_wifi_client;
 static PubSubClient g_mqtt(g_wifi_client);
@@ -152,16 +153,21 @@ static void mqtt_publish(float r_mean, bool anomaly)
     snprintf(g_buf, sizeof(g_buf),
              "{"
              "\"device_id\":\"%s\","
+             "\"model_id\":\"" FOVET_MODEL_ID "\","
              "\"firmware\":\"fire_detection\","
-             "\"sensor\":\"camera\","
+             "\"sensor\":\"" FOVET_MODEL_SENSOR "\","
              "\"value\":%.2f,"
+             "\"value_min\":%.2f,"
+             "\"value_max\":%.2f,"
              "\"label\":\"%s\","
-             "\"unit\":\"r_mean\","
+             "\"unit\":\"" FOVET_MODEL_UNIT "\","
              "\"anomaly\":%s,"
              "\"ts\":%lu"
              "}",
              DEVICE_ID,
              r_mean,
+             (double)FOVET_MODEL_VALUE_MIN,
+             (double)FOVET_MODEL_VALUE_MAX,
              label,
              anomaly ? "true" : "false",
              (unsigned long)hal_time_ms());

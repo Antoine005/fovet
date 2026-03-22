@@ -1,5 +1,5 @@
-﻿“””
-Fovet Forge CLI — entry point.
+"""
+Fovet Forge CLI -- entry point.
 
 Usage:
     forge run --config configs/demo_zscore.yaml
@@ -7,7 +7,7 @@ Usage:
     forge convert --model model.h5 --output model.tflite [--quantization int8]
     forge deploy --model model.tflite --target person_detection [--port COM4]
     forge version
-“””
+"""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from forge.benchmark import run_benchmark
 
 app = typer.Typer(
     name="forge",
-    help="Fovet Forge â€” AutoML pipeline for anomaly detection on embedded targets.",
+    help="Fovet Forge -- AutoML pipeline for anomaly detection on embedded targets.",
     no_args_is_help=True,
 )
 console = Console()
@@ -63,7 +63,7 @@ def validate(
     table.add_row("report.format", cfg.report.format if cfg.report.enabled else "disabled")
 
     console.print(table)
-    console.print("[green]âœ“ Config is valid.[/green]")
+    console.print("[green]OK Config is valid.[/green]")
 
 
 @app.command()
@@ -109,9 +109,9 @@ def benchmark(
             str(m.n_samples),
             str(m.n_anomalies_predicted),
             f"{m.anomaly_rate:.1%}",
-            f"{m.precision:.2f}" if m.precision is not None else "—",
-            f"{m.recall:.2f}" if m.recall is not None else "—",
-            f"{m.f1:.2f}" if m.f1 is not None else "—",
+            f"{m.precision:.2f}" if m.precision is not None else "--",
+            f"{m.recall:.2f}" if m.recall is not None else "--",
+            f"{m.f1:.2f}" if m.f1 is not None else "--",
         )
 
     console.print(table)
@@ -126,7 +126,7 @@ def convert(
         "float32", "--quantization", "-q", help="float32 or int8"
     ),
     calibration: Path = typer.Option(
-        None, "--calibration", help=".npy calibration data for INT8 (n_samples × *input_shape)"
+        None, "--calibration", help=".npy calibration data for INT8 (n_samples x *input_shape)"
     ),
 ) -> None:
     """Convert a Keras model to TFLite optimised for ESP32 (float32 or INT8)."""
@@ -164,7 +164,7 @@ def convert(
         "Tensor arena",
         f"{result.arena_estimate_kb} KB  "
         f"({'[green]OK[/green]' if result.fits_esp32 else '[red]TOO LARGE[/red]'} "
-        f"— limit {ESP32_MAX_ARENA_BYTES // 1024} KB)",
+        f"-- limit {ESP32_MAX_ARENA_BYTES // 1024} KB)",
     )
     table.add_row("Report", str(result.report_path))
     console.print(table)
@@ -173,9 +173,9 @@ def convert(
         console.print(f"[yellow]WARNING:[/yellow] {w}")
 
     if result.fits_esp32:
-        console.print("[green]✔ Model fits ESP32 tensor arena.[/green]")
+        console.print("[green]OK Model fits ESP32 tensor arena.[/green]")
     else:
-        console.print("[red]✘ Model exceeds ESP32 tensor arena — optimise before deploying.[/red]")
+        console.print("[red]FAIL Model exceeds ESP32 tensor arena -- optimise before deploying.[/red]")
         raise typer.Exit(1)
 
 
@@ -192,10 +192,10 @@ def deploy(
         None, "--project-dir", help="Custom PlatformIO project directory"
     ),
 ) -> None:
-    """Deploy a TFLite model to ESP32: generate model_data.cpp → pio compile → flash."""
+    """Deploy a TFLite model to ESP32: generate model_data.cpp -> pio compile -> flash."""
     from forge.deploy import deploy as _deploy, _BUILTIN_TARGETS  # noqa: PLC0415
 
-    console.print(f"[bold]Fovet Forge deploy[/bold] — target: [cyan]{target}[/cyan]")
+    console.print(f"[bold]Fovet Forge deploy[/bold] -- target: [cyan]{target}[/cyan]")
     console.print(f"  Model  : {model}")
     console.print(f"  Port   : {port}")
     console.print(f"  Mode   : {'compile only' if compile_only else 'compile + flash'}")
@@ -220,9 +220,54 @@ def deploy(
         raise typer.Exit(1)
 
     if compile_only:
-        console.print("[green]✔ Compile successful.[/green]")
+        console.print("[green]OK Compile successful.[/green]")
     else:
-        console.print("[green]✔ Flash complete.[/green]")
+        console.print("[green]OK Flash complete.[/green]")
+
+
+@app.command(name="deploy-manifest")
+def deploy_manifest(
+    config: Path = typer.Option(..., "--config", "-c", help="Path to pipeline YAML config"),
+    project_dir: Path = typer.Option(
+        ..., "--project-dir", "-p",
+        help="PlatformIO project directory -- manifest will be copied to <project-dir>/src/"
+    ),
+) -> None:
+    """Copy the generated fovet_model_manifest.h to a PlatformIO project.
+
+    Run after `forge run` to embed the Forge model metadata into firmware:
+
+    \\b
+        forge run --config configs/demo_zscore.yaml
+        forge deploy-manifest --config configs/demo_zscore.yaml \\
+                              --project-dir examples/esp32/zscore_demo
+    """
+    import shutil  # noqa: PLC0415
+
+    cfg = _load_config(config)
+    if cfg is None:
+        raise typer.Exit(1)
+
+    src = Path(cfg.export.output_dir) / "fovet_model_manifest.h"
+    if not src.exists():
+        err_console.print(
+            f"Manifest not found: {src}\n"
+            f"Run `forge run --config {config}` first."
+        )
+        raise typer.Exit(1)
+
+    dest_dir = project_dir / "src"
+    if not dest_dir.is_dir():
+        err_console.print(f"Project src/ directory not found: {dest_dir}")
+        raise typer.Exit(1)
+
+    dest = dest_dir / "fovet_model_manifest.h"
+    shutil.copy2(src, dest)
+
+    console.print(f"[green]OK[/green] Copied manifest to [cyan]{dest}[/cyan]")
+    console.print(f"  Pipeline : [bold]{cfg.name}[/bold]")
+    console.print(f"  Unit     : {cfg.manifest.unit}")
+    console.print(f"  Sensor   : {cfg.manifest.sensor}")
 
 
 @app.command()

@@ -93,7 +93,8 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 
 | Méthode | Route | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/health` | Non | État de l'API |
+| `GET` | `/api/health` | Non | État de l'API (ping léger) |
+| `GET` | `/api/healthz` | Non | Santé étendue — MQTT + DB (200 OK / 503 degraded) |
 | `POST` | `/api/auth/token` | Non | Login — retourne cookie httpOnly `fovet_token` |
 | `POST` | `/api/auth/refresh` | JWT | Renouvelle le token (sliding session) |
 | `POST` | `/api/auth/logout` | Non | Supprime le cookie de session |

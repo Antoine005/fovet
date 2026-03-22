@@ -115,28 +115,36 @@ fovet/
 │   └── prisma/                 # Schéma PostgreSQL
 ├── docs/
 │   ├── architecture.md         # Diagramme système détaillé + décisions
-│   └── contributing.md         # Convention contribution + doc
+│   ├── contributing.md         # Convention contribution + doc
+│   └── new-use-case.md         # Guide pas à pas — créer un nouveau use case
 ├── CLAUDE.md                   # Contexte Claude Code
 └── README.md                   # Ce fichier
 ```
 
 ---
 
-## Workflow type : calibration → déploiement
+## Workflow type : nouveau use case
 
 ```
-1. Collecter des données capteurs (CSV ou live MQTT via Vigie)
+1. Créer la config YAML Forge (capteur, détecteur, manifest)
          ↓
-2. Lancer Forge pour calibrer le détecteur sur données propres
+2. Collecter des données (synthétique / CSV / MQTT live)
+         ↓
+3. Calibrer avec Forge
    uv run forge run --config configs/mon_capteur.yaml
          ↓
-3. Récupérer le fichier exporté (ex. fovet_zscore_config.h)
+4. Déployer le manifest dans le firmware
+   uv run forge deploy-manifest --config configs/mon_capteur.yaml \
+                                --project-dir edge-core/examples/esp32/mon_uc
          ↓
-4. Copier le header dans le projet PlatformIO ESP32
-   #include "fovet_zscore_config.h"   // stats précalibrées
+5. Copier fovet_zscore_config.h dans src/ et l'inclure dans main.cpp
          ↓
-5. Flasher l'ESP32 → détection active immédiatement, sans warm-up
+6. Flasher → détection active immédiatement, sans warm-up
+         ↓
+7. Vigie auto-adapte le graphe depuis le manifest (plage, unité, model_id)
 ```
+
+> Guide complet : [`docs/new-use-case.md`](docs/new-use-case.md)
 
 ---
 

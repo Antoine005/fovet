@@ -19,6 +19,10 @@ interface Device {
   active: boolean;
   lastReadingAt: string | null;
   readingCount: number;
+  latestFirmware: string | null;
+  latestModelId: string | null;
+  latestUnit: string | null;
+  latestLabel: string | null;
 }
 
 export default function DashboardPage() {
@@ -143,10 +147,52 @@ export default function DashboardPage() {
       )}
 
       {!fetchError && devices.length === 0 && (
-        <p className="text-gray-500 text-sm">
-          Aucun capteur enregistré.{" "}
-          <code className="text-blue-400">POST /api/devices</code> pour en ajouter un.
-        </p>
+        <div className="max-w-2xl mx-auto mt-16 text-center">
+          <div className="text-4xl mb-4">📡</div>
+          <h2 className="text-lg font-semibold text-white mb-2">Aucun capteur enregistré</h2>
+          <p className="text-gray-400 text-sm mb-6">
+            Enregistrez votre premier capteur via l&apos;API, puis démarrez la transmission MQTT.
+          </p>
+
+          <div className="text-left space-y-4">
+            {/* Step 1 */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                1 — Créer le capteur
+              </p>
+              <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-all bg-gray-950 rounded p-3">
+{`curl -s -X POST http://localhost:3000/api/devices \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"ESP32-CAM 001","mqttClientId":"esp32-cam-001","location":"Bureau"}' | jq .`}
+              </pre>
+            </div>
+
+            {/* Step 2 */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                2 — Simuler des données (sans hardware)
+              </p>
+              <pre className="text-xs text-blue-400 font-mono whitespace-pre-wrap break-all bg-gray-950 rounded p-3">
+{`uv run --with paho-mqtt scripts/demo_mqtt.py`}
+              </pre>
+            </div>
+
+            {/* Step 3 */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                3 — Flasher sur ESP32 (hardware réel)
+              </p>
+              <pre className="text-xs text-yellow-400 font-mono whitespace-pre-wrap break-all bg-gray-950 rounded p-3">
+{`# Configurer WiFi/MQTT dans config.h, puis :
+pio run --target upload --environment zscore_demo`}
+              </pre>
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-600 mt-6">
+            La page se rafraîchit automatiquement dès qu&apos;un capteur est enregistré.
+          </p>
+        </div>
       )}
 
       {/* Fleet view — devices + alert timeline */}

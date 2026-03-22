@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { apiFetch } from "@/lib/api-client";
+import { relativeTime } from "@/lib/relative-time";
 
 const PAGE_SIZE = 30;
 
@@ -42,13 +43,6 @@ const LEVEL_BADGE: Record<string, string> = {
   INFO:     "bg-gray-500/20 text-gray-400",
 };
 
-function matchesSeverity(a: FleetAlert, f: SeverityFilter): boolean {
-  if (f === "all")    return true;
-  if (f === "DANGER") return a.alertLevel === "DANGER" || a.alertLevel === "CRITICAL";
-  if (f === "WARN")   return a.alertLevel === "WARN"   || a.alertLevel === "COLD";
-  return true;
-}
-
 function rowStyle(level: string | null): string {
   return level && LEVEL_STYLES[level]
     ? LEVEL_STYLES[level]
@@ -63,8 +57,9 @@ export function FleetAlertTimeline() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter]         = useState<SeverityFilter>("all");
 
-  const fetchAlerts = useCallback((reset = true) => {
-    const url = `/api/fleet/alerts/recent?limit=${PAGE_SIZE}`;
+  const fetchAlerts = useCallback((reset = true, currentFilter: SeverityFilter = filter) => {
+    const levelParam = currentFilter !== "all" ? `&level=${currentFilter}` : "";
+    const url = `/api/fleet/alerts/recent?limit=${PAGE_SIZE}${levelParam}`;
     apiFetch(url)
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<Envelope>; })
       .then(({ data, pagination }) => {
@@ -74,19 +69,21 @@ export function FleetAlertTimeline() {
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Erreur réseau"));
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
 
   useEffect(() => {
-    fetchAlerts(true);
-    const id = setInterval(() => fetchAlerts(true), 10_000);
+    fetchAlerts(true, filter);
+    const id = setInterval(() => fetchAlerts(true, filter), 10_000);
     return () => clearInterval(id);
-  }, [fetchAlerts]);
+  }, [fetchAlerts, filter]);
 
   const loadMore = async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
+    const levelParam = filter !== "all" ? `&level=${filter}` : "";
     try {
-      const r = await apiFetch(`/api/fleet/alerts/recent?limit=${PAGE_SIZE}&cursor=${nextCursor}`);
+      const r = await apiFetch(`/api/fleet/alerts/recent?limit=${PAGE_SIZE}&cursor=${nextCursor}${levelParam}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const { data, pagination } = await r.json() as Envelope;
       setAlerts((prev) => [...prev, ...data]);
@@ -104,7 +101,7 @@ export function FleetAlertTimeline() {
     fetchAlerts(true);
   };
 
-  const visible = alerts.filter((a) => matchesSeverity(a, filter));
+  const visible = alerts;
   const unacked = visible.filter((a) => !a.acknowledged).length;
 
   return (
@@ -174,8 +171,11 @@ export function FleetAlertTimeline() {
                       <span className="text-xs font-mono">z={a.zScore.toFixed(2)}σ</span>
                     </div>
                     <p className="text-xs font-medium text-gray-300 mt-0.5 truncate">{a.deviceName}</p>
-                    <p className="text-xs text-gray-600">
-                      {format(new Date(a.timestamp), "HH:mm:ss dd/MM", { locale: fr })}
+                    <p
+                      className="text-xs text-gray-600"
+                      title={format(new Date(a.timestamp), "HH:mm:ss dd/MM/yyyy", { locale: fr })}
+                    >
+                      {relativeTime(a.timestamp)}
                     </p>
                   </div>
                   {!a.acknowledged && (

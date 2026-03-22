@@ -19,8 +19,10 @@
 #include "fovet/hal/hal_uart.h"
 #include "fovet/hal/hal_gpio.h"
 #include "fovet/hal/hal_time.h"
+#include "fovet/hal/hal_i2c.h"
 
 #include <Arduino.h>
+#include <Wire.h>
 
 /* -------------------------------------------------------------------------
  * HAL — ADC
@@ -117,6 +119,75 @@ uint32_t hal_time_us(void)
 void hal_delay_ms(uint32_t ms)
 {
     delay((unsigned long)ms);
+}
+
+/* -------------------------------------------------------------------------
+ * HAL — I2C
+ * Uses Wire (Arduino I2C) with configurable SDA/SCL pins.
+ * ESP32-CAM external sensor header: SDA=GPIO13, SCL=GPIO14.
+ * Timeout: 10 ms (Wire.setTimeOut is in ms on ESP32 Arduino).
+ * ------------------------------------------------------------------------- */
+
+#define HAL_I2C_TIMEOUT_MS 10U
+
+void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t freq_hz)
+{
+    Wire.begin((int)sda_pin, (int)scl_pin);
+    Wire.setClock(freq_hz);
+    Wire.setTimeOut(HAL_I2C_TIMEOUT_MS);
+}
+
+hal_i2c_err_t hal_i2c_write_reg(uint8_t addr, uint8_t reg,
+                                  const uint8_t *data, uint8_t len)
+{
+    Wire.beginTransmission(addr);
+    Wire.write(reg);
+    Wire.write(data, len);
+    uint8_t status = Wire.endTransmission(true);
+    switch (status) {
+        case 0:  return HAL_I2C_OK;
+        case 2:  return HAL_I2C_ERR_NACK;   /* NACK on address */
+        case 3:  return HAL_I2C_ERR_NACK;   /* NACK on data */
+        case 5:  return HAL_I2C_ERR_TIMEOUT;
+        default: return HAL_I2C_ERR_BUS;
+    }
+}
+
+hal_i2c_err_t hal_i2c_read_reg(uint8_t addr, uint8_t reg,
+                                 uint8_t *buf, uint8_t len)
+{
+    /* Set register pointer */
+    Wire.beginTransmission(addr);
+    Wire.write(reg);
+    uint8_t status = Wire.endTransmission(false);  /* repeated START */
+    if (status == 2 || status == 3) return HAL_I2C_ERR_NACK;
+    if (status == 5)                return HAL_I2C_ERR_TIMEOUT;
+    if (status != 0)                return HAL_I2C_ERR_BUS;
+
+    /* Read bytes */
+    uint8_t received = Wire.requestFrom(addr, (uint8_t)len, (bool)true);
+    if (received < len) return HAL_I2C_ERR_NACK;
+
+    for (uint8_t i = 0; i < len; i++) {
+        buf[i] = (uint8_t)Wire.read();
+    }
+    return HAL_I2C_OK;
+}
+
+hal_i2c_err_t hal_i2c_read_byte(uint8_t addr, uint8_t reg, uint8_t *out)
+{
+    return hal_i2c_read_reg(addr, reg, out, 1);
+}
+
+hal_i2c_err_t hal_i2c_write_byte(uint8_t addr, uint8_t reg, uint8_t value)
+{
+    return hal_i2c_write_reg(addr, reg, &value, 1);
+}
+
+bool hal_i2c_probe(uint8_t addr)
+{
+    Wire.beginTransmission(addr);
+    return Wire.endTransmission(true) == 0;
 }
 
 #endif /* ARDUINO */

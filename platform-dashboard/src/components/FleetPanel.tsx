@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch } from "@/lib/api-client";
+import { relativeTime } from "@/lib/relative-time";
 import {
   ResponsiveContainer,
   LineChart,
@@ -15,6 +16,10 @@ interface Reading {
   timestamp: string;
   value: number;
   isAnomaly: boolean;
+  firmware: string | null;
+  modelId: string | null;
+  unit: string | null;
+  label: string | null;
 }
 
 interface AlertsEnvelope {
@@ -77,8 +82,12 @@ export function FleetPanel({ deviceId, deviceName, mqttClientId, location, readi
     anomaly: r.isAnomaly ? r.value : null,
   }));
   const hasAlerts = alertCount > 0 || alertsHasMore;
-  const latestValue = readings.at(-1)?.value;
-  const latestTimestamp = readings.at(-1)?.timestamp;
+  const latestReading = readings.at(-1);
+  const latestValue = latestReading?.value;
+  const latestTimestamp = latestReading?.timestamp;
+  const latestModelId = latestReading?.modelId ?? null;
+  const latestUnit    = latestReading?.unit    ?? null;
+  const latestLabel   = latestReading?.label   ?? null;
   const isConnected =
     latestTimestamp !== undefined &&
     Date.now() - new Date(latestTimestamp).getTime() < CONNECTED_THRESHOLD_MS;
@@ -120,12 +129,40 @@ export function FleetPanel({ deviceId, deviceName, mqttClientId, location, readi
         <p className="text-xs text-gray-600 mb-1 truncate">{location}</p>
       )}
 
+      {/* Model / unit / label badges */}
+      {(latestModelId || latestUnit || latestLabel) && (
+        <div className="flex items-center gap-1 flex-wrap mb-1">
+          {latestModelId && (
+            <span className="text-xs text-indigo-400 bg-indigo-900/30 px-1.5 py-0.5 rounded font-mono truncate max-w-[120px]">
+              {latestModelId}
+            </span>
+          )}
+          {latestUnit && !latestModelId && (
+            <span className="text-xs text-gray-400 bg-gray-800 px-1.5 py-0.5 rounded">
+              {latestUnit}
+            </span>
+          )}
+          {latestLabel && (
+            <span className={`text-xs px-1.5 py-0.5 rounded font-mono ${
+              latestLabel === "anomaly" || latestLabel === "fire" || latestLabel === "person"
+                ? "bg-red-900/30 text-red-400"
+                : "bg-green-900/20 text-green-500"
+            }`}>
+              {latestLabel}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Last reading info + total count */}
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-gray-500 font-mono">
-          {latestTimestamp
-            ? new Date(latestTimestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-            : "—"}
+        <span
+          className="text-xs text-gray-500 font-mono"
+          title={latestTimestamp
+            ? new Date(latestTimestamp).toLocaleString("fr-FR")
+            : undefined}
+        >
+          {latestTimestamp ? relativeTime(latestTimestamp) : "—"}
         </span>
         <span className="text-xs text-gray-600 font-mono">
           {readingCount.toLocaleString()} msg

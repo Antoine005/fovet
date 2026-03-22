@@ -1,0 +1,46 @@
+# Fovet Forge — Demo config: EWMA Drift detector on synthetic random-walk signal
+# Run: uv run forge run --config configs/demo_drift.yaml
+
+name: demo-drift-rw
+description: "Détection de dérive EWMA (double EMA) sur signal random-walk synthétique"
+
+data:
+  source: synthetic
+  signal: random_walk     # random_walk is more natural for drift detection
+  n_samples: 1000
+  noise_std: 0.1
+  anomaly_rate: 0.05
+  anomaly_magnitude: 5.0
+  columns: [value]
+  seed: 42
+
+detectors:
+  - type: ewma_drift
+    alpha_fast: 0.10          # ~10 sample memory — réagit vite aux transitions
+    alpha_slow: 0.01          # ~100 sample memory — référence long terme
+    threshold_percentile: 99.0 # auto-calibration : flag le top 1% des scores d'entraînement
+    # threshold: 0.5          # décommentez pour forcer un seuil explicite (sinon auto-calibré)
+
+# Train/test split
+split:
+  enabled: true
+  test_ratio: 0.2
+  random_state: 42
+
+export:
+  targets: [c_header, json_config]
+  output_dir: models/demo_drift
+
+# Métadonnées pour fovet_model_manifest.h — copier dans src/ du projet PlatformIO
+manifest:
+  sensor: synthetic          # "synthetic" | "imu" | "camera" | "temperature" | "hr"
+  unit: drift_score          # unité affichée sur l'axe Y de Vigie
+  value_min: -5.0            # borne basse pour l'auto-scale du graphe Vigie
+  value_max: 5.0             # borne haute
+  label_normal: stable
+  label_anomaly: drift
+
+report:
+  enabled: true
+  format: html
+  output_dir: reports
