@@ -18,6 +18,7 @@ interface Device {
   location: string | null;
   active: boolean;
   lastReadingAt: string | null;
+  readingCount: number;
 }
 
 export default function DashboardPage() {
@@ -159,6 +160,7 @@ export default function DashboardPage() {
                 deviceName={d.name}
                 mqttClientId={d.mqttClientId}
                 location={d.location}
+                readingCount={d.readingCount}
                 onSelect={() => selectDevice(d.id)}
               />
             ))}

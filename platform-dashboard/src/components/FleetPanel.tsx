@@ -27,6 +27,7 @@ interface Props {
   deviceName: string;
   mqttClientId: string;
   location: string | null;
+  readingCount: number;
   onSelect: () => void;
 }
 
@@ -35,7 +36,7 @@ const READINGS_LIMIT = 60;
 const ALERTS_LIMIT = 20;
 const CONNECTED_THRESHOLD_MS = 30_000;
 
-export function FleetPanel({ deviceId, deviceName, mqttClientId, location, onSelect }: Props) {
+export function FleetPanel({ deviceId, deviceName, mqttClientId, location, readingCount, onSelect }: Props) {
   const [readings, setReadings] = useState<Reading[]>([]);
   const [alertCount, setAlertCount] = useState(0);
   const [alertsHasMore, setAlertsHasMore] = useState(false);
@@ -116,8 +117,20 @@ export function FleetPanel({ deviceId, deviceName, mqttClientId, location, onSel
       </div>
       <p className="text-xs text-gray-500 font-mono truncate mb-2">{mqttClientId}</p>
       {location && (
-        <p className="text-xs text-gray-600 mb-2 truncate">{location}</p>
+        <p className="text-xs text-gray-600 mb-1 truncate">{location}</p>
       )}
+
+      {/* Last reading info + total count */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-gray-500 font-mono">
+          {latestTimestamp
+            ? new Date(latestTimestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+            : "—"}
+        </span>
+        <span className="text-xs text-gray-600 font-mono">
+          {readingCount.toLocaleString()} msg
+        </span>
+      </div>
 
       {/* Sparkline */}
       {error ? (

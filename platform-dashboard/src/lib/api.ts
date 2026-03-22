@@ -190,12 +190,14 @@ app.get("/devices", cookieAuth, async (c) => {
         orderBy: { timestamp: "desc" },
         select: { timestamp: true },
       },
+      _count: { select: { readings: true } },
     },
   });
   return c.json(
-    devices.map(({ readings, ...d }) => ({
+    devices.map(({ readings, _count, ...d }) => ({
       ...d,
       lastReadingAt: readings[0]?.timestamp ?? null,
+      readingCount: _count.readings,
     }))
   );
 });
