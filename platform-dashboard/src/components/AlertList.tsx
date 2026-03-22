@@ -35,6 +35,7 @@ const LEVEL_STYLES: Record<string, string> = {
   CRITICAL: "border-red-700/60 bg-red-950/40 text-red-400",
   WARN:     "border-yellow-700/50 bg-yellow-950/30 text-yellow-400",
   COLD:     "border-blue-700/50 bg-blue-950/30 text-blue-400",
+  INFO:     "border-gray-600/50 bg-gray-800/40 text-gray-300",
 };
 
 const LEVEL_BADGE: Record<string, string> = {
@@ -42,6 +43,7 @@ const LEVEL_BADGE: Record<string, string> = {
   CRITICAL: "bg-red-500/20 text-red-400",
   WARN:     "bg-yellow-500/20 text-yellow-400",
   COLD:     "bg-blue-500/20 text-blue-400",
+  INFO:     "bg-gray-500/20 text-gray-400",
 };
 
 const REFRESH_LABELS: Record<number, string> = {

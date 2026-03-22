@@ -30,7 +30,7 @@ const WEBHOOK_URL  = process.env.ALERT_WEBHOOK_URL ?? "";
 const WEBHOOK_MIN  = (process.env.ALERT_WEBHOOK_MIN_LEVEL ?? "DANGER").toUpperCase();
 
 // Severity rank — higher = more severe. Used to filter by WEBHOOK_MIN.
-const LEVEL_RANK: Record<string, number> = { WARN: 1, COLD: 1, DANGER: 2, CRITICAL: 3 };
+const LEVEL_RANK: Record<string, number> = { INFO: 0, WARN: 1, COLD: 1, DANGER: 2, CRITICAL: 3 };
 const WEBHOOK_MIN_RANK = WEBHOOK_MIN === "ALL" ? 0 : (LEVEL_RANK[WEBHOOK_MIN] ?? 2);
 
 // Modules that produce alerts beyond z-score anomalies
@@ -42,6 +42,14 @@ const ALERT_MODULES: Record<string, string> = {
 
 // Levels that trigger an Alert record (in addition to z-score anomalies)
 const ALERT_LEVELS = new Set(["WARN", "DANGER", "COLD", "CRITICAL"]);
+
+// Per-device alert throttle: deviceId → timestamp of last alert (ms).
+// Prevents alert storms — at most 1 alert per ALERT_THROTTLE_MS per device.
+const ALERT_THROTTLE_MS = 60_000;
+const alertThrottle = new Map<string, number>();
+
+// Camera-specific score threshold for raising an alert.
+const CAMERA_ALERT_THRESHOLD = 0.75;
 
 interface SensorPayload {
   value: number;
@@ -145,8 +153,9 @@ export function startMqttIngestion(): void {
       }
 
       // Normalise camera payloads (ESP32-CAM format: label/score) to SensorPayload
-      const camera = normaliseCameraPayload(raw);
-      let data: SensorPayload = camera ?? (raw as unknown as SensorPayload);
+      const cameraNorm = normaliseCameraPayload(raw);
+      const isCamera = cameraNorm !== null;
+      let data: SensorPayload = cameraNorm ?? (raw as unknown as SensorPayload);
 
       if (
         typeof data.value !== "number" || !isFinite(data.value) ||
@@ -235,14 +244,35 @@ export function startMqttIngestion(): void {
       // Broadcast to SSE clients
       emitReading(device.id, { ...reading, id: String(reading.id) });
 
-      // Create alert when:
-      //   a) legacy z-score anomaly (anomaly: true), OR
-      //   b) Sentinelle profile level requires attention (WARN/DANGER/COLD/CRITICAL)
-      const shouldAlert =
-        data.anomaly ||
-        (data.level !== undefined && ALERT_LEVELS.has(data.level));
+      // Determine whether to create an alert and at what severity:
+      //   a) Camera (ESP32-CAM person detection): only if score >= CAMERA_ALERT_THRESHOLD → INFO
+      //   b) Sentinelle profile level (PTI/FATIGUE/THERMAL): WARN/DANGER/COLD/CRITICAL from payload
+      //   c) Generic z-score anomaly: derive severity from |zScore|
+      let shouldAlert = false;
+      let alertLevel: string | null = null;
+
+      if (isCamera) {
+        shouldAlert = data.value >= CAMERA_ALERT_THRESHOLD;
+        alertLevel  = "INFO";
+      } else if (data.level !== undefined && ALERT_LEVELS.has(data.level)) {
+        shouldAlert = true;
+        alertLevel  = data.level;
+      } else if (data.anomaly) {
+        shouldAlert = true;
+        alertLevel  = Math.abs(data.zScore) >= 5 ? "CRITICAL" : "WARN";
+      }
+
+      // Throttle: skip if another alert was emitted for this device in the last 60 s
+      if (shouldAlert) {
+        const lastAlert = alertThrottle.get(device.id) ?? 0;
+        if (now - lastAlert < ALERT_THROTTLE_MS) {
+          shouldAlert = false;
+          console.log(`[MQTT] Alert throttled for ${mqttClientId} (last: ${Math.round((now - lastAlert) / 1000)}s ago)`);
+        }
+      }
 
       if (shouldAlert) {
+        alertThrottle.set(device.id, now);
         const alertModule = data.sensorType ? ALERT_MODULES[data.sensorType] ?? null : null;
         await prisma.alert.create({
           data: {
@@ -250,23 +280,24 @@ export function startMqttIngestion(): void {
             timestamp,
             value: data.value,
             zScore: data.zScore,
-            threshold: 3.0,
-            ...(alertModule && { alertModule }),
-            ...(data.level   && { alertLevel: data.level }),
+            threshold: isCamera ? CAMERA_ALERT_THRESHOLD : 3.0,
+            ...(alertModule  && { alertModule }),
+            ...(alertLevel   && { alertLevel }),
             ...(data.ptiType && { ptiType: data.ptiType }),
           },
         });
         console.log(
           `[MQTT] Alert on ${mqttClientId}` +
           (alertModule ? ` [${alertModule}]` : "") +
-          (data.level ? ` level=${data.level}` : ` z=${data.zScore.toFixed(2)}`)
+          ` level=${alertLevel ?? "—"}` +
+          (isCamera ? ` score=${data.value.toFixed(2)}` : ` z=${data.zScore.toFixed(2)}`)
         );
 
         fireWebhook({
           deviceId:    device.id,
           deviceName:  device.name,
           alertModule: alertModule,
-          alertLevel:  data.level   ?? null,
+          alertLevel:  alertLevel,
           ptiType:     data.ptiType ?? null,
           value:       data.value,
           zScore:      data.zScore,
