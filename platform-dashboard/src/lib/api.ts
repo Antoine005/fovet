@@ -184,8 +184,20 @@ app.get("/devices", cookieAuth, async (c) => {
   const devices = await prisma.device.findMany({
     where: { active: true },
     orderBy: { createdAt: "desc" },
+    include: {
+      readings: {
+        take: 1,
+        orderBy: { timestamp: "desc" },
+        select: { timestamp: true },
+      },
+    },
   });
-  return c.json(devices);
+  return c.json(
+    devices.map(({ readings, ...d }) => ({
+      ...d,
+      lastReadingAt: readings[0]?.timestamp ?? null,
+    }))
+  );
 });
 
 // -------------------------------------------------------------------------
@@ -263,7 +275,12 @@ app.get("/devices/:id/stream", cookieAuth, async (c) => {
 
   return streamSSE(c, async (stream) => {
     const cleanup = subscribeToReadings(id, async (reading) => {
-      await stream.writeSSE({ event: "reading", data: JSON.stringify(reading) });
+      try {
+        await stream.writeSSE({ event: "reading", data: JSON.stringify(reading) });
+      } catch {
+        // Stream already closed — unsubscribe to avoid further attempts
+        cleanup();
+      }
     });
 
     stream.onAbort(() => cleanup());
