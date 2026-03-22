@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fovet — Détection d'anomalies embarquée souveraine</title>
   <meta name="description" content="SDK C/C++ temps réel pour la détection d'anomalies sur microcontrôleurs. Zéro cloud étranger. Cible défense, industriel, aéronautique." />
+  <!-- OpenGraph -->
+  <meta property="og:title" content="Fovet — Détection d'anomalies embarquée souveraine" />
+  <meta property="og:description" content="SDK C/C++ pour la détection d'anomalies en edge. Zéro cloud étranger. Moins d'1 ms par échantillon. Défense, industriel, aéronautique." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://fovet.eu" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Fovet — SDK embarqué souverain" />
+  <meta name="twitter:description" content="Détection d'anomalies temps réel sur MCU. C99 pur, zéro malloc, zéro cloud étranger." />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -326,6 +334,153 @@
 
     .footer-legal a:hover { color: var(--text); text-decoration: none; }
 
+    /* ── Code snippet ── */
+    .code-section {
+      background: var(--bg-card);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      margin-top: 48px;
+    }
+
+    .code-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .code-header span {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    .code-lang {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent) !important;
+      padding: 2px 7px;
+      border-radius: 3px;
+    }
+
+    .code-section pre {
+      padding: 20px 20px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      line-height: 1.7;
+      color: #cdd6f4;
+      overflow-x: auto;
+    }
+
+    .c-kw  { color: #cba6f7; }
+    .c-type{ color: #89dceb; }
+    .c-fn  { color: #89b4fa; }
+    .c-num { color: #fab387; }
+    .c-cmt { color: #585b70; }
+    .c-str { color: #a6e3a1; }
+
+    /* ── Pipeline flow ── */
+    .pipeline-flow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 48px;
+    }
+
+    .flow-step {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      text-align: center;
+      flex: 1;
+      min-width: 160px;
+      max-width: 220px;
+    }
+
+    .flow-step-tag {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .flow-step-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .flow-step-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .flow-arrow {
+      font-size: 1.2rem;
+      color: var(--accent);
+      padding: 0 12px;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 600px) {
+      .flow-arrow { transform: rotate(90deg); padding: 10px 0; }
+      .pipeline-flow { flex-direction: column; align-items: stretch; }
+      .flow-step { max-width: 100%; }
+    }
+
+    /* ── Use cases ── */
+    .usecases-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .usecase-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+    }
+
+    .usecase-sector {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .usecase-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .usecase-desc {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── License badge ── */
+    .license-note {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 16px;
+    }
+
+    .license-note a { color: var(--muted); text-decoration: underline; }
+    .license-note a:hover { color: var(--text); }
+
     /* ── GitHub link ── */
     .github-link {
       display: inline-flex;
@@ -362,6 +517,7 @@
       <span class="nav-logo">fovet<span>.</span>eu</span>
       <ul>
         <li><a href="#produits">Produits</a></li>
+        <li><a href="#usecases">Cas d'usage</a></li>
         <li><a href="#pourquoi">Pourquoi</a></li>
         <li><a href="#contact">Contact</a></li>
         <li>
@@ -409,8 +565,8 @@
           <div class="metric-label">zéro dépendance externe</div>
         </div>
         <div>
-          <div class="metric-value">0</div>
-          <div class="metric-label">allocation dynamique</div>
+          <div class="metric-value">115+</div>
+          <div class="metric-label">tests natifs PC validés</div>
         </div>
       </div>
     </div>
@@ -419,7 +575,7 @@
   <!-- Produits -->
   <section id="produits">
     <div class="container">
-      <p class="section-label">01 — Produits</p>
+      <p class="section-label">01 — Suite</p>
       <h2 class="section-title">La suite Fovet</h2>
       <div class="products-grid">
 
@@ -469,10 +625,88 @@
     </div>
   </section>
 
+  <!-- Pipeline -->
+  <section id="pipeline">
+    <div class="container">
+      <p class="section-label">02 — Pipeline</p>
+      <h2 class="section-title">Du capteur au dashboard en 3 étapes</h2>
+
+      <div class="pipeline-flow">
+        <div class="flow-step">
+          <div class="flow-step-tag">edge · C99</div>
+          <div class="flow-step-name">Sentinelle</div>
+          <div class="flow-step-desc">SDK embarqué sur MCU<br />Z-Score · MAD · Drift</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-step-tag">automl · python</div>
+          <div class="flow-step-name">Forge</div>
+          <div class="flow-step-desc">Entraîne + exporte<br /><code style="font-size:0.75rem">forge run --config cfg.yaml</code></div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-step-tag">dashboard · web</div>
+          <div class="flow-step-name">Vigie</div>
+          <div class="flow-step-desc">Supervision temps réel<br />MQTT · alertes · flotte</div>
+        </div>
+      </div>
+
+      <div class="code-section">
+        <div class="code-header">
+          <span class="code-lang">C99</span>
+          <span>Fovet Sentinelle — intégration en 4 lignes</span>
+        </div>
+        <pre><span class="c-cmt">// Initialiser le détecteur (5σ, 50 échantillons de chauffe)</span>
+<span class="c-type">FovetZScore</span> ctx;
+<span class="c-fn">fovet_zscore_init</span>(&amp;ctx, <span class="c-num">5.0f</span>, <span class="c-num">50</span>);
+
+<span class="c-cmt">// Dans la boucle d'acquisition :</span>
+<span class="c-kw">float</span> sample = <span class="c-fn">hal_adc_read</span>(<span class="c-num">0</span>);
+<span class="c-kw">bool</span> anomaly = <span class="c-fn">fovet_zscore_update</span>(&amp;ctx, sample);
+<span class="c-kw">if</span> (anomaly) <span class="c-fn">hal_uart_write</span>(<span class="c-str">"ANOMALY\n"</span>, <span class="c-num">8</span>);</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cas d'usage -->
+  <section id="usecases">
+    <div class="container">
+      <p class="section-label">03 — Cas d'usage</p>
+      <h2 class="section-title">Déployé dans des environnements critiques</h2>
+      <div class="usecases-grid">
+
+        <div class="usecase-card">
+          <div class="usecase-sector">Défense</div>
+          <div class="usecase-title">Protection travailleur isolé (PTI)</div>
+          <p class="usecase-desc">Détection de chute, immobilité et SOS sur MPU-6050. Alerte MQTT temps réel. Zéro cloud US.</p>
+        </div>
+
+        <div class="usecase-card">
+          <div class="usecase-sector">Industriel</div>
+          <div class="usecase-title">Détection d'incendie / fumée</div>
+          <p class="usecase-desc">Analyse RGB565 OV2640 en temps réel. 3× Z-Score sur canaux R/ratio/variance. Flash sur ESP32-CAM.</p>
+        </div>
+
+        <div class="usecase-card">
+          <div class="usecase-sector">Aéronautique</div>
+          <div class="usecase-title">Surveillance vibratoire</div>
+          <p class="usecase-desc">Z-Score sur accéléromètre I2C. Détection d'anomalies de signature mécanique sur MCU contraint.</p>
+        </div>
+
+        <div class="usecase-card">
+          <div class="usecase-sector">Santé / Sécurité</div>
+          <div class="usecase-title">Fatigue cardiaque (MAX30102)</div>
+          <p class="usecase-desc">Surveillance HR/SpO₂ temps réel. Seuils WARN/DANGER/CRITICAL. Historique TimescaleDB.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
   <!-- Pourquoi -->
   <section id="pourquoi">
     <div class="container">
-      <p class="section-label">02 — Pourquoi Fovet</p>
+      <p class="section-label">04 — Pourquoi Fovet</p>
       <h2 class="section-title">Souverain par conception</h2>
       <div class="why-grid">
 
@@ -507,14 +741,21 @@
   <!-- Contact -->
   <section id="contact">
     <div class="container">
-      <p class="section-label">03 — Contact</p>
+      <p class="section-label">05 — Contact</p>
       <div class="contact-block">
         <div>
           <h2>Discutons de votre projet</h2>
           <p>Intégration sur mesure, licence commerciale, démo technique — contactez-nous.</p>
         </div>
-        <a href="mailto:contact@fovet.eu" class="btn-primary">contact@fovet.eu</a>
+        <div style="display:flex;flex-direction:column;gap:12px;align-items:flex-end;">
+          <a href="mailto:contact@fovet.eu" class="btn-primary">contact@fovet.eu</a>
+          <a href="https://github.com/Antoine005/fovet" target="_blank" rel="noopener" class="github-link" style="justify-content:flex-end;">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            Démarrer sur GitHub (LGPL v3)
+          </a>
+        </div>
       </div>
+      <p class="license-note" style="margin-top:20px;">Fovet est distribué sous <a href="https://github.com/Antoine005/fovet/blob/master/LICENSE" target="_blank" rel="noopener">LGPL v3</a> pour les usages non commerciaux. Licence commerciale disponible pour les entreprises.</p>
     </div>
   </section>
 
