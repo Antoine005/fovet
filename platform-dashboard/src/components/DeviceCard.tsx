@@ -1,5 +1,7 @@
 "use client";
 
+import { relativeTime } from "@/lib/relative-time";
+
 const CONNECTED_THRESHOLD_MS = 30_000; // 30 s
 
 interface Device {
@@ -9,6 +11,10 @@ interface Device {
   location: string | null;
   active: boolean;
   lastReadingAt: string | null;
+  latestFirmware: string | null;
+  latestModelId: string | null;
+  latestUnit: string | null;
+  latestLabel: string | null;
 }
 
 interface Props {
@@ -51,12 +57,35 @@ export function DeviceCard({ device, selected, onClick }: Props) {
       {device.location && (
         <p className="text-xs text-gray-600 mt-1">{device.location}</p>
       )}
+      {(device.latestModelId || device.latestUnit || device.latestLabel) && (
+        <div className="flex items-center gap-1 flex-wrap mt-1">
+          {device.latestModelId && (
+            <span className="text-xs text-indigo-400 bg-indigo-900/30 px-1.5 py-0.5 rounded font-mono truncate max-w-[130px]">
+              {device.latestModelId}
+            </span>
+          )}
+          {device.latestUnit && !device.latestModelId && (
+            <span className="text-xs text-gray-400 bg-gray-800 px-1.5 py-0.5 rounded">
+              {device.latestUnit}
+            </span>
+          )}
+          {device.latestLabel && (
+            <span className={`text-xs px-1.5 py-0.5 rounded font-mono ${
+              device.latestLabel === "anomaly" || device.latestLabel === "fire" || device.latestLabel === "person"
+                ? "bg-red-900/30 text-red-400"
+                : "bg-green-900/20 text-green-500"
+            }`}>
+              {device.latestLabel}
+            </span>
+          )}
+        </div>
+      )}
       <p className={`text-xs mt-1 ${isConnected ? "text-green-500" : "text-red-500"}`}>
         {device.lastReadingAt === null
           ? "Aucune donnée"
           : isConnected
-            ? "Connecté"
-            : "Déconnecté"}
+            ? `Connecté — ${relativeTime(device.lastReadingAt)}`
+            : `Déconnecté — ${relativeTime(device.lastReadingAt)}`}
       </p>
     </button>
   );

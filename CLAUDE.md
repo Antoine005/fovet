@@ -123,6 +123,7 @@ Critère de sortie Phase 1 atteint : détecte une anomalie ±5σ injectée dans 
 - [x] zscore_demo (Z-Score + Drift + MQTT → Vigie) compilé et prêt à flasher
 - [x] fire_detection (OV2640 QQVGA RGB565 — 3×Z-Score sur R_mean/ratio_rb/variance) ✅
 - [x] person_detection (VWW TFLite Micro — OV2640 96×96 GRAY → MobileNetV1 0.25× → Z-Score → Vigie MQTT) ✅
+- [x] **Validation hardware réelle (2026-03-22)** — ESP32-CAM opérationnel avec person_detection / fire_detection sur hardware physique
 
 **Tests natifs gcc (master) — 115 tests, 0 failing**
 
@@ -132,12 +133,25 @@ Critère de sortie Phase 1 atteint : détecte une anomalie ±5σ injectée dans 
 | test_drift | 28 | EWMA drift bilatéral |
 | test_mad | 28 | Streaming MAD (médiane glissante) |
 
-**Phase 3 — Capteur réel (prochaine étape)**
+**Phase 3 — Capteurs réels (en cours)**
+
+Pré-requis validés : ESP32-CAM opérationnel ✅ — capteurs MPU-6050/MAX30102/DHT22 reçus ✅
+
 - [ ] Brancher MPU-6050 sur I2C : SDA=GPIO13, SCL=GPIO14 sur ESP32-CAM
 - [ ] Implémenter `hal_i2c.h` + I2C read dans `platform_esp32.cpp`
 - [ ] Lire accélération réelle MPU-6050 → `fovet_zscore_update()` en lieu du sinus
 - [ ] Valider la détection sur un mouvement réel (secousse, chute)
 - [ ] Flasher la `zscore_demo` complète avec credentials WiFi/MQTT → données dans Vigie
+
+**Phase 3.5 — Pipeline Forge→Sentinelle→Vigie standardisée** ✅ (2026-03-22)
+- [x] `ManifestConfig` dans Forge — champs `sensor`, `unit`, `value_min`, `value_max`, `label_normal/anomaly`
+- [x] `forge/manifest.py` — génère `fovet_model_manifest.h` à chaque `forge run`
+- [x] `include/fovet/model_manifest.h` — documentation du format manifest dans le SDK
+- [x] Manifests par défaut dans chaque exemple ESP32 (`fovet_model_manifest.h` dans `src/`)
+- [x] Payload MQTT canonique v2 — `model_id`, `value_min`, `value_max` dans chaque publish
+- [x] Prisma `Reading` — champs `modelId`, `unit`, `valueMin`, `valueMax`, `label`
+- [x] `mqtt-ingestion.ts` — parse et persiste les nouveaux champs
+- [x] `ReadingChart.tsx` — auto-scale Y, label unité, ligne zéro, badge `model_id`
 
 **Phase 4 — Déploiement production** (après Phase 3)
 - [ ] VPS Scaleway : Nginx + HTTPS + TimescaleDB
@@ -224,9 +238,9 @@ Règle rapide selon ce qui change :
 
 ## Hardware disponible
 
-- **ESP32-CAM** (Espressif AI-Thinker, WiFi + caméra OV2640 + antenne externe)
+- **ESP32-CAM** (Espressif AI-Thinker, WiFi + caméra OV2640 + antenne externe) — opérationnel ✅ (validé 2026-03-22 avec person_detection / fire_detection)
 - **Adaptateur CH340** USB-UART sur **COM4** — driver WCH CH341SER installé ✅
-- Capteurs commandés (livraison ~2026-03-19) : MPU-6050 (accéléromètre I2C), MAX30102 (HR/SpO₂), DHT22 (température)
+- Capteurs reçus ✅ : MPU-6050 (accéléromètre I2C), MAX30102 (HR/SpO₂), DHT22 (température)
 
 ## Hardware gotchas
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 from rich.console import Console
 from rich.table import Table
 
@@ -14,6 +15,7 @@ from forge.data import Dataset, load_data
 from forge.detectors import DetectionResult, build_detectors
 from forge.detectors.base import Detector
 from forge.evaluation import compute_metrics, EvaluationMetrics
+from forge.manifest import export_manifest
 from forge.preprocessing import Scaler
 from forge.report import generate_report
 
@@ -159,3 +161,25 @@ class Pipeline:
                 )
                 for p in written:
                     console.print(f"  Wrote: {p}")
+
+        # Auto-compute value_min/max from training data when not set in YAML
+        resolved_min = self.config.manifest.value_min
+        resolved_max = self.config.manifest.value_max
+        if (resolved_min is None or resolved_max is None) and self.train_dataset is not None:
+            flat = self.train_dataset.samples.flatten()
+            if resolved_min is None:
+                resolved_min = float(np.percentile(flat, 1))
+            if resolved_max is None:
+                resolved_max = float(np.percentile(flat, 99))
+            console.print(
+                f"  [dim]manifest: auto value_min={resolved_min:.4f}  "
+                f"value_max={resolved_max:.4f} (p1/p99 from training data)[/dim]"
+            )
+
+        # Always export manifest — firmware needs it regardless of detector type
+        manifest_path = export_manifest(
+            self.config, Path(output_dir),
+            value_min=resolved_min,
+            value_max=resolved_max,
+        )
+        console.print(f"  Wrote: {manifest_path}")

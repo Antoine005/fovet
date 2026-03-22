@@ -37,21 +37,31 @@ model Reading {
   id         BigInt    @id @default(autoincrement())
   deviceId   String
   timestamp  DateTime  @default(now())
-  value      Float                       // Raw sensor value (primary — temp °C, BPM, accel g)
+  value      Float                       // Raw sensor value (primary — temp °C, BPM, accel g, z-score)
   value2     Float?                      // Secondary value — humidity % (TEMP module)
-  mean       Float                       // Running mean at time of reading
-  stddev     Float                       // Running stddev at time of reading
-  zScore     Float                       // |value - mean| / stddev
+  mean       Float                       // Running mean at time of reading (0 for canonical payloads)
+  stddev     Float                       // Running stddev at time of reading (0 for canonical payloads)
+  zScore     Float                       // |value - mean| / stddev (0 for canonical payloads)
   isAnomaly  Boolean   @default(false)
   // Module that produced this reading: "IMU" | "HR" | "TEMP" | null (legacy/unknown)
   sensorType String?
   // Firmware that published this reading: "person_detection" | "fire_detection" | "zscore_demo" | "smoke_test" | null
   firmware   String?
+  // Forge model identifier — matches pipeline name in manifest (e.g. "demo-zscore-sine")
+  modelId    String?
+  // Value unit for Vigie chart Y-axis: "z_score" | "g" | "score" | "bpm" | "C" | "r_mean" | "mad_score"
+  unit       String?
+  // Expected value range from manifest — Vigie uses these to auto-scale the chart
+  valueMin   Float?
+  valueMax   Float?
+  // Human-readable label: "normal" | "anomaly" | "person" | "no_person" | "fire"
+  label      String?
 
   device    Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@index([deviceId, timestamp(sort: Desc)])
   @@index([deviceId, sensorType, timestamp(sort: Desc)])
+  @@index([deviceId, modelId, timestamp(sort: Desc)])
   @@map("readings")
 }
 

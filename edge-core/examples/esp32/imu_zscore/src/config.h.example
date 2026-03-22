@@ -1,0 +1,22 @@
+/*
+ * Fovet SDK — Sentinelle
+ * IMU Z-Score Demo — configuration template
+ *
+ * Copy this file to config.h and fill in your credentials.
+ * config.h is in .gitignore — never commit it.
+ */
+
+#pragma once
+
+/* WiFi credentials */
+#define WIFI_SSID       "YourSSID"
+#define WIFI_PASSWORD   "YourPassword"
+
+/* MQTT broker — use LAN IP (not localhost) to reach host from ESP32 */
+#define MQTT_BROKER     "192.168.1.X"
+#define MQTT_PORT       1883
+#define MQTT_USER       "fovet-device"
+#define MQTT_PASSWORD   "your-mqtt-password"
+
+/* Device identifier — must match mqttClientId in the Vigie DB */
+#define DEVICE_ID       "esp32-cam-001"

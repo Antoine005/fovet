@@ -26,7 +26,8 @@
  * Serial format: index,value,mean,stddev,drift_mag,spike,drift,event
  */
 
-#include "config.h"     /* WiFi/MQTT credentials — DO NOT COMMIT */
+#include "config.h"              /* WiFi/MQTT credentials — DO NOT COMMIT */
+#include "fovet_model_manifest.h" /* Forge-generated model metadata       */
 
 extern "C" {
 #include "fovet/zscore.h"
@@ -73,7 +74,7 @@ extern "C" {
 static FovetZScore  g_zscore;
 static FovetDrift   g_drift;
 static uint32_t     g_sample_index = 0;
-static char         g_log_buf[256];
+static char         g_log_buf[384];
 
 static WiFiClient   g_wifi_client;
 static PubSubClient g_mqtt(g_wifi_client);
@@ -136,16 +137,21 @@ static void mqtt_publish_reading(float zscore_val, bool spike, bool drift_alert)
     int len = snprintf(g_log_buf, sizeof(g_log_buf),
         "{"
         "\"device_id\":\"%s\","
+        "\"model_id\":\"" FOVET_MODEL_ID "\","
         "\"firmware\":\"zscore_demo\","
-        "\"sensor\":\"synthetic\","
+        "\"sensor\":\"" FOVET_MODEL_SENSOR "\","
         "\"value\":%.4f,"
+        "\"value_min\":%.4f,"
+        "\"value_max\":%.4f,"
         "\"label\":\"%s\","
-        "\"unit\":\"z_score\","
+        "\"unit\":\"" FOVET_MODEL_UNIT "\","
         "\"anomaly\":%s,"
         "\"ts\":%lu"
         "}",
         DEVICE_ID,
         zscore_val,
+        (double)FOVET_MODEL_VALUE_MIN,
+        (double)FOVET_MODEL_VALUE_MAX,
         label,
         anomaly ? "true" : "false",
         (unsigned long)hal_time_ms());

@@ -19,12 +19,19 @@ uv sync
 # Installer les dépendances ML (AutoEncoder/TFLite)
 uv sync --extra ml
 
-# Lancer un pipeline de démo
+# Lancer des pipelines de démo
 uv run forge run --config configs/demo_zscore.yaml
+uv run forge run --config configs/demo_drift.yaml
 uv run forge run --config configs/demo_autoencoder.yaml
+uv run forge run --config configs/demo_lstm_autoencoder.yaml
 
 # Valider une config sans lancer le pipeline
 uv run forge validate --config configs/client_vibration.yaml
+
+# Copier le manifest généré dans un projet PlatformIO
+uv run forge deploy-manifest \
+    --config configs/demo_zscore.yaml \
+    --project-dir ../edge-core/examples/esp32/zscore_demo
 
 # Version
 uv run forge version
@@ -54,11 +61,13 @@ automl-pipeline/
 │       ├── mad.py          ← MADDetector (médiane glissante) + export fovet_mad_config.h
 │       └── registry.py     ← build_detectors(configs) factory
 ├── configs/
-│   ├── demo_zscore.yaml           ← Démo synthétique sinus + Z-Score
-│   ├── demo_mad.yaml              ← Démo synthétique sinus + MAD detector
-│   ├── demo_autoencoder.yaml      ← Démo synthétique 2D + AutoEncoder TFLite
-│   ├── client_vibration.yaml      ← Template client CSV + Z-Score + Isolation Forest
-│   └── benchmark_4detectors.yaml ← Benchmark comparatif 4 détecteurs (forge benchmark)
+│   ├── demo_zscore.yaml              ← Démo synthétique sinus + Z-Score
+│   ├── demo_drift.yaml               ← Démo synthétique sinus + EWMA Drift
+│   ├── demo_mad.yaml                 ← Démo synthétique sinus + MAD detector
+│   ├── demo_autoencoder.yaml         ← Démo synthétique 2D + AutoEncoder Dense TFLite
+│   ├── demo_lstm_autoencoder.yaml    ← Démo synthétique + LSTM AutoEncoder TFLite
+│   ├── client_vibration.yaml         ← Template client CSV + Z-Score + Isolation Forest
+│   └── benchmark_4detectors.yaml    ← Benchmark comparatif 4 détecteurs (forge benchmark)
 ├── tests/
 │   ├── test_config.py             ← 13 tests config Pydantic
 │   ├── test_data.py               ← 23 tests Dataset + synthetic + CSV
@@ -145,6 +154,33 @@ export:
   targets: [c_header, tflite_micro, json_config]
   output_dir: models/
   quantization: float32  # ou int8 pour production ESP32
+
+# Manifest — métadonnées intégrées dans le payload MQTT et le graphe Vigie
+manifest:
+  sensor: temperature     # ex: imu, temperature, pressure, vibration
+  unit: "°C"              # unité affichée dans Vigie
+  # value_min / value_max : OPTIONNELS
+  # Si absents → calculés automatiquement depuis les percentiles p1/p99 du dataset
+  # Si définis → utilisés tels quels (utile si la plage physique est connue)
+  value_min: -10.0
+  value_max: 60.0
+  label_normal:  normal
+  label_anomaly: anomaly
+```
+
+### `manifest.value_min` / `value_max` — calcul automatique
+
+Quand `value_min` ou `value_max` sont absents du YAML, Forge les calcule automatiquement
+depuis les percentiles **p1 / p99** des données d'entraînement. C'est le comportement
+recommandé pour les premières itérations.
+
+```yaml
+# Minimal — Forge calcule value_min/max automatiquement
+manifest:
+  sensor: vibration
+  unit: g
+  label_normal: normal
+  label_anomaly: anomaly
 ```
 
 ## Boucle Forge → Sentinelle
@@ -216,6 +252,31 @@ static FovetMAD fovet_mad_temperature = {
     .threshold_mad = 3.500000f,   // auto-calibré à 99e percentile
 };
 ```
+
+### `forge deploy-manifest` — copier le manifest dans un projet PlatformIO
+
+Après `forge run`, copie `models/<pipeline>/fovet_model_manifest.h` dans le dossier
+`src/` d'un projet PlatformIO. À exécuter à chaque nouvelle calibration.
+
+```bash
+# Syntaxe
+uv run forge deploy-manifest \
+    --config configs/<use_case>.yaml \
+    --project-dir ../edge-core/examples/esp32/<use_case>
+
+# Exemple concret
+uv run forge deploy-manifest \
+    --config configs/demo_zscore.yaml \
+    --project-dir ../edge-core/examples/esp32/zscore_demo
+# → Copie models/demo_zscore/fovet_model_manifest.h
+#   dans edge-core/examples/esp32/zscore_demo/src/fovet_model_manifest.h
+```
+
+Le manifest embarqué dans le firmware encode : `model_id`, `sensor`, `unit`,
+`value_min`, `value_max`, `label_normal`, `label_anomaly`. Ces valeurs sont publiées
+dans chaque payload MQTT et utilisées par Vigie pour auto-scaler le graphe.
+
+---
 
 ## Tests
 

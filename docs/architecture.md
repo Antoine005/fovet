@@ -134,31 +134,44 @@ const float g_autoencoder_threshold = 0.042f;
 //     tflite::GetModel(g_autoencoder_model_data), ...);
 ```
 
-### ESP32 → Vigie (MQTT JSON)
+### ESP32 → Vigie (MQTT JSON — payload canonique v2)
 
 ```json
 {
+  "device_id":  "esp32-cam-001",
+  "firmware":   "zscore_demo",
+  "model_id":   "demo-zscore-sine",
+  "sensor":     "synthetic",
   "value":      23.41,
-  "mean":       23.18,
-  "stddev":     0.42,
-  "zScore":     0.55,
-  "madScore":   0.31,
+  "value_min":  -6.0,
+  "value_max":   6.0,
+  "unit":       "z_score",
+  "label":      "normal",
   "anomaly":    false,
-  "sensorType": "TEMP",
-  "level":      "SAFE",
-  "value2":     61.0,
-  "ptiType":    null,
   "ts":         1741876800000
 }
 ```
 
-Champs requis : `value`, `mean`, `stddev`, `zScore`, `anomaly`. Tous les autres sont optionnels.
-`sensorType` : `"IMU"` | `"HR"` | `"TEMP"` — identifie le module producteur.
-`level` : `"SAFE"` | `"WARN"` | `"DANGER"` | `"COLD"` | `"CRITICAL"` — niveau Sentinelle.
-`ptiType` : `"FALL"` | `"MOTIONLESS"` | `"SOS"` — exclusif au module IMU (PTI).
-`madScore` : score MAD fenêtré (win=32), 0 pendant warm-up — publié par demo_mqtt.py.
+**Champs requis :** `value`, `anomaly`. Tous les autres sont optionnels (rétrocompatibilité).
+
+| Champ | Type | Description |
+|---|---|---|
+| `device_id` | string | `mqttClientId` du firmware |
+| `model_id` | string | Identifiant du modèle Forge (depuis `fovet_model_manifest.h`) |
+| `firmware` | string | Nom de l'exemple PlatformIO |
+| `sensor` | string | Type de capteur physique |
+| `value` | float | Valeur surveillée |
+| `value_min` | float | Borne basse pour le graphe Vigie |
+| `value_max` | float | Borne haute pour le graphe Vigie |
+| `unit` | string | Unité (ex: `g`, `°C`, `z_score`) |
+| `label` | string | Classification (`"normal"` ou `"anomaly"`) |
+| `anomaly` | bool | true si anomalie détectée |
+| `ts` | int | Timestamp Unix ms |
 
 Topic : `fovet/devices/<mqttClientId>/readings`
+
+**Payload legacy (v1) :** `mean`, `stddev`, `zScore`, `madScore`, `sensorType`, `level`,
+`value2`, `ptiType` — toujours acceptés par Vigie pour rétrocompatibilité.
 
 ### Vigie → Client (REST JSON — lectures paginées)
 
@@ -328,14 +341,17 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 
 | Session | Produit | Statut | Contenu |
 |---|---|---|---|
-| Forge-4b | Forge | ✅ | LSTMAutoEncoderDetector + export TFLite + C header (`fovet_lstm_autoencoder_model.h`) |
+| Forge-4b | Forge | ✅ | LSTMAutoEncoderDetector + export TFLite + C header |
 | Forge-5 | Forge | ✅ | Rapport HTML/JSON + train/test split + métriques |
 | Forge-6 | Forge | ✅ | CI GitHub Actions + Scaleway GPU |
-| Forge-7 | Forge | ✅ | Benchmark CLI : `forge benchmark --config a.yaml --config b.yaml` |
-| Forge-8 | Forge | ✅ | MADDetector + export `fovet_mad_config.h` (miroir C99 `fovet_mad`) |
-| Forge-9 | Forge | ✅ | Pipeline Scaler + export `fovet_scaler_params.h` (normalize: true) |
-| U1–U5 | Vigie/Scripts | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT (zScore + madScore) |
-| S10 | Sentinelle | ⏳ ~19/03 | Flash ESP32-CAM (nouvelle carte MB) |
-| S11 | Sentinelle | ⏳ | Capteurs réels : DHT22 (I2C) ou MPU-6050 (accéléromètre) |
+| Forge-7 | Forge | ✅ | Benchmark CLI : `forge benchmark` |
+| Forge-8 | Forge | ✅ | MADDetector + export `fovet_mad_config.h` |
+| Forge-9 | Forge | ✅ | `forge convert` + `forge deploy` — Keras → TFLite → ESP32 |
+| Forge-10 | Forge | ✅ | `forge deploy-manifest` + ManifestConfig + auto-compute `value_min/max` |
+| U1–U5 | Vigie | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT |
+| S10 | Sentinelle | ✅ | Flash ESP32-CAM validé — person_detection + fire_detection (2026-03-22) |
+| S11 | Sentinelle | ✅ | HAL I2C + driver MPU-6050 + exemple `imu_zscore` |
+| UX-1 | Vigie | ✅ | Fenêtre graphe configurable [30s / 100s / 5min / 15min] |
+| UX-2 | Vigie | ✅ | Page onboarding + `/api/healthz` (MQTT + DB status) |
+| Phase 3 | Sentinelle | ⏳ | MPU-6050 sur hardware réel → live Vigie |
 | Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |
-| Prod-security | Vigie | ⏳ | Redis rate limiting, CSP nonce, refresh token |

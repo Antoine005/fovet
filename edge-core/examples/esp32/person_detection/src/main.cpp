@@ -39,6 +39,7 @@
  */
 
 #include "config.h"
+#include "fovet_model_manifest.h" /* Forge-generated model metadata */
 
 /* --- TFLite Micro (ESP32 port) ------------------------------------------- */
 #include <TensorFlowLite_ESP32.h>
@@ -335,16 +336,21 @@ static void mqtt_publish(float person_score)
     snprintf(g_buf, sizeof(g_buf),
              "{"
              "\"device_id\":\"%s\","
+             "\"model_id\":\"" FOVET_MODEL_ID "\","
              "\"firmware\":\"person_detection\","
-             "\"sensor\":\"camera\","
+             "\"sensor\":\"" FOVET_MODEL_SENSOR "\","
              "\"value\":%.3f,"
+             "\"value_min\":%.3f,"
+             "\"value_max\":%.3f,"
              "\"label\":\"%s\","
-             "\"unit\":\"score\","
+             "\"unit\":\"" FOVET_MODEL_UNIT "\","
              "\"anomaly\":%s,"
              "\"ts\":%lu"
              "}",
              DEVICE_ID,
              person_score,
+             (double)FOVET_MODEL_VALUE_MIN,
+             (double)FOVET_MODEL_VALUE_MAX,
              label,
              anomaly ? "true" : "false",
              (unsigned long)hal_time_ms());
