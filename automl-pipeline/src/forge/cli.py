@@ -1,16 +1,19 @@
-﻿"""
-Fovet Forge CLI â€” entry point.
+﻿“””
+Fovet Forge CLI — entry point.
 
 Usage:
     forge run --config configs/demo_zscore.yaml
     forge validate --config configs/demo_zscore.yaml
+    forge convert --model model.h5 --output model.tflite [--quantization int8]
+    forge deploy --model model.tflite --target person_detection [--port COM4]
     forge version
-"""
+“””
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import typer
 from pydantic import ValidationError
 from rich.console import Console
@@ -113,6 +116,113 @@ def benchmark(
 
     console.print(table)
     console.print(f"[green]Benchmark report written to: {output_dir}[/green]")
+
+
+@app.command()
+def convert(
+    model: Path = typer.Option(..., "--model", "-m", help="Keras model path (.h5 or SavedModel)"),
+    output: Path = typer.Option(None, "--output", "-o", help="Output .tflite path (default: <model>.tflite)"),
+    quantization: str = typer.Option(
+        "float32", "--quantization", "-q", help="float32 or int8"
+    ),
+    calibration: Path = typer.Option(
+        None, "--calibration", help=".npy calibration data for INT8 (n_samples × *input_shape)"
+    ),
+) -> None:
+    """Convert a Keras model to TFLite optimised for ESP32 (float32 or INT8)."""
+    from forge.convert import convert_keras_to_tflite, ESP32_MAX_ARENA_BYTES  # noqa: PLC0415
+
+    out = output if output is not None else model.with_suffix(".tflite")
+
+    calib_data = None
+    if calibration is not None:
+        if not calibration.exists():
+            err_console.print(f"Calibration file not found: {calibration}")
+            raise typer.Exit(1)
+        calib_data = np.load(str(calibration)).astype("float32")
+
+    try:
+        result = convert_keras_to_tflite(
+            model, out,
+            quantization=quantization,
+            calibration_data=calib_data,
+        )
+    except ImportError as exc:
+        err_console.print(str(exc))
+        raise typer.Exit(1)
+    except (FileNotFoundError, ValueError) as exc:
+        err_console.print(str(exc))
+        raise typer.Exit(1)
+
+    table = Table(title="Conversion result", show_header=True)
+    table.add_column("Field", style="cyan")
+    table.add_column("Value")
+    table.add_row("TFLite model", str(result.tflite_path))
+    table.add_row("Quantization", result.quantization)
+    table.add_row("Model size", f"{result.model_size_kb} KB")
+    table.add_row(
+        "Tensor arena",
+        f"{result.arena_estimate_kb} KB  "
+        f"({'[green]OK[/green]' if result.fits_esp32 else '[red]TOO LARGE[/red]'} "
+        f"— limit {ESP32_MAX_ARENA_BYTES // 1024} KB)",
+    )
+    table.add_row("Report", str(result.report_path))
+    console.print(table)
+
+    for w in result.warnings:
+        console.print(f"[yellow]WARNING:[/yellow] {w}")
+
+    if result.fits_esp32:
+        console.print("[green]✔ Model fits ESP32 tensor arena.[/green]")
+    else:
+        console.print("[red]✘ Model exceeds ESP32 tensor arena — optimise before deploying.[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def deploy(
+    model: Path = typer.Option(..., "--model", "-m", help="Path to .tflite model"),
+    target: str = typer.Option(
+        "person_detection", "--target", "-t",
+        help="Built-in target: person_detection | fire_detection | zscore_demo",
+    ),
+    port: str = typer.Option("COM4", "--port", "-p", help="Upload serial port"),
+    compile_only: bool = typer.Option(False, "--compile-only", help="Compile only, skip flash"),
+    project_dir: Path = typer.Option(
+        None, "--project-dir", help="Custom PlatformIO project directory"
+    ),
+) -> None:
+    """Deploy a TFLite model to ESP32: generate model_data.cpp → pio compile → flash."""
+    from forge.deploy import deploy as _deploy, _BUILTIN_TARGETS  # noqa: PLC0415
+
+    console.print(f"[bold]Fovet Forge deploy[/bold] — target: [cyan]{target}[/cyan]")
+    console.print(f"  Model  : {model}")
+    console.print(f"  Port   : {port}")
+    console.print(f"  Mode   : {'compile only' if compile_only else 'compile + flash'}")
+
+    try:
+        _deploy(
+            tflite_path=model,
+            target=target,
+            port=port,
+            compile_only=compile_only,
+            custom_project_dir=project_dir,
+        )
+    except FileNotFoundError as exc:
+        err_console.print(str(exc))
+        raise typer.Exit(1)
+    except ValueError as exc:
+        err_console.print(str(exc))
+        err_console.print(f"Built-in targets: {', '.join(sorted(_BUILTIN_TARGETS))}")
+        raise typer.Exit(1)
+    except RuntimeError as exc:
+        err_console.print(str(exc))
+        raise typer.Exit(1)
+
+    if compile_only:
+        console.print("[green]✔ Compile successful.[/green]")
+    else:
+        console.print("[green]✔ Flash complete.[/green]")
 
 
 @app.command()
