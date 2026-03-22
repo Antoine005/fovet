@@ -18,13 +18,15 @@ Il est composé de trois couches indépendantes qui s'interfacent via des contra
 │   │Sentinelle│  WiFi/    │ Broker MQTT │                 │ Python AutoML│   │
 │   │ (C99)   │──MQTT──→  │ port 1883   │                 │              │   │
 │   │         │            └──────┬──────┘                 │ ZScore       │   │
-│   │ zscore.h│                   │ subscribe              │ IsoForest    │   │
-│   │ 20 bytes│                   ▼                        │ AutoEncoder  │   │
-│   │ drift.h │            ┌─────────────┐                 └──────┬───────┘   │
-│   │ 24 bytes│            │ Fovet Vigie │                        │           │
-│   └─────────┘            │ (Next.js)   │                 export ↓           │
-│         ▲                │ PostgreSQL  │          fovet_zscore_config.h     │
-│         │                │ REST + SSE  │          autoencoder.tflite        │
+│   │ zscore.h│                   │ subscribe              │ MAD          │   │
+│   │ 20 bytes│                   ▼                        │ EWMA Drift   │   │
+│   │ drift.h │            ┌─────────────┐                 │ IsoForest    │   │
+│   │ 24 bytes│            │ Fovet Vigie │                 │ AutoEncoder  │   │
+│   │ mad.h   │            │ (Next.js)   │                 └──────┬───────┘   │
+│   │ ~1 KB   │            │ PostgreSQL  │                 export ↓           │
+│   └─────────┘            │ REST + SSE  │          fovet_zscore_config.h     │
+│         ▲                │             │          fovet_mad_config.h        │
+│         │                │             │          autoencoder.tflite        │
 │         │                └─────────────┘                        │           │
 │         └──────────────────────────────────────────────────────-┘           │
 │              firmware mis à jour avec stats précalibrées                     │
@@ -91,8 +93,7 @@ Artefacts exportés
   ├── autoencoder.tflite               → TFLite Micro sur ESP32 (Dense)
   ├── fovet_autoencoder_model.h        → C byte-array pour TFLite Micro (Dense)
   ├── lstm_autoencoder.tflite          → TFLite Micro sur ESP32 (LSTM, unroll=True)
-  ├── fovet_lstm_autoencoder_model.h   → C byte-array pour TFLite Micro (LSTM)
-  └── fall_detection.tflite            → TFLite Micro — chute/PTI (H1.2, INT8 < 32 KB)
+  └── fovet_lstm_autoencoder_model.h   → C byte-array pour TFLite Micro (LSTM)
   ▼
 Firmware ESP32 mis à jour
   #include "fovet_zscore_config.h"
@@ -133,31 +134,44 @@ const float g_autoencoder_threshold = 0.042f;
 //     tflite::GetModel(g_autoencoder_model_data), ...);
 ```
 
-### ESP32 → Vigie (MQTT JSON)
+### ESP32 → Vigie (MQTT JSON — payload canonique v2)
 
 ```json
 {
+  "device_id":  "esp32-cam-001",
+  "firmware":   "zscore_demo",
+  "model_id":   "demo-zscore-sine",
+  "sensor":     "synthetic",
   "value":      23.41,
-  "mean":       23.18,
-  "stddev":     0.42,
-  "zScore":     0.55,
-  "madScore":   0.31,
+  "value_min":  -6.0,
+  "value_max":   6.0,
+  "unit":       "z_score",
+  "label":      "normal",
   "anomaly":    false,
-  "sensorType": "TEMP",
-  "level":      "SAFE",
-  "value2":     61.0,
-  "ptiType":    null,
   "ts":         1741876800000
 }
 ```
 
-Champs requis : `value`, `mean`, `stddev`, `zScore`, `anomaly`. Tous les autres sont optionnels.
-`sensorType` : `"IMU"` | `"HR"` | `"TEMP"` — identifie le module producteur.
-`level` : `"SAFE"` | `"WARN"` | `"DANGER"` | `"COLD"` | `"CRITICAL"` — niveau Sentinelle.
-`ptiType` : `"FALL"` | `"MOTIONLESS"` | `"SOS"` — exclusif au module IMU (PTI).
-`madScore` : score MAD fenêtré (win=32), 0 pendant warm-up — publié par demo_mqtt.py.
+**Champs requis :** `value`, `anomaly`. Tous les autres sont optionnels (rétrocompatibilité).
+
+| Champ | Type | Description |
+|---|---|---|
+| `device_id` | string | `mqttClientId` du firmware |
+| `model_id` | string | Identifiant du modèle Forge (depuis `fovet_model_manifest.h`) |
+| `firmware` | string | Nom de l'exemple PlatformIO |
+| `sensor` | string | Type de capteur physique |
+| `value` | float | Valeur surveillée |
+| `value_min` | float | Borne basse pour le graphe Vigie |
+| `value_max` | float | Borne haute pour le graphe Vigie |
+| `unit` | string | Unité (ex: `g`, `°C`, `z_score`) |
+| `label` | string | Classification (`"normal"` ou `"anomaly"`) |
+| `anomaly` | bool | true si anomalie détectée |
+| `ts` | int | Timestamp Unix ms |
 
 Topic : `fovet/devices/<mqttClientId>/readings`
+
+**Payload legacy (v1) :** `mean`, `stddev`, `zScore`, `madScore`, `sensorType`, `level`,
+`value2`, `ptiType` — toujours acceptés par Vigie pour rétrocompatibilité.
 
 ### Vigie → Client (REST JSON — lectures paginées)
 
@@ -192,298 +206,51 @@ data: heartbeat
 
 ---
 
-## Modules H — Monitoring humain (branch monitoring/human)
-
-Le module H étend Fovet Sentinelle vers la surveillance physiologique de l'humain (travailleur isolé, défense, milieu industriel). Développé sur la branche locale `monitoring/human`, non poussé sur GitHub.
-
-**Biosignal HAL** (`fovet_biosignal_hal.h`) — registre statique 4 slots, commun à tous les modules H :
-
-| Slot | Source | Driver | Profil | Statut |
-|---|---|---|---|---|
-| 0 — IMU  | `FOVET_SOURCE_IMU`  | `mpu6050_hal.c`  | `pti_profile.c` (H1)      | ✅ Complet |
-| 1 — HR   | `FOVET_SOURCE_HR`   | `max30102_hal.c` | `fatigue_profile.c` (H2)  | ✅ Complet |
-| 2 — TEMP | `FOVET_SOURCE_TEMP` | `dht22_hal.c`    | `temp_profile.c` (H3)     | ✅ Complet |
-| 3 — ECG  | `FOVET_SOURCE_ECG`  | *(H4 — AD8232)*  | *(H4 — stress combiné)*   | 🟡 Standby (hardware) |
-
----
-
-### Architecture H1 — PTI (Protection du Travailleur Isolé)
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  EDGE (ESP32)                                                             │
-│                                                                           │
-│  MPU-6050 (I2C)                                                           │
-│     ▼ fovet_mpu6050_set_i2c() → fovet_mpu6050_init() → FOVET_SOURCE_IMU │
-│  Biosignal HAL                                                            │
-│     ▼ fovet_pti_tick() — 25 Hz                                           │
-│  Profil PTI : fenêtre 50 samples → fall_score_fn (TFLite Micro)         │
-│               immobilité |a|<0.1g > 30s / SOS GPIO actif-bas            │
-│     ▼ alert_fn(FALL | MOTIONLESS | SOS) → MQTT                          │
-└──────────────────────────────────────────────────────────────────────────┘
-         │ MQTT  fovet/devices/<id>/alerts
-         ▼
-Vigie — INSERT Alert (ptiType) → GET /api/pti/fleet → WorkerMap / AlertTimeline
-
-Forge — FallDetectionPipeline → Dense 10→16→8→1 INT8 < 32 KB → fall_detection.tflite
-```
-
-### Architecture H2 — Fatigue cardiaque
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  EDGE (ESP32)                                                             │
-│                                                                           │
-│  MAX30102 (I2C)                                                           │
-│     ▼ fovet_max30102_set_i2c() → fovet_max30102_init() → FOVET_SOURCE_HR│
-│  Biosignal HAL                                                            │
-│     ▼ fovet_fatigue_tick() — 25 Hz                                       │
-│  Profil Fatigue : EMA BPM α=0.05 — seuils 72/82 bpm                     │
-│                   SpO₂ < 94% → CRITICAL (priorité)                       │
-│                   3 niveaux → LED RGB (OK/ALERT/CRITICAL)                │
-│     ▼ alert_fn(level) → MQTT                                             │
-└──────────────────────────────────────────────────────────────────────────┘
-         │ MQTT  fovet/devices/<id>/readings (value = BPM)
-         ▼
-Vigie — GET /api/devices/:id/readings → FatigueCard + HRVChart (onglet Fatigue)
-        Classification client-side : EMA α=0.05, seuils 72/82 bpm
-
-Forge — FatigueHRVPipeline → BVP → 7 features HRV → Random Forest AUC ≥ 0.85
-                            → fatigue_hrv_thresholds.h (seuils HR + RMSSD pour MCU)
-```
-
-### Architecture H3 — Température / Stress thermique ✅
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  EDGE (ESP32)                                                             │
-│                                                                           │
-│  DHT22 (single-wire)                                                      │
-│     ▼ fovet_dht22_set_io() → fovet_dht22_init() → FOVET_SOURCE_TEMP     │
-│  Biosignal HAL                                                            │
-│     ▼ fovet_temp_tick() — 0.5 Hz (DHT22 max 0.5 Hz)                     │
-│  Profil Thermique : WBGT Stull (2011) indoor, ISO 7243 moderate work     │
-│     EMA α=0.10, warmup=10 samples, sleep=2000 ms                         │
-│     4 niveaux : SAFE / WARN (WBGT≥25) / DANGER (WBGT≥28) / COLD (T≤10) │
-│     Cold check prioritaire sur WBGT                                       │
-│     ▼ alert_fn(SAFE|WARN|DANGER|COLD) + led_fn + sleep_fn               │
-└──────────────────────────────────────────────────────────────────────────┘
-         │ MQTT  fovet/devices/<id>/readings (value_1=°C, value_2=RH%)
-         ▼
-Vigie — TempCard (EMA+WBGT+badge niveau) + TemperatureChart (SSE — 3 courbes)
-        onglet "Thermique" — même pattern que H2 Fatigue
-
-Forge — ThermalStressPipeline → 8 features WBGT + RandomForest AUC ≥ 0.90
-        → thermal_stress_model.pkl + thermal_stress_config.json
-        → thermal_thresholds.h (FOVET_TEMP_WBGT_WARN_C / DANGER_C / COLD_ALERT_C)
-```
-
----
-
-### H1.1 — Driver HAL MPU-6050
-
-Le MPU-6050 est accédé via deux callbacks injectés (`fovet_i2c_write_fn_t`, `fovet_i2c_read_fn_t`), découplant le driver de Wire.h et le rendant testable sur PC.
-
-- Registres : `WHO_AM_I=0x75`, `PWR_MGMT_1=0x6B`, `ACCEL_XOUT_H=0x3B`
-- Échelle accéléromètre : 16 384 LSB/g (±2g)
-- Fréquence : `SMPLRT_DIV = 1000/hz - 1`, DLPF actif, plage 10–200 Hz
-- Auto-enregistrement dans le Biosignal HAL à l'init
-
-### H1.2 — FallDetectionPipeline (Forge)
-
-Pipeline Python entraînant un réseau Dense sur un signal IMU synthétique ou réel.
-
-- Entrée : 10 features extraites d'une fenêtre glissante de 50 samples (2 s @ 25 Hz)
-- Architecture : `Input(10) → Dense(16, relu) → Dense(8, relu) → Dense(1, sigmoid)`
-- Spécification : precision ≥ 0.92 et recall ≥ 0.90
-- Export : TFLite INT8 < 32 KB + header C + config JSON (scaler, threshold, window_samples)
-
-### H1.3 — Profil PTI Sentinelle
-
-Profil C99 zéro-malloc résidant entièrement dans `fovet_pti_ctx_t` (stack).
-
-| Alerte | Logique |
-|---|---|
-| FALL | `fall_score_fn(ordered_window) > fall_threshold` ; fenêtre pleine uniquement |
-| MOTIONLESS | `|a| < motion_threshold_g` continu ≥ `motionless_timeout_ms` ; debounce (1 fire / période) |
-| SOS | `gpio_read_fn(pin) == 0` (actif-bas) ; debounce release/press |
-
-### H1.4 — Vue Vigie Flotte PTI
-
-Extension du dashboard Vigie avec une vue dédiée aux travailleurs isolés.
-
-- Champ `Alert.ptiType String?` distingue alertes PTI des alertes z-score (rétrocompatible)
-- `GET /api/pti/fleet` : agrège les alertes actives par type pour chaque travailleur
-- `GET /api/pti/alerts/recent` : timeline cross-flotte pour le superviseur
-- UI : onglet `PTI` → WorkerMap (grille) + AlertTimeline (panneau latéral)
-
-### H2.1 — Driver HAL MAX30102
-
-Pilote optique pour la mesure de fréquence cardiaque et SpO₂.
-
-- Pan-Tompkins simplifié sur fenêtre circulaire de 100 samples (4 s @ 25 Hz)
-- Ratio-of-ratios RED/IR pour l'estimation SpO₂ ; clamp physiologique [30, 220] BPM
-- Registres : `PART_ID=0x15`, `FIFO_DATA`, contrôle LED RED + IR 6.4 mA
-- Injection I2C : même interface que MPU-6050 (`fovet_i2c_write_fn_t`, `fovet_i2c_read_fn_t`)
-- `FOVET_HR_ERR_NODATA=-4` (distinct de `FOVET_HAL_ERR_NOREG=-3`)
-
-### H2.2 — FatigueHRVPipeline (Forge)
-
-Pipeline Python entraînant un Random Forest sur 7 features HRV issues de la BVP.
-
-- Entrée : signal BVP synthétique (pulses gaussiens à positions jittérées)
-- Features : `mean_rr`, `sdnn`, `rmssd`, `pnn50`, `mean_hr`, `cv_rr`, `range_rr`
-- Baseline (repos) : 62 bpm / RMSSD=40 ms ; Stress : 82 bpm / RMSSD=12 ms
-- Spécification : AUC ROC ≥ 0.85 (atteint > 0.95 sur données synthétiques)
-- Export : `fatigue_hrv_model.pkl`, `fatigue_hrv_config.json`, `fatigue_hrv_thresholds.h`
-
-### H2.3 — Profil Sentinelle Fatigue
-
-Profil C99 zéro-malloc implémentant la détection de fatigue cardiaque sur MCU.
-
-| Niveau | Condition | LED |
-|---|---|---|
-| OK | EMA BPM < 72 | Vert |
-| ALERT | 72 ≤ EMA BPM ≤ 82 | Ambre |
-| CRITICAL | EMA BPM > 82 **ou** SpO₂ < 94 % | Rouge |
-
-- EMA α = 0.05 (≈ 20 samples de mémoire), seed = premier sample valide
-- Warmup : 25 samples avant première classification
-- SpO₂ < spo2_critical → CRITICAL en priorité absolue
-- Callbacks : `alert_fn` (sur changement de niveau), `led_fn` (chaque tick), `sleep_fn`
-
-### H2.4 — Vue Vigie Fatigue
-
-Extension Vigie avec vue dédiée à la surveillance de la fatigue cardiaque.
-
-- `FatigueCard` : carte par dispositif — EMA BPM α=0.05, niveau badge couleur, sparkline avec RefLines 72/82 bpm, auto-refresh 15 s
-- `HRVChart` : graphe temps réel SSE — BPM brut + courbe EMA violette, ReferenceArea OK/ALERT/CRITICAL, RefLines labellisées 72 et 82 bpm
-- Onglet `Fatigue` dans le dashboard — grille FatigueCards + HRVChart detail
-- Seuils identiques au profil MCU — classification client-side, aucun changement de schéma
-
-### H3.1 — Driver HAL DHT22 ✅
-
-Pilote C99 pour le capteur DHT22 (température ambiante + humidité relative, protocole single-wire 40 bits).
-
-- IO entièrement injectée : `pin_write`, `pulse_us(expected_level, timeout_us)`, `delay_us`
-- `pulse_us` retourne 0 sur timeout (caller → `FOVET_DHT22_ERR_TIMEOUT`)
-- Décodage bit : durée HIGH < 40 µs → 0, ≥ 40 µs → 1
-- Checksum 8 bits sur (bytes[0]+bytes[1]+bytes[2]+bytes[3]) & 0xFF
-- Températures négatives : bit 15 de bytes[2] = signe
-- Erreurs : `ERR_TIMEOUT=-1`, `ERR_CHECKSUM=-2`, `ERR_RANGE=-3`, `ERR_IO=-4`
-- S'enregistre en tant que `FOVET_SOURCE_TEMP` dans le biosignal HAL
-
-### H3.2 — ThermalStressPipeline (Forge) ✅
-
-Pipeline Python entraînant un Random Forest sur 8 features thermiques issues du DHT22.
-
-- WBGT Stull (2011) : `NWB = T×atan(0.151977×√(H+8.313659)) + ... - 4.686035` ; `WBGT = 0.7×NWB + 0.3×T`
-- 8 features : `mean_celsius`, `max_celsius`, `min_celsius`, `std_celsius`, `mean_humidity`, `mean_wbgt`, `max_wbgt`, `trend_celsius` (pente °C/min)
-- Fenêtre glissante 240 s, pas 120 s, 0.5 Hz (DHT22)
-- Données synthétiques 3 phases : normal (22°C/50%), stress chaud (35°C/72%), stress froid (4°C/80%)
-- Spécification : AUC ROC ≥ 0.90 (atteint > 0.99 sur données synthétiques)
-- Export : `thermal_stress_model.pkl`, `thermal_stress_config.json`, `thermal_thresholds.h`
-
-### H3.3 — Profil Thermique Sentinelle ✅
-
-Profil C99 zéro-malloc implémentant la classification thermique sur MCU via WBGT.
-
-| Niveau | Condition (par priorité) | LED |
-|---|---|---|
-| COLD   | EMA temp ≤ 10 °C (priorité) | Bleu |
-| DANGER | WBGT ≥ 28 °C | Rouge |
-| WARN   | WBGT ≥ 25 °C | Ambre |
-| SAFE   | sinon | Vert |
-
-- WBGT calculé inline : `fovet_temp_compute_wbgt(celsius, humidity_pct)` via `atanf`/`sqrtf`/`powf` de `<math.h>`
-- EMA α = 0.10, warmup = 10 samples, sleep = 2000 ms (0.5 Hz)
-- Erreurs transitoires DHT22 (TIMEOUT/CHECKSUM/RANGE) → skip tick + sleep, pas de propagation
-- ERR_IO (callbacks non injectés) → propagé comme erreur fatale
-
-### H3.4 — Vue Vigie Thermique ✅
-
-Extension Vigie avec vue dédiée à la surveillance thermique WBGT.
-
-- `TempCard` : carte par dispositif — EMA α=0.10, WBGT Stull (2011) client-side, 4 niveaux colorés, sparkline orange avec RefLine froid=bleu
-- `TemperatureChart` : graphe temps réel SSE — 3 courbes (temp brute / EMA / WBGT), ReferenceArea zones, RefLines aux 3 seuils avec labels
-- Onglet `Thermique` dans le dashboard — 5e vue (Flotte / Détail / PTI / Fatigue / Thermique)
-- WBGT calculé côté client (même formule Stull 2011 que temp_profile.c)
-
-### H4 — ECG / Stress combiné 🟡 Standby (hardware)
-
-> **Bloqué** en attente du module AD8232 (~20€ — voir `docs/hardware-bom.md`)
-
-Conception prévue :
-
-| Sous-module | Contenu |
-|---|---|
-| H4.1 Sentinelle | Driver HAL AD8232 — sortie analogique ADC ESP32 (GPIO34), détection R-peaks, mesure RR précise |
-| H4.2 Forge | Pipeline stress combiné (HR + RMSSD + WBGT + accélération) — dataset WESAD ou synthétique |
-| H4.3 Vigie | Vue ECG — tracé temps réel + détection arythmie / surmenage |
-
----
-
 ## Backlog orienté utilisateur
 
 > Axe stratégique : compléter le périmètre *produit* au-delà des modules capteurs.
-> Ces items ne dépendent pas du hardware AD8232 et sont réalisables dans l'état actuel.
 
 ### U1 — Alertes unifiées cross-modules ✅
 
-**Implémenté (commit 28936d1)**
-
-- Migration Prisma : `Alert.alertModule` (PTI/FATIGUE/THERMAL), `Alert.alertLevel` (WARN/DANGER/COLD/CRITICAL)
-- `Reading.sensorType` (IMU/HR/TEMP), `Reading.value2` (humidité %)
+- Migration Prisma : `Alert.alertModule`, `Alert.alertLevel` (WARN/DANGER/COLD/CRITICAL)
+- `Reading.sensorType`, `Reading.value2`
 - `mqtt-ingestion.ts` : crée alerte si `level ∈ {WARN,DANGER,COLD,CRITICAL}` + z-score legacy
 - `GET /api/fleet/health` : état agrégé par module par dispositif
-- `FleetHealth.tsx` : vue **Santé** — une ligne par travailleur, badges PTI/FATIGUE/THERMAL
+- `FleetHealth.tsx` : vue **Santé** — une ligne par dispositif, badges par module
 
 ### U2 — Vue worker individuelle (multi-capteur) ✅
 
-**Implémenté (commit suivant)**
+- `GET /api/workers/:deviceId/summary` : agrège lectures HR + TEMP (50 each) + 20 alertes récentes
+- `WorkerDetail.tsx` : résumé cross-module + chronologie alertes + export rapport
+- Navigation depuis `FleetHealth` (clic ligne)
 
-- `GET /api/workers/:deviceId/summary` : agrège PTI + HR (50 readings) + TEMP (50 readings) + 20 alertes récentes
-- `WorkerDetail.tsx` : layout 3 colonnes (PTI / Fatigue / Thermique) + chronologie alertes cross-module
-- EMA/WBGT calculés côté client (même formules que FatigueCard/TempCard)
-- Navigation depuis `FleetHealth` (clic ligne) et `WorkerMap` (clic carte travailleur)
+### U3 — Notifications sortantes (webhook) ✅
 
-### U3 — Notifications sortantes (webhook / email) ✅
+- `ALERT_WEBHOOK_URL` + `ALERT_WEBHOOK_MIN_LEVEL` dans `.env.example`
+- `mqtt-ingestion.ts` appelle `fireWebhook()` (fire-and-forget) après chaque alerte
+- Payload : `{ deviceId, deviceName, alertModule, alertLevel, value, zScore, timestamp }`
+- Compatible n8n, Make, Zapier, Slack Incoming Webhooks
 
-**Implémenté** : `ALERT_WEBHOOK_URL` + `ALERT_WEBHOOK_MIN_LEVEL` dans `.env.example`.
-`mqtt-ingestion.ts` appelle `fireWebhook()` (fire-and-forget) après chaque création d'alerte.
-Payload : `{ deviceId, deviceName, alertModule, alertLevel, value, zScore, timestamp }`.
-Compatible n8n, Make, Zapier, Slack Incoming Webhooks.
-
-### U4 — Export de session (rapport travailleur) ✅
-
-**Implémenté**
+### U4 — Export de session ✅
 
 - `GET /api/devices/:id/report?from=ISO&to=ISO&format=json|csv`
-- JSON : device info, session stats par module (IMU/HR/TEMP), alertsByLevel, liste complète alertes
-- CSV : table plate de toutes les lectures (timestamp, sensorType, value, value2, zScore, isAnomaly…)
-- Cap 7 jours — défaut last 8h
-- `ExportReport` dans `WorkerDetail` : presets (8h / Aujourd'hui / Personnalisé) + boutons JSON + CSV (download via blob URL)
+- JSON : stats par module, alertsByLevel, liste alertes | CSV : lectures brutes
+- Cap 7 jours — défaut 8h ; `ExportReport` dans `WorkerDetail` (presets + download)
 
-### U5 — Mode démo / simulation (sans hardware) ✅
-
-**Implémenté** : `scripts/demo_mqtt.py`
+### U5 — Mode démo MQTT ✅
 
 3 threads (IMU 1 Hz, HR 0.5 Hz, TEMP 0.33 Hz) publient des lectures Welford réalistes.
-Injection automatique d'anomalies (FALL/SOS/MOTIONLESS, fatigue, chaleur WBGT) toutes les 30 s.
+Injection automatique d'anomalies toutes les 30 s.
 
 ```bash
-# Démarrage rapide (sans installation)
 uv run --with paho-mqtt --with python-dotenv scripts/demo_mqtt.py
-
-# Options
-python scripts/demo_mqtt.py --device demo-001 --interval 1 --anomaly-period 20
-python scripts/demo_mqtt.py --no-anomalies   # flux normaux uniquement
+python scripts/demo_mqtt.py --device demo-001 --anomaly-period 20 --no-anomalies
 ```
 
-**Corrige aussi** : `ptiType` désormais propagé depuis le payload MQTT vers la table `alerts`
-(les vues PTI fleet et `/api/pti/fleet` voient maintenant les alertes FALL/SOS/MOTIONLESS).
+**Corrige aussi** : `ptiType` propagé depuis le payload MQTT vers la table `alerts`.
 
 ---
+
 
 ## Décisions architecturales
 
@@ -516,6 +283,13 @@ python scripts/demo_mqtt.py --no-anomalies   # flux normaux uniquement
 - Un LSTM nécessite des fenêtres temporelles → complexité mémoire incompatible avec TFLite Micro
 - Dense : chaque sample est traité indépendamment, latence O(1)
 - LSTM possible en Forge-7+ si le modèle Dense s'avère insuffisant
+
+### Pourquoi MAD plutôt que Z-Score sur certains signaux ?
+
+- Le Z-Score (Welford) accumule moyenne et variance sur tout l'historique → un outlier passé contamine la baseline
+- Le MAD utilise la médiane glissante : insensible aux valeurs extrêmes précédentes
+- Sur des signaux physiologiques (HR, WBGT) où des pointes légitimes existent, MAD évite la sur-détection
+- Contrainte identique : O(1) amortie (tri par insertion sur fenêtre fixe ≤ 128), < 1 µs/sample
 
 ### Pourquoi IsolationForest cloud-only ?
 
@@ -563,64 +337,21 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 
 ---
 
-## Roadmap
-
-### Modules capteurs (Sentinelle / Forge / Vigie)
-
-| Module | Sentinelle | Forge | Vigie | Tests |
-|---|---|---|---|---|
-| **H1 — PTI** (MPU-6050, chute) | ✅ | ✅ | ✅ | 25+56+24 = 105 |
-| **H2 — Fatigue cardiaque** (MAX30102) | ✅ | ✅ | ✅ | 23+67+27 = 117 |
-| **H3 — Stress thermique** (DHT22/WBGT) | ✅ | ✅ | ✅ | 43+88+40 = 171 |
-| **H4 — ECG / Stress combiné** (AD8232) | 🟡 | 🟡 | 🟡 | — |
-
-> **H4 bloqué** : en attente du module AD8232 (~20 €, voir `docs/hardware-bom.md`).
-
-**Total tests actifs** : 16 (zscore) + 28 (drift) + 10 (forge_integration) + 30 (biosignal_hal) + 251 modules H = **335 tests** — tous passants.
-
----
-
-### Backlog orienté utilisateur (priorité décroissante)
-
-| Item | Axe | Valeur | Effort | Dépendances |
-|---|---|---|---|---|
-| **U1** — Alertes unifiées cross-modules | Supervisor | ⭐⭐⭐ | M | Prisma migration |
-| **U2** — Vue worker individuelle (multi-capteur) | Supervisor | ⭐⭐⭐ | M | U1 |
-| **U3** — Notifications webhook/email | Ops | ⭐⭐⭐ | S | — |
-| **U5** — Mode démo / injection synthétique | Commercial | ⭐⭐ | S | Mosquitto local |
-| **U4** — Export rapport de session (CSV/JSON) | Compliance | ⭐⭐ | M | — |
-| **S10** — Flash ESP32-CAM réel | Validation | ⭐⭐⭐ | — | Nouvelle MB (~19/03) |
-| **H4** — ECG AD8232 | Sensing | ⭐⭐ | L | AD8232 hardware |
-| **Prod-deploy** — Scaleway VPS, Nginx, HTTPS | Infra | ⭐⭐ | L | — |
-
----
-
-### Historique sessions
+## Roadmap technique
 
 | Session | Produit | Statut | Contenu |
 |---|---|---|---|
-| Forge-4b | Forge | ✅ | LSTMAutoEncoderDetector + export TFLite + C header (`fovet_lstm_autoencoder_model.h`) |
+| Forge-4b | Forge | ✅ | LSTMAutoEncoderDetector + export TFLite + C header |
 | Forge-5 | Forge | ✅ | Rapport HTML/JSON + train/test split + métriques |
 | Forge-6 | Forge | ✅ | CI GitHub Actions + Scaleway GPU |
-| Forge-7 | Forge | ✅ | Benchmark CLI : `forge benchmark --config a.yaml --config b.yaml` |
-| Forge-8 | Forge | ✅ | MADDetector + export `fovet_mad_config.h` (miroir C99 `fovet_mad`) |
-| Forge-9 | Forge | ✅ | Pipeline Scaler + export `fovet_scaler_params.h` (normalize: true) |
-| H1.1 | Sentinelle | ✅ | Driver HAL MPU-6050 (I2C callbacks, ±2g, DLPF, 25 tests) |
-| H1.2 | Forge | ✅ | FallDetectionPipeline (Dense TFLite INT8 < 32 KB, 56 tests) |
-| H1.3 | Sentinelle | ✅ | Profil PTI (FALL/MOTIONLESS/SOS, fenêtre 50 samples, 24 tests) |
-| H1.4 | Vigie | ✅ | Vue Flotte PTI (WorkerCard/Map/AlertTimeline, 39 tests API) |
-| H2.1 | Sentinelle | ✅ | Driver HAL MAX30102 (Pan-Tompkins BPM, SpO₂, 23 tests) |
-| H2.2 | Forge | ✅ | FatigueHRVPipeline (BVP → 7 HRV features → Random Forest AUC ≥ 0.85, 67 tests) |
-| H2.3 | Sentinelle | ✅ | Profil Fatigue (EMA BPM + SpO₂ priority, LED RGB, 3 niveaux, 27 tests) |
-| H2.4 | Vigie | ✅ | Vue Fatigue (FatigueCard + HRVChart + onglet Fatigue) |
-| H3.1 | Sentinelle | ✅ | Driver HAL DHT22 (single-wire, temp + humidity, 43 tests) |
-| H3.2 | Forge | ✅ | ThermalStressPipeline (WBGT Stull 2011, RandomForest AUC ≥ 0.90, 88 tests) |
-| H3.3 | Sentinelle | ✅ | Profil Thermique (SAFE/WARN/DANGER/COLD, WBGT C99, 40 tests) |
-| H3.4 | Vigie | ✅ | Vue Thermique (TempCard + TemperatureChart + onglet Thermique) |
-| H4.1 | Sentinelle | 🟡 | Driver HAL AD8232 (ECG single-lead, R-peaks, RR) |
-| H4.2 | Forge | 🟡 | Pipeline stress combiné (HR + RMSSD + WBGT + accel — WESAD) |
-| H4.3 | Vigie | 🟡 | Vue ECG — tracé temps réel + détection arythmie |
-| U1–U5 | Vigie/Scripts | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT (zScore + madScore) |
-| S10 | Sentinelle | ⏳ ~19/03 | Flash ESP32-CAM (nouvelle carte MB) |
-| S11 | Sentinelle | ⏳ | Capteurs réels : DHT22 (I2C) ou MPU-6050 (accéléromètre) |
+| Forge-7 | Forge | ✅ | Benchmark CLI : `forge benchmark` |
+| Forge-8 | Forge | ✅ | MADDetector + export `fovet_mad_config.h` |
+| Forge-9 | Forge | ✅ | `forge convert` + `forge deploy` — Keras → TFLite → ESP32 |
+| Forge-10 | Forge | ✅ | `forge deploy-manifest` + ManifestConfig + auto-compute `value_min/max` |
+| U1–U5 | Vigie | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT |
+| S10 | Sentinelle | ✅ | Flash ESP32-CAM validé — person_detection + fire_detection (2026-03-22) |
+| S11 | Sentinelle | ✅ | HAL I2C + driver MPU-6050 + exemple `imu_zscore` |
+| UX-1 | Vigie | ✅ | Fenêtre graphe configurable [30s / 100s / 5min / 15min] |
+| UX-2 | Vigie | ✅ | Page onboarding + `/api/healthz` (MQTT + DB status) |
+| Phase 3 | Sentinelle | ⏳ | MPU-6050 sur hardware réel → live Vigie |
 | Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |

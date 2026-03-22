@@ -61,19 +61,25 @@ edge-core/
 │   ├── zscore.c              ← Algorithme de Welford (C99 pur)
 │   ├── drift.c               ← Double EWMA fast/slow
 │   ├── biosignal_hal.c       ← Registre HAL biosignaux (4 slots statiques)
-│   ├── mpu6050_hal.c         ← Pilote MPU-6050 I2C via callbacks injectés
+│   ├── mpu6050_hal.c         ← Pilote MPU-6050 I2C via callbacks injectés (monitoring)
 │   ├── max30102_hal.c        ← Pilote MAX30102 I2C : Pan-Tompkins simplifié + SpO₂
 │   ├── dht22_hal.c           ← Pilote DHT22 single-wire via callbacks pin/pulse/delay
 │   ├── profiles/
 │   │   ├── pti_profile.c     ← Profil PTI (chute + immobilité + SOS)
 │   │   ├── fatigue_profile.c ← Profil Fatigue (EMA BPM + SpO₂ + LED RGB)
 │   │   └── temp_profile.c    ← Profil Thermique (EMA temp + WBGT + COLD/WARN/DANGER)
+│   ├── mad.c                 ← MAD detector (ring buffer + tri par insertion)
+│   ├── drivers/
+│   │   └── mpu6050.c         ← Driver MPU-6050 générique (accéléromètre I2C ±2/4/8/16g)
 │   └── platform/
-│       └── platform_esp32.cpp ← Implémentation HAL pour ESP32/Arduino
+│       └── platform_esp32.cpp ← Implémentation HAL (UART, GPIO, ADC, time, I2C)
 ├── tests/
 │   ├── test_zscore.c         ← 41 tests : Welford, warm-up, saturation, windowed mode
 │   ├── test_drift.c          ← 28 tests : EWMA, complémentarité zscore/drift
-│   ├── test_forge_integration.c ← 10 tests : validation header Forge→Sentinelle
+│   ├── test_forge_integration.c ← 12 tests : validation header Forge→Sentinelle
+│   ├── test_mad.c            ← 28 tests : ring buffer, médiane, MAD, score, détection
+│   ├── test_i2c_hal.c        ← 39 tests : HAL I2C mock (probe, read, write, erreurs)
+│   ├── test_mpu6050.c        ← 33 tests : driver MPU-6050 (init, ranges, read, NACK)
 │   ├── test_biosignal_hal.c  ← 30 tests : registre, register/read/reset, 4 sources
 │   ├── test_mpu6050_hal.c    ← 25 tests : I2C mock, WHO_AM_I, ±2g, rate, magnitude
 │   ├── test_pti_profile.c    ← 24 tests : chute/immobilité/SOS, debounce, callbacks
@@ -82,7 +88,12 @@ edge-core/
 │   ├── test_dht22_hal.c      ← 43 tests : pulse mock, T+/T−/T=0, checksum, range, HAL
 │   └── test_temp_profile.c   ← 40 tests : WBGT, SAFE/WARN/DANGER/COLD, EMA, callbacks
 ├── examples/
-│   └── esp32/zscore_demo/    ← Demo PlatformIO : sinus + MQTT + Vigie
+│   └── esp32/
+│       ├── smoke_test/       ← Premier flash : sinus + ±5σ, sans WiFi/MQTT
+│       ├── zscore_demo/      ← Sinus synthétique + Z-Score + EWMA Drift + MQTT → Vigie
+│       ├── fire_detection/   ← OV2640 RGB565 : 3× Z-Score (R/ratio/variance) → Vigie
+│       ├── person_detection/ ← OV2640 + TFLite MobileNetV1 + Z-Score temporel → Vigie
+│       └── imu_zscore/       ← MPU-6050 I2C + Z-Score sur magnitude → Vigie
 └── library.json              ← Manifest PlatformIO (fovet-sentinelle)
 ```
 
@@ -732,8 +743,56 @@ Tout passe par des fonctions `hal_*` définies dans `include/fovet/hal/`.
 | GPIO | `hal_gpio.h` | `hal_gpio_set_mode()`, `hal_gpio_read()`, `hal_gpio_write()` |
 | ADC | `hal_adc.h` | `hal_adc_read()` |
 | Temps | `hal_time.h` | `hal_time_ms()`, `hal_delay_ms()` |
+| I2C | `hal_i2c.h` | `hal_i2c_init()`, `hal_i2c_write_reg()`, `hal_i2c_read_reg()`, `hal_i2c_probe()` |
 
 **Ajouter un nouveau MCU :** créer `src/platform/platform_<mcu>.c` qui implémente toutes les fonctions `hal_*`.
+
+---
+
+## Drivers capteurs disponibles
+
+| Driver | Fichier | Capteur | Interface | Tests |
+|---|---|---|---|---|
+| MPU-6050 | `drivers/mpu6050.h` | Accéléromètre 3 axes ±2/4/8/16g | I2C | 33 tests |
+
+### MPU-6050 — accéléromètre I2C
+
+```c
+#include "fovet/drivers/mpu6050.h"
+
+mpu6050_accel_t accel;
+
+// Initialiser : adresse 0x68 (AD0=GND), plage ±4g
+if (!mpu6050_init(MPU6050_ADDR_DEFAULT, MPU6050_RANGE_4G)) {
+    // capteur absent ou erreur I2C
+}
+
+// Lire l'accélération
+if (mpu6050_read_accel(MPU6050_ADDR_DEFAULT, &accel)) {
+    // accel.x, accel.y, accel.z en g
+    // accel.magnitude = sqrt(x²+y²+z²) en g
+}
+```
+
+Câblage ESP32-CAM : SDA → GPIO13, SCL → GPIO14, AD0 → GND (adresse 0x68).
+
+**Ajouter un nouveau driver :** créer `include/fovet/drivers/<capteur>.h` +
+`src/drivers/<capteur>.c` + `tests/test_<capteur>.c` (mock HAL I2C).
+Voir `docs/new-use-case.md` pour le guide complet.
+
+---
+
+## Exemples ESP32-CAM
+
+| Exemple | Capteur | Détecteur | Prérequis |
+|---|---|---|---|
+| `smoke_test` | Synthétique | Z-Score | Aucun (premier flash) |
+| `zscore_demo` | Synthétique | Z-Score + EWMA Drift | WiFi + MQTT + Vigie |
+| `fire_detection` | OV2640 (caméra) | 3× Z-Score (R/ratio/var) | WiFi + MQTT + Vigie |
+| `person_detection` | OV2640 (caméra) | TFLite MobileNetV1 + Z-Score | WiFi + MQTT + Vigie |
+| `imu_zscore` | MPU-6050 I2C | Z-Score sur magnitude | MPU-6050 câblé + WiFi + MQTT + Vigie |
+
+Tous utilisent `board=esp32dev` — voir [Hardware gotchas](../CLAUDE.md) pour le détail.
 
 ---
 

@@ -258,6 +258,11 @@ def run_imu(client: mqtt.Client, device_id: str, interval: float,
             "anomaly":    anomaly,
             "sensorType": "IMU",
             "level":      level,
+            # Canonical v2 — manifest fields for Vigie auto-scaling
+            "model_id":   "demo-imu-accel",
+            "unit":       "g",
+            "value_min":  0.0,
+            "value_max":  6.0,
         }
         if pti_type:
             payload["ptiType"] = pti_type
@@ -305,6 +310,11 @@ def run_hr(client: mqtt.Client, device_id: str, interval: float,
             "anomaly":    z > 3.0,
             "sensorType": "HR",
             "level":      level,
+            # Canonical v2 — manifest fields for Vigie auto-scaling
+            "model_id":   "demo-hr-bpm",
+            "unit":       "bpm",
+            "value_min":  40.0,
+            "value_max":  120.0,
         }
         label = f"bpm={bpm:.1f} ema={ema_bpm:.1f}"
         publish(client, device_id, payload, label)
@@ -359,6 +369,11 @@ def run_temp(client: mqtt.Client, device_id: str, interval: float,
             "anomaly":    z > 3.0,
             "sensorType": "TEMP",
             "level":      level,
+            # Canonical v2 — manifest fields for Vigie auto-scaling
+            "model_id":   "demo-temp-celsius",
+            "unit":       "C",
+            "value_min":  10.0,
+            "value_max":  40.0,
         }
         label = f"t={celsius:.1f}°C h={humidity:.0f}% wbgt={wbgt:.1f}"
         publish(client, device_id, payload, label)

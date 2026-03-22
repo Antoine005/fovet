@@ -266,6 +266,30 @@ class PreprocessingConfig(BaseModel):
     normalize: bool = False  # True → StandardScaler fit on train set
 
 
+class ManifestConfig(BaseModel):
+    """Metadata exported to fovet_model_manifest.h for Sentinelle firmware.
+
+    These values are embedded in the C header and used by the firmware to:
+      - identify the Forge model in the MQTT payload (model_id)
+      - tell Vigie the unit and expected range for chart auto-scaling
+      - provide human-readable labels for anomaly/normal states
+
+    Typical sensor values:
+        sensor: "synthetic" | "imu" | "camera" | "temperature" | "hr"
+        unit:   "z_score"   | "g"   | "score"  | "°C"          | "bpm"
+
+    If ``value_min`` / ``value_max`` are omitted (None), Forge computes them
+    automatically from the training dataset (1st / 99th percentile).
+    """
+
+    sensor: str = "unknown"
+    unit: str = "value"
+    value_min: float | None = None   # None → auto-computed from training data (p1)
+    value_max: float | None = None   # None → auto-computed from training data (p99)
+    label_normal: str = "normal"
+    label_anomaly: str = "anomaly"
+
+
 class PipelineConfig(BaseModel):
     """Root configuration for a Fovet Forge pipeline.
 
@@ -281,6 +305,7 @@ class PipelineConfig(BaseModel):
     split: TrainTestSplitConfig = Field(default_factory=TrainTestSplitConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
     report: ReportConfig = Field(default_factory=ReportConfig)
+    manifest: ManifestConfig = Field(default_factory=ManifestConfig)
 
     @model_validator(mode="after")
     def tflite_requires_ml_detector(self) -> PipelineConfig:

@@ -4,7 +4,22 @@
  * Subscribes to fovet/devices/+/readings and persists incoming
  * sensor data from Fovet Sentinelle nodes into PostgreSQL.
  *
- * MQTT message format (JSON):
+ * Canonical MQTT message format v2 (JSON) — all ESP32 firmwares with manifest:
+ * {
+ *   "device_id":  "esp32cam_001",          // optional (also in topic)
+ *   "model_id":   "demo-zscore-sine",      // canonical v2: Forge pipeline ID
+ *   "firmware":   "zscore_demo",           // canonical: identifies the firmware
+ *   "sensor":     "synthetic",             // canonical: sensor type from manifest
+ *   "value":      1.23,                    // required: primary numeric value
+ *   "value_min":  -6.0,                    // canonical v2: expected chart min (from manifest)
+ *   "value_max":   6.0,                    // canonical v2: expected chart max (from manifest)
+ *   "label":      "normal",               // optional: human-readable label from manifest
+ *   "unit":       "z_score",              // optional: value unit from manifest
+ *   "anomaly":    false,                  // optional: anomaly flag
+ *   "ts":         1704067200000,          // optional: Unix ms (defaults to server time)
+ * }
+ *
+ * Legacy format (monitoring/human branch — still supported):
  * {
  *   "value":      1.2345,
  *   "mean":       0.0012,
@@ -43,18 +58,86 @@ const ALERT_MODULES: Record<string, string> = {
 // Levels that trigger an Alert record (in addition to z-score anomalies)
 const ALERT_LEVELS = new Set(["WARN", "DANGER", "COLD", "CRITICAL"]);
 
+// Per-device webhook throttle: deviceId → timestamp of last outbound POST (ms).
+// Alerts are always written to DB; this only limits outbound webhook calls.
+const ALERT_THROTTLE_MS = 60_000;
+const alertThrottle = new Map<string, number>();
+
+// Camera-specific score threshold for raising an alert.
+const CAMERA_ALERT_THRESHOLD = 0.75;
+
 interface SensorPayload {
   value: number;
-  mean: number;
-  stddev: number;
-  zScore: number;
-  anomaly: boolean;
+  // Canonical v2 fields (manifest-driven)
+  model_id?: string;     // Forge pipeline ID — "demo-zscore-sine" | "fire-detection" | ...
+  firmware?: string;     // "person_detection" | "fire_detection" | "zscore_demo" | "smoke_test"
+  sensor?: string;       // sensor type from manifest: "camera" | "synthetic" | "imu" | ...
+  label?: string;        // human-readable label: "normal" | "anomaly" | "person" | "fire" | ...
+  unit?: string;         // value unit from manifest: "score" | "z_score" | "r_mean" | "g" | ...
+  value_min?: number;    // expected chart min (from manifest)
+  value_max?: number;    // expected chart max (from manifest)
+  // Fields present in both canonical and legacy
+  anomaly?: boolean;
   ts?: number;
   sensorType?: string;   // "IMU" | "HR" | "TEMP"
   level?: string;        // "SAFE" | "WARN" | "DANGER" | "COLD" | "CRITICAL"
   ptiType?: string;      // "FALL" | "MOTIONLESS" | "SOS" — IMU module only
   value2?: number;       // secondary value (e.g. humidity %)
 }
+
+/**
+ * Normalise any incoming MQTT payload into a SensorPayload.
+ *
+ * Handles three formats:
+ *   1. Canonical (firmware field present) — all ESP32 Sentinelle firmwares
+ *   2. Legacy camera (score + label fields) — pre-canonical ESP32-CAM
+ *   3. Standard legacy — monitoring/human branch (mean/stddev/zScore required)
+ *
+ * Returns null if the payload cannot be normalised (missing required fields).
+ */
+function normalisePayload(raw: Record<string, unknown>): SensorPayload | null {
+  // --- 1. Canonical format: firmware field is present ---
+  if (typeof raw.firmware === "string") {
+    if (typeof raw.value !== "number" || !isFinite(raw.value as number)) return null;
+    const vmin = typeof raw.value_min === "number" && isFinite(raw.value_min as number)
+      ? raw.value_min as number : undefined;
+    const vmax = typeof raw.value_max === "number" && isFinite(raw.value_max as number)
+      ? raw.value_max as number : undefined;
+    return {
+      model_id:  typeof raw.model_id === "string"  ? raw.model_id as string  : undefined,
+      firmware:  raw.firmware as string,
+      sensor:    typeof raw.sensor   === "string"  ? raw.sensor   as string  : undefined,
+      label:     typeof raw.label    === "string"  ? raw.label    as string  : undefined,
+      unit:      typeof raw.unit     === "string"  ? raw.unit     as string  : undefined,
+      value_min: vmin,
+      value_max: vmax,
+      value:     raw.value as number,
+      anomaly:   typeof raw.anomaly  === "boolean" ? raw.anomaly  as boolean : false,
+      ts:        typeof raw.ts       === "number"  ? raw.ts       as number  : undefined,
+      // Defaults for DB fields that require a value
+      mean:   0,
+      stddev: 0,
+      zScore: 0,
+    };
+  }
+
+  // --- 2. Legacy camera format: score + label (pre-canonical) ---
+  if (typeof raw.score === "number" && typeof raw.label === "string") {
+    return {
+      value:   raw.score as number,
+      label:   raw.label as string,
+      mean:    0,
+      stddev:  1,
+      zScore:  0,
+      anomaly: (raw.label as string) === "person",
+    };
+  }
+
+  // --- 3. Standard legacy format: value required, mean/stddev/zScore optional ---
+  if (typeof raw.value !== "number" || !isFinite(raw.value as number)) return null;
+  return raw as unknown as SensorPayload;
+}
+
 
 interface WebhookPayload {
   deviceId:    string;
@@ -189,27 +272,49 @@ export function startMqttIngestion(): void {
           deviceId: device.id,
           timestamp,
           value: data.value,
-          ...(data.value2 !== undefined && { value2: data.value2 }),
-          mean: data.mean,
-          stddev: data.stddev,
-          zScore: data.zScore,
-          isAnomaly: data.anomaly,
+          ...(data.value2     !== undefined && { value2:    data.value2 }),
+          mean:      data.mean   ?? 0,
+          stddev:    data.stddev ?? 0,
+          zScore:    data.zScore ?? 0,
+          isAnomaly: data.anomaly ?? false,
           ...(data.sensorType && { sensorType: data.sensorType }),
+          ...(data.firmware   && { firmware:   data.firmware }),
+          // Manifest-driven fields (canonical v2)
+          ...(data.model_id   && { modelId:    data.model_id }),
+          ...(data.unit       && { unit:        data.unit }),
+          ...(data.label      && { label:        data.label }),
+          ...(data.value_min  !== undefined && { valueMin:  data.value_min }),
+          ...(data.value_max  !== undefined && { valueMax:  data.value_max }),
         },
       });
 
       // Broadcast to SSE clients
       emitReading(device.id, { ...reading, id: String(reading.id) });
 
-      // Create alert when:
-      //   a) legacy z-score anomaly (anomaly: true), OR
-      //   b) Sentinelle profile level requires attention (WARN/DANGER/COLD/CRITICAL)
-      const shouldAlert =
-        data.anomaly ||
-        (data.level !== undefined && ALERT_LEVELS.has(data.level));
+      // Determine whether to create an alert and at what severity:
+      //   a) Canonical firmware payload: anomaly=true → WARN
+      //   b) Sentinelle profile level (PTI/FATIGUE/THERMAL): WARN/DANGER/COLD/CRITICAL from payload
+      //   c) Generic z-score anomaly: derive severity from |zScore|
+      let shouldAlert = false;
+      let alertLevel: string | null = null;
+
+      if (isCanonical) {
+        if (data.anomaly) {
+          shouldAlert = true;
+          alertLevel  = "WARN";
+        }
+      } else if (data.level !== undefined && ALERT_LEVELS.has(data.level)) {
+        shouldAlert = true;
+        alertLevel  = data.level;
+      } else if (data.anomaly) {
+        shouldAlert = true;
+        alertLevel  = Math.abs(data.zScore ?? 0) >= 5 ? "CRITICAL" : "WARN";
+      }
 
       if (shouldAlert) {
         const alertModule = data.sensorType ? ALERT_MODULES[data.sensorType] ?? null : null;
+
+        // Always persist the alert to DB — Vigie FleetAlertTimeline shows all of them.
         await prisma.alert.create({
           data: {
             deviceId: device.id,
@@ -228,16 +333,23 @@ export function startMqttIngestion(): void {
           (data.level ? ` level=${data.level}` : ` z=${data.zScore.toFixed(2)}`)
         );
 
-        fireWebhook({
-          deviceId:    device.id,
-          deviceName:  device.name,
-          alertModule: alertModule,
-          alertLevel:  data.level   ?? null,
-          ptiType:     data.ptiType ?? null,
-          value:       data.value,
-          zScore:      data.zScore,
-          timestamp:   timestamp.toISOString(),
-        });
+        // Webhook: throttled — at most 1 outbound POST per device per ALERT_THROTTLE_MS.
+        const lastWebhook = alertThrottle.get(device.id) ?? 0;
+        if (now - lastWebhook >= ALERT_THROTTLE_MS) {
+          alertThrottle.set(device.id, now);
+          fireWebhook({
+            deviceId:    device.id,
+            deviceName:  device.name,
+            alertModule: alertModule,
+            alertLevel:  alertLevel,
+            ptiType:     data.ptiType ?? null,
+            value:       data.value,
+            zScore:      data.zScore ?? 0,
+            timestamp:   timestamp.toISOString(),
+          });
+        } else {
+          console.log(`[MQTT] Webhook throttled for ${mqttClientId} (last: ${Math.round((now - lastWebhook) / 1000)}s ago)`);
+        }
       }
     } catch (err) {
       console.error("[MQTT] Processing error:", err);
@@ -251,4 +363,11 @@ export function startMqttIngestion(): void {
 export function stopMqttIngestion(): void {
   client?.end();
   client = null;
+}
+
+export function getMqttStatus(): { connected: boolean; broker: string } {
+  return {
+    connected: client?.connected ?? false,
+    broker: BROKER_URL,
+  };
 }

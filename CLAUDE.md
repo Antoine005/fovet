@@ -43,7 +43,9 @@ fovet/
 ├── edge-core/
 │   ├── include/
 │   │   └── fovet/
-│   │       ├── zscore.h          ← API publique Z-Score detector
+│   │       ├── zscore.h           ← API publique Z-Score detector
+│   │       ├── drift.h            ← API publique Drift detector (EWMA)
+│   │       ├── mad.h              ← API publique MAD detector (Streaming MAD)
 │   │       └── hal/
 │   │           ├── hal_adc.h
 │   │           ├── hal_uart.h
@@ -51,16 +53,25 @@ fovet/
 │   │           └── hal_time.h
 │   ├── src/
 │   │   ├── zscore.c
+│   │   ├── drift.c
+│   │   ├── mad.c
 │   │   └── platform/
-│   │       └── platform_esp32.c  ← Implémentation HAL ESP32
-│   ├── tests/                    ← Tests unitaires compilés en natif (gcc)
+│   │       └── platform_esp32.cpp ← Implémentation HAL ESP32
+│   ├── tests/                     ← Tests unitaires compilés en natif (gcc)
+│   │   ├── test_zscore.c          ← 59 tests (master) / 56 (physio branch)
+│   │   ├── test_drift.c           ← 28 tests
+│   │   └── test_mad.c             ← 28 tests
+│   ├── library.json               ← PlatformIO manifest (fovet-sentinelle)
 │   └── examples/
 │       └── esp32/
-│           └── zscore_demo/      ← Demo PlatformIO ESP32-CAM
-├── automl-pipeline/
-├── platform-dashboard/
+│           ├── smoke_test/        ← Smoke test SDK complet (HAL + Z-Score + LED)
+│           ├── zscore_demo/       ← Z-Score + Drift + MQTT → Vigie
+│           ├── fire_detection/    ← Détection feu/fumée OV2640 (3×Z-Score sur RGB565)
+│           └── person_detection/  ← VWW TFLite Micro + Z-Score temporel → Vigie MQTT
+├── automl-pipeline/               ← Fovet Forge (Python AutoML)
+├── platform-dashboard/            ← Fovet Vigie (Next.js/Hono)
 ├── docs/
-├── CLAUDE.md                     ← Ce fichier
+├── CLAUDE.md                      ← Ce fichier
 └── README.md
 ```
 
@@ -94,22 +105,61 @@ Premier implémenteur : ESP32 (Arduino-ESP-IDF via PlatformIO).
 
 ## Phase de développement actuelle
 
-**Phase 0 — Setup (Semaine 1)**
-- [ ] Installer PlatformIO (VS Code extension)
-- [ ] Créer projet PlatformIO : board=esp32cam, framework=arduino
-- [ ] Hello World UART sur ESP32-CAM
-- [ ] Initialiser structure repo git
+**Phase 0 — Setup** ✅
+- [x] PlatformIO installé (VS Code extension)
+- [x] Structure repo git initialisée (monorepo edge-core / automl-pipeline / platform-dashboard)
+- [x] Premier flash hardware confirmé — CH340 COM4, `board=esp32dev` (voir "Hardware gotchas")
 
-**Phase 1 — Z-Score Detector (Semaines 2–4)**
-- [ ] Implémenter algorithme de Welford en C99 pur (`zscore.c`)
-- [ ] Tests unitaires sur PC (`tests/test_zscore.c`)
-- [ ] Validation sur ESP32-CAM via UART
+**Phase 1 — Z-Score Detector** ✅
+- [x] Algorithme de Welford en C99 pur (`zscore.c`) — 59 tests natifs PC, 0 warning
+- [x] Tests unitaires PC (`tests/test_zscore.c`) — critère ±5σ sinus validé
+- [x] Validation sur ESP32-CAM via UART — smoke test opérationnel (CSV + LED + détection ±5σ)
 
-Critère de sortie Phase 1 : détecte une anomalie +5σ injectée dans un signal sinusoïdal.
+Critère de sortie Phase 1 atteint : détecte une anomalie ±5σ injectée dans un signal sinusoïdal, à la fois sur PC (gcc natif) et sur hardware ESP32-CAM.
+
+**Phase 2 — Premier flash hardware** ✅
+- [x] Smoke test SDK complet : `edge-core/examples/esp32/smoke_test/`
+- [x] HAL ESP32 opérationnel (UART GPIO1/3, GPIO, time) — `platform_esp32.cpp`
+- [x] zscore_demo (Z-Score + Drift + MQTT → Vigie) compilé et prêt à flasher
+- [x] fire_detection (OV2640 QQVGA RGB565 — 3×Z-Score sur R_mean/ratio_rb/variance) ✅
+- [x] person_detection (VWW TFLite Micro — OV2640 96×96 GRAY → MobileNetV1 0.25× → Z-Score → Vigie MQTT) ✅
+- [x] **Validation hardware réelle (2026-03-22)** — ESP32-CAM opérationnel avec person_detection / fire_detection sur hardware physique
+
+**Tests natifs gcc (master) — 115 tests, 0 failing**
+
+| Suite | Tests | Détecteur |
+|---|---|---|
+| test_zscore | 59 | Z-Score Welford + warm-up + windowed |
+| test_drift | 28 | EWMA drift bilatéral |
+| test_mad | 28 | Streaming MAD (médiane glissante) |
+
+**Phase 3 — Capteurs réels (en cours)**
+
+Pré-requis validés : ESP32-CAM opérationnel ✅ — capteurs MPU-6050/MAX30102/DHT22 reçus ✅
+
+- [ ] Brancher MPU-6050 sur I2C : SDA=GPIO13, SCL=GPIO14 sur ESP32-CAM
+- [ ] Implémenter `hal_i2c.h` + I2C read dans `platform_esp32.cpp`
+- [ ] Lire accélération réelle MPU-6050 → `fovet_zscore_update()` en lieu du sinus
+- [ ] Valider la détection sur un mouvement réel (secousse, chute)
+- [ ] Flasher la `zscore_demo` complète avec credentials WiFi/MQTT → données dans Vigie
+
+**Phase 3.5 — Pipeline Forge→Sentinelle→Vigie standardisée** ✅ (2026-03-22)
+- [x] `ManifestConfig` dans Forge — champs `sensor`, `unit`, `value_min`, `value_max`, `label_normal/anomaly`
+- [x] `forge/manifest.py` — génère `fovet_model_manifest.h` à chaque `forge run`
+- [x] `include/fovet/model_manifest.h` — documentation du format manifest dans le SDK
+- [x] Manifests par défaut dans chaque exemple ESP32 (`fovet_model_manifest.h` dans `src/`)
+- [x] Payload MQTT canonique v2 — `model_id`, `value_min`, `value_max` dans chaque publish
+- [x] Prisma `Reading` — champs `modelId`, `unit`, `valueMin`, `valueMax`, `label`
+- [x] `mqtt-ingestion.ts` — parse et persiste les nouveaux champs
+- [x] `ReadingChart.tsx` — auto-scale Y, label unité, ligne zéro, badge `model_id`
+
+**Phase 4 — Déploiement production** (après Phase 3)
+- [ ] VPS Scaleway : Nginx + HTTPS + TimescaleDB
+- [ ] CI/CD : décider GitHub Actions vs Forgejo self-hosted
 
 ---
 
-## Algorithme de Welford (à implémenter en Phase 1)
+## Algorithme de Welford — API publique
 
 Calcule moyenne et variance en ligne (one-pass), zéro malloc, numériquement stable.
 
@@ -118,14 +168,30 @@ typedef struct {
     uint32_t count;
     float mean;
     float M2;
-    float threshold_sigma;  // ex: 3.0f
+    float threshold_sigma;
+    uint32_t warmup_samples;
 } FovetZScore;
 
-void fovet_zscore_init(FovetZScore* ctx, float threshold_sigma);
-bool fovet_zscore_update(FovetZScore* ctx, float sample); // retourne true si anomalie
-float fovet_zscore_get_mean(const FovetZScore* ctx);
+void  fovet_zscore_init    (FovetZScore* ctx, float threshold_sigma, uint32_t warmup);
+bool  fovet_zscore_update  (FovetZScore* ctx, float sample);   // true si anomalie
+float fovet_zscore_get_mean  (const FovetZScore* ctx);
 float fovet_zscore_get_stddev(const FovetZScore* ctx);
 ```
+
+---
+
+## Branche `monitoring/human` (local only — JAMAIS pushée sur GitHub)
+
+Contient tout master + modules physiologiques H1–H3 :
+
+| Module | Capteur | Tests natifs |
+|---|---|---|
+| H1 — PTI (chute/immobilité/SOS) | MPU-6050 I2C | 24 (pti) + 25 (mpu6050) + 30 (biosignal) |
+| H2 — Fatigue cardiaque | MAX30102 HR/SpO₂ | 27 (fatigue) + 23 (max30102) |
+| H3 — Stress thermique | DHT22 WBGT | 40 (temp) + 43 (dht22) |
+| H4 — ECG / Stress combiné | AD8232 | standby (matériel non commandé) |
+
+**Total tests monitoring/human : 212/212 ✅** (vérifié 2026-03-21)
 
 ---
 
@@ -172,9 +238,22 @@ Règle rapide selon ce qui change :
 
 ## Hardware disponible
 
-- **ESP32-CAM** (Espressif, WiFi + caméra OV2640 + antenne externe)
-- Adaptateur USB-UART FTDI **à commander** (indispensable pour flasher l'ESP32-CAM)
-- Capteurs à acquérir : MPU-6050 (accéléromètre I2C), DHT22 (température)
+- **ESP32-CAM** (Espressif AI-Thinker, WiFi + caméra OV2640 + antenne externe) — opérationnel ✅ (validé 2026-03-22 avec person_detection / fire_detection)
+- **Adaptateur CH340** USB-UART sur **COM4** — driver WCH CH341SER installé ✅
+- Capteurs reçus ✅ : MPU-6050 (accéléromètre I2C), MAX30102 (HR/SpO₂), DHT22 (température)
+
+## Hardware gotchas
+
+> **`board=esp32cam` est interdit pour tous les flashs avec adaptateur CH340.**
+>
+> L'initialisation PSRAM déclenchée par `board=esp32cam` crashe silencieusement
+> avant `setup()` : rien n'apparaît dans le moniteur série, même avec le code le
+> plus minimal. Confirmé le 2026-03-21.
+>
+> **Solution :** utiliser `board=esp32dev` dans tous les `platformio.ini`.
+> Le WiFi, UART, GPIO, I2C fonctionnent identiquement. Seule différence :
+> la PSRAM et la caméra ne sont pas initialisées automatiquement (ce qui
+> est souhaitable tant qu'on n'en a pas besoin).
 
 ---
 
@@ -184,4 +263,5 @@ Règle rapide selon ce qui change :
 |---|---|
 | Communication ESP32 → Dashboard | **WiFi + MQTT** — broker Mosquitto souverain sur Scaleway |
 | Base de données timeseries | **PostgreSQL + TimescaleDB** |
+| Board PlatformIO | **`board=esp32dev`** — `board=esp32cam` crash PSRAM silencieux avec CH340 |
 | CI/CD | À décider (GitHub Actions vs Forgejo self-hosted)

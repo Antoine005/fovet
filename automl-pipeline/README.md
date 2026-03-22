@@ -19,12 +19,19 @@ uv sync
 # Installer les dépendances ML (AutoEncoder/TFLite)
 uv sync --extra ml
 
-# Lancer un pipeline de démo
+# Lancer des pipelines de démo
 uv run forge run --config configs/demo_zscore.yaml
+uv run forge run --config configs/demo_drift.yaml
 uv run forge run --config configs/demo_autoencoder.yaml
+uv run forge run --config configs/demo_lstm_autoencoder.yaml
 
 # Valider une config sans lancer le pipeline
 uv run forge validate --config configs/client_vibration.yaml
+
+# Copier le manifest généré dans un projet PlatformIO
+uv run forge deploy-manifest \
+    --config configs/demo_zscore.yaml \
+    --project-dir ../edge-core/examples/esp32/zscore_demo
 
 # Version
 uv run forge version
@@ -44,25 +51,23 @@ automl-pipeline/
 │   │   ├── synthetic.py    ← Générateur sinus/random_walk/constant + anomalies injectées
 │   │   ├── csv_loader.py   ← Lecteur CSV (pandas)
 │   │   └── loader.py       ← Factory load_data(config)
-│   ├── detectors/
-│   │   ├── base.py             ← Detector ABC + DetectionResult
-│   │   ├── zscore.py           ← ZScoreDetector (algo de Welford) + export fovet_zscore_config.h
-│   │   ├── isolation_forest.py ← IsolationForestDetector (sklearn) + export JSON
-│   │   ├── autoencoder.py      ← AutoEncoderDetector (Keras Dense) + export TFLite + C header
-│   │   ├── lstm_autoencoder.py ← LSTMAutoEncoderDetector (Keras LSTM) + export TFLite + C header
-│   │   ├── ewma_drift.py       ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
-│   │   ├── mad.py              ← MADDetector (médiane glissante) + export fovet_mad_config.h
-│   │   └── registry.py         ← build_detectors(configs) factory
-│   └── pipelines/
-│       ├── fall_detection.py   ← FallDetectionPipeline — IMU fenêtre + Dense TFLite INT8 (H1.2)
-│       ├── fatigue_hrv.py      ← FatigueHRVPipeline — BVP → 7 HRV features + Random Forest (H2.2)
-│       └── thermal_stress.py   ← ThermalStressPipeline — DHT22 → WBGT + Random Forest (H3.2)
+│   └── detectors/
+│       ├── base.py         ← Detector ABC + DetectionResult
+│       ├── zscore.py       ← ZScoreDetector (algo de Welford) + export fovet_zscore_config.h
+│       ├── isolation_forest.py ← IsolationForestDetector (sklearn) + export JSON
+│       ├── autoencoder.py  ← AutoEncoderDetector (Keras Dense) + export TFLite + C header
+│       ├── lstm_autoencoder.py ← LSTMAutoEncoderDetector (Keras LSTM) + export TFLite + C header
+│       ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
+│       ├── mad.py          ← MADDetector (médiane glissante) + export fovet_mad_config.h
+│       └── registry.py     ← build_detectors(configs) factory
 ├── configs/
-│   ├── demo_zscore.yaml           ← Démo synthétique sinus + Z-Score
-│   ├── demo_mad.yaml              ← Démo synthétique sinus + MAD detector
-│   ├── demo_autoencoder.yaml      ← Démo synthétique 2D + AutoEncoder TFLite
-│   ├── client_vibration.yaml      ← Template client CSV + Z-Score + Isolation Forest
-│   └── benchmark_4detectors.yaml ← Benchmark comparatif 4 détecteurs (forge benchmark)
+│   ├── demo_zscore.yaml              ← Démo synthétique sinus + Z-Score
+│   ├── demo_drift.yaml               ← Démo synthétique sinus + EWMA Drift
+│   ├── demo_mad.yaml                 ← Démo synthétique sinus + MAD detector
+│   ├── demo_autoencoder.yaml         ← Démo synthétique 2D + AutoEncoder Dense TFLite
+│   ├── demo_lstm_autoencoder.yaml    ← Démo synthétique + LSTM AutoEncoder TFLite
+│   ├── client_vibration.yaml         ← Template client CSV + Z-Score + Isolation Forest
+│   └── benchmark_4detectors.yaml    ← Benchmark comparatif 4 détecteurs (forge benchmark)
 ├── tests/
 │   ├── test_config.py             ← 13 tests config Pydantic
 │   ├── test_data.py               ← 23 tests Dataset + synthetic + CSV
@@ -72,9 +77,7 @@ automl-pipeline/
 │   ├── test_lstm_autoencoder.py   ← 26 tests LSTMAutoEncoderDetector (skip si TF absent)
 │   ├── test_ewma_drift.py         ← 23 tests EWMADriftDetector + export + registry
 │   ├── test_mad_detector.py       ← 34 tests MADDetector + export + registry
-│   ├── test_fall_detection.py     ← 56 tests FallDetectionPipeline (skip si TF absent)
-│   ├── test_fatigue_hrv.py        ← 67 tests FatigueHRVPipeline (sklearn only)
-│   ├── test_thermal_stress.py     ← 88 tests ThermalStressPipeline (WBGT, 4 niveaux)
+│   ├── test_fall_detection.py     ← 56 tests FallDetectionDetector (PTI — chute/immobilité)
 │   ├── test_mqtt_loader.py        ← 9 tests chargement données source MQTT
 │   ├── test_pipeline.py           ← 12 tests Pipeline end-to-end (normalise, split, export)
 │   └── test_preprocessing.py     ← 23 tests Scaler (fit, transform, export JSON + C header)
@@ -88,6 +91,7 @@ automl-pipeline/
 | Détecteur | Type YAML | Déploiement | Export |
 |---|---|---|---|
 | **Z-Score** | `zscore` | ESP32 / MCU | `fovet_zscore_config.h` (SDK C) |
+| **MAD** | `mad` | ESP32 / MCU | `fovet_mad_config.h` + `mad_config.json` |
 | **EWMA Drift** | `ewma_drift` | ESP32 / MCU | `fovet_drift_config.h` + `drift_config.json` |
 | **Isolation Forest** | `isolation_forest` | Cloud ou gateway uniquement | `isolation_forest_config.json` |
 | **AutoEncoder Dense** | `autoencoder` | ESP32 (TFLite Micro) | `autoencoder.tflite` + `fovet_autoencoder_model.h` |
@@ -99,162 +103,7 @@ automl-pipeline/
 
 > **Note EWMA Drift :** complémentaire au Z-Score. Le Z-Score détecte les pics soudains ; EWMA Drift détecte les glissements progressifs que Welford absorbe dans sa moyenne courante. À utiliser conjointement sur signaux physiques lents (température, pression).
 
----
-
-## Pipeline métier — Détection de chute (PTI)
-
-`FallDetectionPipeline` entraîne un modèle de détection de chute sur un signal accéléromètre (IMU) et exporte un fichier `.tflite` INT8 < 32 KB prêt pour TFLite Micro sur ESP32.
-
-### Principe
-
-```
-Signal IMU (ax, ay, az @ 25 Hz)
-    ↓  _compute_magnitude → |a| = sqrt(ax²+ay²+az²)
-    ↓  Fenêtre glissante 50 samples (2 s), pas de 25 samples (50 % overlap)
-    ↓  _extract_window → 10 features par fenêtre
-    ↓  Dense(16, relu) → Dense(8, relu) → Dense(1, sigmoid)
-    ↓  Score ∈ [0, 1]  →  > 0.5 = chute détectée
-```
-
-### 10 features par fenêtre
-
-| Index | Feature | Description |
-|---|---|---|
-| 0 | `magnitude_mean` | Moyenne de \|a\| |
-| 1 | `magnitude_std` | Écart-type de \|a\| |
-| 2 | `magnitude_min` | Minimum de \|a\| |
-| 3 | `magnitude_max` | Maximum de \|a\| |
-| 4 | `magnitude_rms` | RMS de \|a\| |
-| 5 | `magnitude_kurtosis` | Kurtosis (aplatissement) |
-| 6 | `magnitude_skewness` | Asymétrie |
-| 7 | `zcr` | Taux de passage par zéro |
-| 8 | `peak_to_peak` | max - min |
-| 9 | `signal_energy` | sum(\|a\|²) / n |
-
-### Usage
-
-```python
-from forge.pipelines.fall_detection import FallDetectionPipeline, synthesize_fall_data
-
-# Données (DataFrame colonnes : timestamp_ms, sensor_type, value_1/2/3, label)
-data = synthesize_fall_data(n_normal=800, n_fall=200)
-
-pipeline = FallDetectionPipeline(epochs=50, window_samples=50, step_samples=25)
-pipeline.fit(data, verbose=1)
-
-# Évaluation
-report = pipeline.evaluate(data)
-print(report)  # Precision, Recall, F1, confusion matrix
-assert report.meets_spec()  # precision >= 0.92 et recall >= 0.90
-
-# Export vers edge-core (TFLite Micro + headers C + config JSON)
-pipeline.export("path/to/output/")
-```
-
-### Artefacts exportés
-
-| Fichier | Usage |
-|---|---|
-| `fall_detection.tflite` | Inférence TFLite Micro sur ESP32 |
-| `fall_detection_model.h` | Tableau C `g_fall_detection_model[]` + `#define FOVET_FALL_DETECTION_N_FEATURES 10` |
-| `fall_detection_model.cc` | Définition du tableau byte (à compiler avec le firmware) |
-| `fall_detection_config.json` | `scaler_mean`, `scaler_std`, `threshold`, `window_samples` |
-
-### Intégration firmware
-
-```c
-#include "fall_detection_model.h"
-
-// Dans fovet_pti_init(), passer my_fall_score_fn :
-float my_fall_score_fn(const float *mag, uint32_t n) {
-    // 1. Normaliser les 10 features avec scaler_mean / scaler_std
-    // 2. Inférence TFLite Micro → score sigmoid [0, 1]
-    return score;
-}
-```
-
----
-
-## Pipeline métier — Détection fatigue / HRV (H2.2)
-
-`FatigueHRVPipeline` entraîne un Random Forest sur des features HRV extraites d'un signal BVP (Blood Volume Pulse) et exporte un header C avec les seuils pour Sentinelle (H2.3). Aucune dépendance TensorFlow — sklearn uniquement.
-
-### Principe
-
-```
-Signal BVP (value_1 @ 64 Hz, sensor_type="hr")
-    ↓  _bvp_to_rr → détection pics (scipy.signal.find_peaks) → RR intervals (ms)
-    ↓  Fenêtre glissante 120 s, pas de 60 s
-    ↓  _extract_hrv_features → 7 features HRV par fenêtre
-    ↓  RandomForestClassifier (sklearn) — AUC ≥ 0.85
-    ↓  Proba ∈ [0, 1]  →  > 0.5 = fatigue détectée
-```
-
-### 7 features HRV par fenêtre
-
-| Index | Feature | Description |
-|---|---|---|
-| 0 | `mean_rr` | Intervalle RR moyen (ms) |
-| 1 | `sdnn` | Écart-type des RR (ms) — HRV globale |
-| 2 | `rmssd` | RMS des différences successives (ms) — tonus parasympathique |
-| 3 | `pnn50` | Proportion de \|ΔRR\| > 50 ms |
-| 4 | `mean_hr` | FC moyenne (bpm) = 60 000 / mean_rr |
-| 5 | `cv_rr` | Coefficient de variation = sdnn / mean_rr |
-| 6 | `range_rr` | max_rr - min_rr (ms) |
-
-### Usage
-
-```python
-from forge.pipelines.fatigue_hrv import FatigueHRVPipeline, synthesize_fatigue_data
-
-# Données synthétiques WESAD-like (BVP @ 64 Hz)
-data = synthesize_fatigue_data(n_baseline_s=600, n_stress_s=300)
-
-pipeline = FatigueHRVPipeline(window_s=120, step_s=60, n_estimators=100)
-pipeline.fit(data)
-
-# Évaluation — spec : AUC ≥ 0.85
-report = pipeline.evaluate(data)
-print(report)
-assert report.meets_spec()  # AUC >= 0.85
-
-# Export vers edge-core (header C + config JSON + modèle joblib)
-pipeline.export("models/fatigue_hrv/")
-```
-
-### Artefacts exportés
-
-| Fichier | Usage |
-|---|---|
-| `fatigue_hrv_model.pkl` | Modèle RandomForest sérialisé (joblib) — prédiction batch |
-| `fatigue_hrv_config.json` | `scaler_mean`, `scaler_std`, `feature_importances`, `threshold` |
-| `fatigue_hrv_thresholds.h` | Header C pour Sentinelle MCU (H2.3) — seuils RMSSD / HR |
-
-### Intégration firmware (H2.3)
-
-```c
-#include "fatigue_hrv_thresholds.h"
-
-// Classifier la fatigue en 3 niveaux à partir des features HRV temps réel :
-fovet_fatigue_level_t classify_fatigue(float rmssd_ms, float mean_hr_bpm) {
-    if (rmssd_ms > FOVET_FATIGUE_RMSSD_OK)    return FOVET_FATIGUE_LEVEL_OK;
-    if (rmssd_ms < FOVET_FATIGUE_RMSSD_ALERT) return FOVET_FATIGUE_LEVEL_CRITICAL;
-    return FOVET_FATIGUE_LEVEL_ALERT;
-}
-```
-
-### Données réelles (WESAD)
-
-```bash
-# Télécharger WESAD (accès académique — https://ubicomp.ifi.lmu.de/pub/datasets/WESAD/)
-# Extraire dans datasets/raw/wesad/ (structure S2/S2.pkl, S3/S3.pkl, ...)
-uv run python -m forge.datasets.download_human_datasets parse wesad \
-    --raw-dir datasets/raw/wesad \
-    --output-dir datasets/human
-# Puis entraîner sur données réelles :
-# df = load_parsed(Path("datasets/human"), "wesad")
-# pipeline.fit(df[df["sensor_type"] == "hr"])
-```
+> **Note MAD :** alternative robuste au Z-Score. Contrairement à Welford dont la moyenne/variance sont contaminées par les outliers passés, la médiane et la MAD sont insensibles aux valeurs extrêmes. Préférer MAD sur signaux bruités ou avec outliers récurrents.
 
 ## Prétraitement (optionnel)
 
@@ -305,6 +154,33 @@ export:
   targets: [c_header, tflite_micro, json_config]
   output_dir: models/
   quantization: float32  # ou int8 pour production ESP32
+
+# Manifest — métadonnées intégrées dans le payload MQTT et le graphe Vigie
+manifest:
+  sensor: temperature     # ex: imu, temperature, pressure, vibration
+  unit: "°C"              # unité affichée dans Vigie
+  # value_min / value_max : OPTIONNELS
+  # Si absents → calculés automatiquement depuis les percentiles p1/p99 du dataset
+  # Si définis → utilisés tels quels (utile si la plage physique est connue)
+  value_min: -10.0
+  value_max: 60.0
+  label_normal:  normal
+  label_anomaly: anomaly
+```
+
+### `manifest.value_min` / `value_max` — calcul automatique
+
+Quand `value_min` ou `value_max` sont absents du YAML, Forge les calcule automatiquement
+depuis les percentiles **p1 / p99** des données d'entraînement. C'est le comportement
+recommandé pour les premières itérations.
+
+```yaml
+# Minimal — Forge calcule value_min/max automatiquement
+manifest:
+  sensor: vibration
+  unit: g
+  label_normal: normal
+  label_anomaly: anomaly
 ```
 
 ## Boucle Forge → Sentinelle
@@ -354,13 +230,171 @@ static FovetDrift fovet_drift_temperature = {
 };
 ```
 
+### MAD (signal bruité / outliers récurrents)
+
+```
+Données capteurs (signal bruité, outliers passés possibles)
+    ↓
+Forge : fit() sur données propres → ring buffer seedé + seuil auto (99e percentile)
+    ↓
+Export : fovet_mad_config.h + mad_config.json
+    ↓
+ESP32 : #include "fovet_mad_config.h" → fovet_mad_update() dans HAL loop
+```
+
+```c
+static FovetMAD fovet_mad_temperature = {
+    .window        = {23.85f, 23.91f, /* … 128 entrées … */},
+    .scratch       = {0},
+    .head          = 0U,
+    .count         = 32U,
+    .win_size      = 32U,
+    .threshold_mad = 3.500000f,   // auto-calibré à 99e percentile
+};
+```
+
+### `forge deploy-manifest` — copier le manifest dans un projet PlatformIO
+
+Après `forge run`, copie `models/<pipeline>/fovet_model_manifest.h` dans le dossier
+`src/` d'un projet PlatformIO. À exécuter à chaque nouvelle calibration.
+
+```bash
+# Syntaxe
+uv run forge deploy-manifest \
+    --config configs/<use_case>.yaml \
+    --project-dir ../edge-core/examples/esp32/<use_case>
+
+# Exemple concret
+uv run forge deploy-manifest \
+    --config configs/demo_zscore.yaml \
+    --project-dir ../edge-core/examples/esp32/zscore_demo
+# → Copie models/demo_zscore/fovet_model_manifest.h
+#   dans edge-core/examples/esp32/zscore_demo/src/fovet_model_manifest.h
+```
+
+Le manifest embarqué dans le firmware encode : `model_id`, `sensor`, `unit`,
+`value_min`, `value_max`, `label_normal`, `label_anomaly`. Ces valeurs sont publiées
+dans chaque payload MQTT et utilisées par Vigie pour auto-scaler le graphe.
+
+---
+
 ## Tests
 
 ```bash
 uv run pytest -v
-# ~470 tests au total (branch monitoring/human : +H1/H2/H3 pipelines)
-# 321 tests master (dont quelques-uns skippés si TF absent)
-# 186 tests toujours actifs (sklearn only, sans TF)
+# 321 tests (dont quelques-uns skippés si TF absent)
+```
+
+## Déploiement ESP32 — Workflow complet
+
+```
+Données capteurs (CSV / MQTT / synthétique)
+    ↓
+forge run --config config.yaml          ← entraînement + export .tflite
+    ↓
+forge convert --model model.h5          ← (optionnel) Keras → TFLite + validation RAM
+    ↓
+forge deploy --model model.tflite       ← génère model_data.cpp → pio compile → flash
+    ↓
+ESP32 : détection d'anomalies en temps réel
+```
+
+### `forge convert` — Keras → TFLite
+
+Convertit un modèle Keras entraîné en `.tflite` optimisé pour MCU. Valide que le
+tensor arena tient en RAM ESP32 (< 200 KB) et génère un rapport de compatibilité.
+
+```bash
+# Conversion float32 (par défaut)
+uv run forge convert --model models/autoencoder/autoencoder.h5 --output my_model.tflite
+
+# Conversion INT8 full-quantisée (recommandé pour production ESP32)
+uv run forge convert \
+    --model models/autoencoder/autoencoder.h5 \
+    --output my_model_int8.tflite \
+    --quantization int8
+
+# INT8 avec données de calibration réelles (meilleure précision)
+uv run forge convert \
+    --model models/autoencoder/autoencoder.h5 \
+    --quantization int8 \
+    --calibration data/sensor_calib.npy
+```
+
+Sorties générées :
+- `my_model.tflite` — modèle TFLite (float32 ou INT8)
+- `my_model.compat.json` — rapport : taille modèle, estimation arena, warnings
+
+```json
+{
+  "quantization": "int8",
+  "model_size_kb": 18.4,
+  "tensor_arena_estimate_kb": 42.1,
+  "fits_esp32_arena": true,
+  "esp32_max_arena_kb": 200,
+  "warnings": []
+}
+```
+
+### `forge deploy` — TFLite → ESP32
+
+Convertit le `.tflite` en tableau C, le copie dans le projet PlatformIO,
+compile et flashe sur COM4.
+
+```bash
+# Déployer sur person_detection (cible par défaut)
+uv run forge deploy --model my_model.tflite --target person_detection
+
+# Compiler seulement (vérifier sans flasher)
+uv run forge deploy --model my_model.tflite --target person_detection --compile-only
+
+# Port USB différent
+uv run forge deploy --model my_model.tflite --target person_detection --port COM5
+
+# Cible custom (projet PlatformIO arbitraire)
+uv run forge deploy \
+    --model my_model.tflite \
+    --target my_env \
+    --project-dir D:/mon_projet_pio
+```
+
+**Cibles intégrées :**
+
+| Cible | Répertoire | Variable C |
+|---|---|---|
+| `person_detection` | `edge-core/examples/esp32/person_detection/` | `g_person_detect_model_data` |
+| `fire_detection` | `edge-core/examples/esp32/fire_detection/` | `g_fire_model_data` |
+| `zscore_demo` | `edge-core/examples/esp32/zscore_demo/` | `g_model_data` |
+
+Le script génère un `model_data.cpp` compatible TFLite Micro :
+
+```cpp
+// Auto-generated by Fovet Forge deploy.py — do not edit manually.
+alignas(16) const unsigned char g_person_detect_model_data[] = {
+    0x1c, 0x00, 0x00, 0x00, ...
+};
+const int g_person_detect_model_data_len = 18432;
+```
+
+### Workflow end-to-end type AutoEncoder
+
+```bash
+# 1. Entraîner et exporter le TFLite depuis un pipeline Forge
+uv run forge run --config configs/demo_autoencoder.yaml
+#    → models/demo_autoencoder/autoencoder.tflite
+
+# 2. Valider la compatibilité ESP32
+uv run forge convert \
+    --model models/demo_autoencoder/autoencoder.tflite \
+    --quantization int8
+#    → models/demo_autoencoder/autoencoder_int8.tflite  (si export direct depuis pipeline)
+#    Note : si la config exporte déjà en int8, l'étape convert est optionnelle
+
+# 3. Déployer et flasher
+uv run forge deploy \
+    --model models/demo_autoencoder/autoencoder.tflite \
+    --target person_detection
+#    → édite src/model_data.cpp → pio run → pio run --target upload
 ```
 
 ## Roadmap Forge
@@ -375,5 +409,6 @@ uv run pytest -v
 | Forge-4b | ✅ | LSTMAutoEncoderDetector (Keras LSTM) + export TFLite + C header |
 | Forge-5 | ✅ | Rapport HTML/JSON + train/test split + métriques évaluation |
 | Forge-6 | ✅ | CI GitHub Actions + workflow GPU Scaleway |
-| H1.2 (monitoring/human) | ✅ | FallDetectionPipeline — détection chute IMU, TFLite INT8, 56 tests |
-| H2.2 (monitoring/human) | ✅ | FatigueHRVPipeline — BVP→HRV, Random Forest, AUC ≥ 0.85, 67 tests |
+| Forge-7 | ✅ | Benchmark CLI : `forge benchmark --config a.yaml --config b.yaml` |
+| Forge-8 | ✅ | MADDetector + export `fovet_mad_config.h` (miroir C99 `fovet_mad`) |
+| Forge-9 | ✅ | `forge convert` + `forge deploy` — pipeline Keras → TFLite → ESP32 |
