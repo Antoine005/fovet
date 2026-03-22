@@ -31,11 +31,11 @@ except ImportError:
     print("  uv run --with paho-mqtt scripts/vigie_mqtt_listener.py")
     sys.exit(1)
 
-BROKER   = os.environ.get("MQTT_BROKER",   "localhost")
-PORT     = int(os.environ.get("MQTT_PORT", "1883"))
-USER     = os.environ.get("MQTT_USER",     "fovet-vigie")
-PASSWORD = os.environ.get("MQTT_PASSWORD", "")
-TOPIC    = os.environ.get("MQTT_TOPIC",    "fovet/devices/+/readings")
+BROKER   = os.environ.get("MQTT_BROKER",   "localhost").strip()
+PORT     = int(os.environ.get("MQTT_PORT", "1883").strip())
+USER     = os.environ.get("MQTT_USER",     "fovet-vigie").strip()
+PASSWORD = os.environ.get("MQTT_PASSWORD", "").strip()
+TOPIC    = os.environ.get("MQTT_TOPIC",    "fovet/devices/+/readings").strip()
 
 # Couleurs ANSI (désactivées si pas de terminal)
 _tty = sys.stdout.isatty()
