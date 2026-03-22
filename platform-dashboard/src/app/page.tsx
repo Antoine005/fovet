@@ -17,6 +17,7 @@ interface Device {
   mqttClientId: string;
   location: string | null;
   active: boolean;
+  lastReadingAt: string | null;
 }
 
 export default function DashboardPage() {
@@ -34,20 +35,32 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    apiFetch("/api/devices")
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data: Device[]) => {
-        setDevices(data);
-        if (data.length > 0) setSelectedId(data[0].id);
-        // Switch directly to detail view if only one device
-        if (data.length === 1) setView("detail");
-      })
-      .catch((err: unknown) => {
-        setFetchError(err instanceof Error ? err.message : "Erreur réseau");
-      });
+    let initialised = false;
+
+    function fetchDevices() {
+      apiFetch("/api/devices")
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
+        .then((data: Device[]) => {
+          setDevices(data);
+          if (!initialised) {
+            initialised = true;
+            if (data.length > 0) setSelectedId((prev) => prev ?? data[0].id);
+            if (data.length === 1) setView("detail");
+          }
+          setFetchError(null);
+        })
+        .catch((err: unknown) => {
+          setFetchError(err instanceof Error ? err.message : "Erreur réseau");
+        });
+    }
+
+    fetchDevices();
+    // Poll every 5 s to keep connection status fresh
+    const interval = setInterval(fetchDevices, 5_000);
+    return () => clearInterval(interval);
   }, [router]);
 
   const selectDevice = (id: string) => {

@@ -33,6 +33,7 @@ interface Props {
 const POLL_INTERVAL = 15_000;
 const READINGS_LIMIT = 60;
 const ALERTS_LIMIT = 20;
+const CONNECTED_THRESHOLD_MS = 30_000;
 
 export function FleetPanel({ deviceId, deviceName, mqttClientId, location, onSelect }: Props) {
   const [readings, setReadings] = useState<Reading[]>([]);
@@ -76,6 +77,10 @@ export function FleetPanel({ deviceId, deviceName, mqttClientId, location, onSel
   }));
   const hasAlerts = alertCount > 0 || alertsHasMore;
   const latestValue = readings.at(-1)?.value;
+  const latestTimestamp = readings.at(-1)?.timestamp;
+  const isConnected =
+    latestTimestamp !== undefined &&
+    Date.now() - new Date(latestTimestamp).getTime() < CONNECTED_THRESHOLD_MS;
 
   return (
     <button
@@ -97,7 +102,16 @@ export function FleetPanel({ deviceId, deviceName, mqttClientId, location, onSel
               {alertCount}{alertsHasMore ? "+" : ""}
             </span>
           )}
-          <span className="w-2 h-2 rounded-full bg-green-400" title="Actif" />
+          <span
+            className={`w-2 h-2 rounded-full ${
+              latestTimestamp === undefined
+                ? "bg-gray-600"
+                : isConnected
+                  ? "bg-green-400"
+                  : "bg-red-500"
+            }`}
+            title={latestTimestamp === undefined ? "Aucune donnée" : isConnected ? "Connecté" : "Déconnecté"}
+          />
         </div>
       </div>
       <p className="text-xs text-gray-500 font-mono truncate mb-2">{mqttClientId}</p>

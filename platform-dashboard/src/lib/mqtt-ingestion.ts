@@ -176,11 +176,14 @@ export function startMqttIngestion(): void {
       let timestamp: Date;
       if (data.ts !== undefined && typeof data.ts === "number" && data.ts > UNIX_MS_MIN) {
         if (!isFinite(data.ts) || data.ts < now - FIVE_MIN || data.ts > now + FIVE_MIN) {
-          console.warn(`[MQTT] Rejected timestamp from ${mqttClientId}: ${data.ts}`);
-          return;
+          // Timestamp looks like a valid Unix ms but is out of range — use server time
+          console.warn(`[MQTT] Ignoring out-of-range timestamp from ${mqttClientId}: ${data.ts}, using server time`);
+          timestamp = new Date();
+        } else {
+          timestamp = new Date(data.ts);
         }
-        timestamp = new Date(data.ts);
       } else {
+        // Small value (device uptime) or missing — always use server time
         timestamp = new Date();
       }
 

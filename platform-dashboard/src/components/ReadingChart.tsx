@@ -14,7 +14,8 @@ import {
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
-const MAX_READINGS = 200;
+const MAX_READINGS = 500; // large buffer — sliding window does the actual trimming
+const WINDOW_MS = 100_000; // display only the last 100 seconds
 
 interface Reading {
   id: string;
@@ -38,10 +39,17 @@ export function ReadingChart({ deviceId }: Props) {
   const [readings, setReadings] = useState<Reading[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"sse" | "polling">("sse");
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountedRef = useRef(false);
+
+  // 1-second tick to slide the time window
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const appendReading = useCallback((r: Reading) => {
     setReadings((prev) => {
@@ -97,7 +105,13 @@ export function ReadingChart({ deviceId }: Props) {
 
         retryCountRef.current += 1;
         if (retryCountRef.current >= SSE_MAX_RETRIES) {
+          // Switch to polling, but retry SSE after 60 s
           setMode("polling");
+          retryTimerRef.current = setTimeout(() => {
+            if (unmountedRef.current) return;
+            retryCountRef.current = 0;
+            connectSSE(); // back in the same closure — safe to call
+          }, 60_000);
           return;
         }
 
@@ -129,7 +143,12 @@ export function ReadingChart({ deviceId }: Props) {
     return () => clearInterval(interval);
   }, [mode, fetchInitial]);
 
-  const chartData = readings.map((r) => ({
+  // Keep only the last 100 seconds; re-evaluated every second via nowMs
+  const windowed = readings.filter(
+    (r) => nowMs - new Date(r.timestamp).getTime() <= WINDOW_MS
+  );
+
+  const chartData = windowed.map((r) => ({
     ts: format(new Date(r.timestamp), "HH:mm:ss", { locale: fr }),
     value: r.value,
     mean: r.mean,
@@ -141,7 +160,7 @@ export function ReadingChart({ deviceId }: Props) {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold text-white">Signal capteur</h2>
         <span className="text-xs text-gray-500">
-          {readings.length} mesures —{" "}
+          {windowed.length} mesures / 100 s —{" "}
           {mode === "sse" ? "temps réel (SSE)" : "rafraîchissement 5s"}
         </span>
       </div>
@@ -150,9 +169,11 @@ export function ReadingChart({ deviceId }: Props) {
         <div className="h-48 flex items-center justify-center text-red-400 text-sm">
           {error}
         </div>
-      ) : readings.length === 0 ? (
+      ) : windowed.length === 0 ? (
         <div className="h-48 flex items-center justify-center text-gray-600 text-sm">
-          En attente de données MQTT…
+          {readings.length > 0
+            ? "Aucune mesure dans les 100 dernières secondes"
+            : "En attente de données MQTT…"}
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={240}>
