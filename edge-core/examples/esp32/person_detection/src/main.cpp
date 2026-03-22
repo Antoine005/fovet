@@ -258,12 +258,16 @@ static bool tflite_init(void)
 
 static bool wifi_connect(void)
 {
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect(true);
+    hal_delay_ms(100);
+
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     hal_uart_print("[WiFi] Connexion");
 
     uint32_t t0 = hal_time_ms();
     while (WiFi.status() != WL_CONNECTED) {
-        if ((hal_time_ms() - t0) > 15000U) {
+        if ((hal_time_ms() - t0) > 30000U) {
             hal_uart_print("\r\n[WiFi] TIMEOUT — mode UART seul\r\n");
             return false;
         }
@@ -402,6 +406,13 @@ void setup(void)
     hal_uart_print("\r\n");
     hal_uart_print("[Fovet] Person Detection — TFLite Micro + Z-Score\r\n\r\n");
 
+    /* WiFi must connect before TFLite allocates its 100 KB arena from DRAM.
+     * The WiFi stack needs ~60-100 KB of DRAM; starting it first guarantees
+     * it can allocate that memory before TFLite competes for the same pool. */
+    if (wifi_connect()) {
+        mqtt_connect();
+    }
+
     if (!camera_init()) {
         hal_uart_print("[FATAL] Camera non initialisee\r\n");
         while (true) { hal_delay_ms(1000); }
@@ -413,10 +424,6 @@ void setup(void)
     }
 
     fovet_zscore_init(&g_zs_person, ZSCORE_THRESHOLD, WARMUP_FRAMES);
-
-    if (wifi_connect()) {
-        mqtt_connect();
-    }
 
     hal_uart_print("[CAM] Stabilisation AEC/AWB (5 frames)...\r\n");
     for (int i = 0; i < 5; i++) {
