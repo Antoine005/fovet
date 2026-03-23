@@ -270,6 +270,204 @@ def deploy_manifest(
     console.print(f"  Sensor   : {cfg.manifest.sensor}")
 
 
+@app.command(name="new-usecase")
+def new_usecase(
+    name: str = typer.Option(..., "--name", "-n", help="Use-case slug, e.g. vibration-monitor"),
+    sensor: str = typer.Option("synthetic", "--sensor", "-s",
+                               help="synthetic | imu | temperature | hr | camera | custom"),
+    detector: str = typer.Option("zscore", "--detector", "-d",
+                                 help="zscore | mad | drift | autoencoder | lstm_autoencoder"),
+    data: Path = typer.Option(None, "--data", help="Path to CSV dataset (omit for synthetic)"),
+    column: str = typer.Option("value", "--column", help="CSV column name to use as signal"),
+    port: str = typer.Option("COM4", "--port", "-p", help="Serial port for PlatformIO flash"),
+    sigma: float = typer.Option(3.0, "--sigma", help="Detection threshold (sigma for zscore/mad)"),
+) -> None:
+    """Scaffold a complete use-case: Forge config + ESP32 PlatformIO project.
+
+    \\b
+    Example — vibration anomaly from Kaggle CSV:
+
+        forge new-usecase --name vibration-monitor \\
+                          --sensor imu \\
+                          --detector zscore \\
+                          --data data/vibration.csv \\
+                          --column acceleration_x
+
+    Then run the pipeline and deploy in one command:
+
+        forge run --config configs/vibration-monitor.yaml
+        forge deploy-full --config configs/vibration-monitor.yaml \\
+                          --project-dir edge-core/examples/esp32/vibration-monitor
+    """
+    from forge.scaffolding import scaffold_usecase, _DETECTOR_IS_STATS, _DETECTOR_IS_ML  # noqa: PLC0415
+
+    valid_detectors = _DETECTOR_IS_STATS | _DETECTOR_IS_ML
+    if detector not in valid_detectors:
+        err_console.print(f"Unknown detector: {detector}. Choose from: {', '.join(sorted(valid_detectors))}")
+        raise typer.Exit(1)
+
+    if data is not None and not data.exists():
+        err_console.print(f"CSV file not found: {data}")
+        raise typer.Exit(1)
+
+    # Auto-detect repo root (go up from cli.py until we find edge-core/)
+    root = Path(__file__).resolve()
+    for _ in range(10):
+        root = root.parent
+        if (root / "edge-core").is_dir():
+            break
+    else:
+        err_console.print("Could not find repo root (no edge-core/ directory found).")
+        raise typer.Exit(1)
+
+    console.print(f"[bold]Fovet Forge new-usecase[/bold]")
+    console.print(f"  Name     : [cyan]{name}[/cyan]")
+    console.print(f"  Sensor   : {sensor}")
+    console.print(f"  Detector : {detector}")
+    console.print(f"  Data     : {data if data else 'synthetic (sine wave)'}")
+    console.print(f"  Port     : {port}")
+    console.print()
+
+    try:
+        from forge.scaffolding import scaffold_usecase  # noqa: PLC0415
+        result = scaffold_usecase(
+            name=name,
+            sensor=sensor,
+            detector=detector,
+            data_path=str(data) if data else None,
+            column=column,
+            port=port,
+            threshold_sigma=sigma,
+            root_dir=root,
+        )
+    except Exception as e:
+        err_console.print(f"Scaffolding failed: {e}")
+        raise typer.Exit(1)
+
+    slug = name.replace(" ", "-").lower()
+    console.print("[green]OK[/green] Files created:")
+    for f in result.files_created:
+        console.print(f"  [cyan]{f}[/cyan]")
+
+    console.print()
+    console.print("[bold]Next steps:[/bold]")
+    console.print(f"  1. Copy [cyan]{result.project_dir}/src/config.h.example[/cyan] -> [cyan]config.h[/cyan] and fill in WiFi/MQTT credentials")
+    console.print(f"  2. [cyan]uv run forge run --config configs/{slug}.yaml[/cyan]")
+    console.print(f"  3. [cyan]uv run forge deploy-full --config configs/{slug}.yaml --project-dir {result.project_dir}[/cyan]")
+    console.print(f"  4. Open Vigie and register the device: POST /api/devices {{\"mqttClientId\": \"esp32-{slug[:16]}\"}}")
+
+
+@app.command(name="deploy-full")
+def deploy_full(
+    config: Path = typer.Option(..., "--config", "-c", help="Path to pipeline YAML config"),
+    project_dir: Path = typer.Option(..., "--project-dir", "-p", help="PlatformIO project directory"),
+    port: str = typer.Option("COM4", "--port", help="Serial upload port"),
+    compile_only: bool = typer.Option(False, "--compile-only", help="Compile only, skip flash"),
+) -> None:
+    """Run the full Forge -> Sentinelle pipeline in one command.
+
+    Chains: forge run -> forge deploy-manifest -> pio compile -> pio flash.
+
+    \\b
+        forge deploy-full --config configs/vibration-monitor.yaml \\
+                          --project-dir edge-core/examples/esp32/vibration-monitor
+    """
+    import subprocess  # noqa: PLC0415
+    import shutil      # noqa: PLC0415
+
+    cfg = _load_config(config)
+    if cfg is None:
+        raise typer.Exit(1)
+
+    slug = cfg.name
+    src_dir = project_dir / "src"
+    if not src_dir.is_dir():
+        err_console.print(f"PlatformIO src/ not found: {src_dir}\nRun forge new-usecase first.")
+        raise typer.Exit(1)
+
+    # Step 1 — forge run
+    console.print(f"\n[bold cyan]Step 1/4[/bold cyan] — Training pipeline: [bold]{slug}[/bold]")
+    pipeline = _load_pipeline(config)
+    if pipeline is None:
+        raise typer.Exit(1)
+    try:
+        pipeline.run()
+    except Exception as e:
+        err_console.print(f"Pipeline failed: {e}")
+        raise typer.Exit(1)
+    console.print("[green]OK[/green] Pipeline complete.")
+
+    # Step 2 — deploy manifest
+    console.print(f"\n[bold cyan]Step 2/4[/bold cyan] — Deploying manifest to [cyan]{src_dir}[/cyan]")
+    manifest_src = Path(cfg.export.output_dir) / "fovet_model_manifest.h"
+    if not manifest_src.exists():
+        err_console.print(f"Manifest not found: {manifest_src}")
+        raise typer.Exit(1)
+    manifest_dest = src_dir / "fovet_model_manifest.h"
+    shutil.copy2(manifest_src, manifest_dest)
+    console.print(f"[green]OK[/green] Manifest -> [cyan]{manifest_dest}[/cyan]")
+
+    # Step 3 — for ML detectors, copy model_data.h / model_data.cpp
+    from forge.config import DetectorType  # noqa: PLC0415
+    ml_detectors = {DetectorType.autoencoder, DetectorType.lstm_autoencoder}
+    has_ml = any(d.type in ml_detectors for d in cfg.detectors)
+
+    if has_ml:
+        console.print(f"\n[bold cyan]Step 3/4[/bold cyan] — Copying TFLite model to firmware")
+        # Find the first tflite file in output_dir
+        output_dir = Path(cfg.export.output_dir)
+        tflite_files = list(output_dir.glob("*.tflite"))
+        if not tflite_files:
+            err_console.print(f"No .tflite file found in {output_dir}. Run forge run first.")
+            raise typer.Exit(1)
+        tflite_path = tflite_files[0]
+        # Generate model_data.cpp
+        try:
+            from forge.deploy import generate_model_cpp  # noqa: PLC0415
+            model_cpp = generate_model_cpp(tflite_path, array_name="g_model_data")
+            cpp_dest = src_dir / "model_data.cpp"
+            cpp_dest.write_text(model_cpp, encoding="utf-8")
+            console.print(f"[green]OK[/green] model_data.cpp -> [cyan]{cpp_dest}[/cyan]")
+        except Exception as e:
+            err_console.print(f"Model copy failed: {e}")
+            raise typer.Exit(1)
+    else:
+        console.print(f"\n[bold cyan]Step 3/4[/bold cyan] — Statistical detector: no TFLite needed")
+        # Copy C header config (fovet_zscore_config.h / fovet_mad_config.h / fovet_drift_config.h)
+        output_dir = Path(cfg.export.output_dir)
+        for h_file in output_dir.glob("fovet_*_config.h"):
+            dest = src_dir / h_file.name
+            shutil.copy2(h_file, dest)
+            console.print(f"[green]OK[/green] {h_file.name} -> [cyan]{dest}[/cyan]")
+
+    # Step 4 — pio compile (+ upload)
+    console.print(f"\n[bold cyan]Step 4/4[/bold cyan] — PlatformIO {'compile' if compile_only else 'compile + flash'}")
+
+    pio_cmd_base = ["pio", "run", "--project-dir", str(project_dir)]
+    try:
+        result = subprocess.run(pio_cmd_base, check=True, capture_output=False)
+    except FileNotFoundError:
+        err_console.print("pio not found. Install PlatformIO: https://platformio.org/install/cli")
+        raise typer.Exit(1)
+    except subprocess.CalledProcessError:
+        err_console.print("PlatformIO compile failed.")
+        raise typer.Exit(1)
+
+    if not compile_only:
+        pio_upload = pio_cmd_base + ["--target", "upload", "--upload-port", port]
+        try:
+            subprocess.run(pio_upload, check=True, capture_output=False)
+        except subprocess.CalledProcessError:
+            err_console.print("PlatformIO upload failed. Check that the ESP32 is connected.")
+            raise typer.Exit(1)
+
+    console.print()
+    if compile_only:
+        console.print("[green]OK[/green] Compile successful.")
+    else:
+        console.print("[green]OK[/green] Flash complete. Open Vigie to monitor your device.")
+
+
 @app.command()
 def version() -> None:
     """Print Forge version."""
