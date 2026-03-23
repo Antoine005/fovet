@@ -10,6 +10,7 @@ import { FleetPanel } from "@/components/FleetPanel";
 import FleetHealth from "@/components/FleetHealth";
 import WorkerDetail from "@/components/WorkerDetail";
 import { FleetAlertTimeline } from "@/components/FleetAlertTimeline";
+import ForgeTab from "@/components/ForgeTab";
 
 interface Device {
   id: string;
@@ -30,7 +31,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail" | "sante" | "worker">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "sante" | "worker" | "forge">("fleet");
   const [clock, setClock] = useState<string>("");
 
   useEffect(() => {
@@ -90,40 +91,52 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {devices.length > 0 && (
-            <div className="flex rounded-lg border border-gray-800 overflow-hidden text-xs">
-              <button
-                onClick={() => setView("fleet")}
-                className={`px-3 py-1.5 transition-colors ${
-                  view === "fleet"
-                    ? "bg-gray-800 text-white"
-                    : "text-gray-500 hover:text-gray-300"
-                }`}
-              >
-                Flotte
-              </button>
-              <button
-                onClick={() => setView("detail")}
-                className={`px-3 py-1.5 transition-colors ${
-                  view === "detail"
-                    ? "bg-gray-800 text-white"
-                    : "text-gray-500 hover:text-gray-300"
-                }`}
-              >
-                Détail
-              </button>
-              <button
-                onClick={() => setView("sante")}
-                className={`px-3 py-1.5 transition-colors ${
-                  view === "sante"
-                    ? "bg-gray-800 text-white"
-                    : "text-gray-500 hover:text-gray-300"
-                }`}
-              >
-                Santé
-              </button>
-            </div>
-          )}
+          <div className="flex rounded-lg border border-gray-800 overflow-hidden text-xs">
+            {devices.length > 0 && (
+              <>
+                <button
+                  onClick={() => setView("fleet")}
+                  className={`px-3 py-1.5 transition-colors ${
+                    view === "fleet"
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  Flotte
+                </button>
+                <button
+                  onClick={() => setView("detail")}
+                  className={`px-3 py-1.5 transition-colors ${
+                    view === "detail"
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  Détail
+                </button>
+                <button
+                  onClick={() => setView("sante")}
+                  className={`px-3 py-1.5 transition-colors ${
+                    view === "sante"
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  Santé
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setView("forge")}
+              className={`px-3 py-1.5 transition-colors ${
+                view === "forge"
+                  ? "bg-gray-800 text-white"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Forge
+            </button>
+          </div>
           <span className="text-xs text-gray-500 font-mono">
             {clock}
           </span>
@@ -194,6 +207,9 @@ pio run --target upload --environment zscore_demo`}
           </p>
         </div>
       )}
+
+      {/* Forge view — model management pipeline */}
+      {view === "forge" && <ForgeTab />}
 
       {/* Fleet view — devices + alert timeline */}
       {view === "fleet" && devices.length > 0 && (
