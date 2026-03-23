@@ -3,778 +3,1275 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Fovet — Détection d'anomalies embarquée souveraine</title>
-  <meta name="description" content="SDK C/C++ temps réel pour la détection d'anomalies sur microcontrôleurs. Zéro cloud étranger. Cible défense, industriel, aéronautique." />
-  <!-- OpenGraph -->
-  <meta property="og:title" content="Fovet — Détection d'anomalies embarquée souveraine" />
-  <meta property="og:description" content="SDK C/C++ pour la détection d'anomalies en edge. Zéro cloud étranger. Moins d'1 ms par échantillon. Défense, industriel, aéronautique." />
+  <title>Fovet — SDK Embarqué Souverain</title>
+  <meta name="description" content="Fovet est la suite embarquée française pour la détection d'anomalies temps réel sur microcontrôleurs. Zéro cloud étranger. Conçu pour la défense, l'industrie et l'aéronautique." />
+  <meta property="og:title" content="Fovet — SDK Embarqué Souverain" />
+  <meta property="og:description" content="Détection d'anomalies temps réel sur microcontrôleur. Souverain. Auditable. Embarqué." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://fovet.eu" />
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Fovet — SDK embarqué souverain" />
-  <meta name="twitter:description" content="Détection d'anomalies temps réel sur MCU. C99 pur, zéro malloc, zéro cloud étranger." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
+    /* ===== RESET & BASE ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg:       #0b0c0e;
-      --bg-card:  #111317;
-      --border:   #1f2128;
-      --text:     #e8eaf0;
-      --muted:    #6b7280;
-      --accent:   #3b82f6;
-      --accent-d: #1d4ed8;
-      --mono:     'Courier New', Courier, monospace;
-      --sans:     -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --bg:        #0b0c0e;
+      --bg2:       #111318;
+      --bg3:       #181b22;
+      --border:    #1e2230;
+      --border2:   #2a3045;
+      --blue:      #3b82f6;
+      --blue-dim:  #1d4ed8;
+      --blue-glow: rgba(59,130,246,0.15);
+      --text:      #e8eaf0;
+      --text-muted:#8b92a8;
+      --text-dim:  #5c6378;
+      --green:     #10b981;
+      --radius:    10px;
+      --radius-lg: 16px;
     }
-
     html { scroll-behavior: smooth; }
-
     body {
+      font-family: 'Inter', system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
-      font-family: var(--sans);
-      font-size: 16px;
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
     }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
 
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    /* ── Layout ── */
-    .container {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 0 24px;
-    }
-
-    /* ── Nav ── */
-    nav {
-      border-bottom: 1px solid var(--border);
-      padding: 18px 0;
-      position: sticky;
-      top: 0;
-      background: rgba(11, 12, 14, 0.92);
-      backdrop-filter: blur(8px);
-      z-index: 10;
-    }
-
-    nav .container {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .nav-logo {
-      font-family: var(--mono);
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--text);
-      letter-spacing: 0.04em;
-    }
-
-    .nav-logo span { color: var(--accent); }
-
-    nav ul {
-      list-style: none;
-      display: flex;
-      gap: 32px;
-    }
-
-    nav ul a {
-      color: var(--muted);
-      font-size: 0.875rem;
-      letter-spacing: 0.02em;
-      transition: color 0.15s;
-    }
-
-    nav ul a:hover { color: var(--text); text-decoration: none; }
-
-    /* ── Hero ── */
-    .hero {
-      padding: 96px 0 80px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .hero-label {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--accent);
+    /* ===== LAYOUT ===== */
+    .container { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 96px 0; }
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
       letter-spacing: 0.12em;
       text-transform: uppercase;
-      margin-bottom: 20px;
-    }
-
-    .hero h1 {
-      font-size: clamp(2rem, 5vw, 3.25rem);
-      font-weight: 700;
-      line-height: 1.15;
-      letter-spacing: -0.02em;
-      max-width: 680px;
-      margin-bottom: 24px;
-    }
-
-    .hero h1 em {
-      font-style: normal;
-      color: var(--accent);
-    }
-
-    .hero p {
-      font-size: 1.125rem;
-      color: var(--muted);
-      max-width: 540px;
-      margin-bottom: 36px;
-    }
-
-    .hero-cta {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: #fff;
-      padding: 11px 24px;
-      border-radius: 6px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      transition: background 0.15s;
-    }
-
-    .btn-primary:hover { background: var(--accent-d); text-decoration: none; }
-
-    .btn-ghost {
-      color: var(--muted);
-      font-size: 0.9rem;
-      padding: 11px 0;
-      transition: color 0.15s;
-    }
-
-    .btn-ghost:hover { color: var(--text); text-decoration: none; }
-
-    .hero-metrics {
-      display: flex;
-      gap: 40px;
-      margin-top: 56px;
-      flex-wrap: wrap;
-    }
-
-    .metric-value {
-      font-family: var(--mono);
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    .metric-label {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-top: 2px;
-    }
-
-    /* ── Sections ── */
-    section {
-      padding: 72px 0;
-      border-bottom: 1px solid var(--border);
-    }
-
-    section:last-of-type { border-bottom: none; }
-
-    .section-label {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      color: var(--muted);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-    }
-
-    .section-title {
-      font-size: 1.75rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      margin-bottom: 48px;
-    }
-
-    /* ── Products ── */
-    .products-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 16px;
-    }
-
-    .product-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 28px;
-      transition: border-color 0.15s;
-    }
-
-    .product-card:hover { border-color: var(--accent); }
-
-    .product-tag {
-      font-family: var(--mono);
-      font-size: 0.65rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--accent);
+      color: var(--blue);
       margin-bottom: 14px;
     }
-
-    .product-name {
-      font-size: 1.1rem;
+    h2.section-title {
+      font-size: clamp(28px, 4vw, 40px);
       font-weight: 700;
-      margin-bottom: 10px;
+      line-height: 1.2;
+      color: var(--text);
+      margin-bottom: 16px;
     }
-
-    .product-desc {
-      font-size: 0.875rem;
-      color: var(--muted);
-      line-height: 1.6;
-    }
-
-    .product-specs {
-      margin-top: 18px;
-      padding-top: 18px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .spec {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--muted);
-    }
-
-    .spec::before { content: "›  "; color: var(--accent); }
-
-    /* ── Why ── */
-    .why-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 24px;
-    }
-
-    .why-item h3 {
-      font-size: 0.95rem;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    .why-item p {
-      font-size: 0.85rem;
-      color: var(--muted);
-      line-height: 1.6;
-    }
-
-    .why-icon {
-      font-size: 1.25rem;
-      margin-bottom: 12px;
-      display: block;
-    }
-
-    /* ── Contact ── */
-    .contact-block {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 40px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 24px;
-      flex-wrap: wrap;
-    }
-
-    .contact-block h2 {
-      font-size: 1.25rem;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-
-    .contact-block p {
-      font-size: 0.9rem;
-      color: var(--muted);
-    }
-
-    /* ── Footer ── */
-    footer {
-      padding: 32px 0;
-      border-top: 1px solid var(--border);
-    }
-
-    footer .container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    footer p {
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
-
-    .footer-legal {
-      display: flex;
-      gap: 24px;
-    }
-
-    .footer-legal a {
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
-
-    .footer-legal a:hover { color: var(--text); text-decoration: none; }
-
-    /* ── Code snippet ── */
-    .code-section {
-      background: var(--bg-card);
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      overflow: hidden;
-      margin-top: 48px;
-    }
-
-    .code-header {
-      padding: 10px 16px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .code-header span {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      color: var(--muted);
-    }
-
-    .code-lang {
-      background: rgba(59, 130, 246, 0.15);
-      color: var(--accent) !important;
-      padding: 2px 7px;
-      border-radius: 3px;
-    }
-
-    .code-section pre {
-      padding: 20px 20px;
-      font-family: var(--mono);
-      font-size: 0.8rem;
+    .section-sub {
+      font-size: 17px;
+      color: var(--text-muted);
+      max-width: 560px;
       line-height: 1.7;
-      color: #cdd6f4;
-      overflow-x: auto;
     }
+    .section-header { margin-bottom: 56px; }
 
-    .c-kw  { color: #cba6f7; }
-    .c-type{ color: #89dceb; }
-    .c-fn  { color: #89b4fa; }
-    .c-num { color: #fab387; }
-    .c-cmt { color: #585b70; }
-    .c-str { color: #a6e3a1; }
-
-    /* ── Pipeline flow ── */
-    .pipeline-flow {
-      display: flex;
-      align-items: center;
-      gap: 0;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-top: 48px;
+    /* ===== NAV ===== */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(11,12,14,0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      height: 64px;
+      display: flex; align-items: center;
     }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%;
+    }
+    .nav-logo {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px; font-weight: 500;
+      letter-spacing: -0.02em;
+    }
+    .nav-logo span { color: var(--blue); }
+    .nav-links {
+      display: flex; align-items: center; gap: 6px;
+      list-style: none;
+    }
+    .nav-links a {
+      font-size: 14px; font-weight: 500; color: var(--text-muted);
+      padding: 6px 12px; border-radius: 6px;
+      transition: color 0.2s, background 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); background: var(--bg3); }
+    .nav-cta {
+      background: var(--blue) !important;
+      color: #fff !important;
+      padding: 7px 16px !important;
+      border-radius: 7px !important;
+      font-weight: 600 !important;
+    }
+    .nav-cta:hover { background: var(--blue-dim) !important; }
+    .nav-github {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 14px; font-weight: 500;
+      color: var(--text-muted);
+      padding: 6px 12px; border-radius: 6px;
+      border: 1px solid var(--border2);
+      transition: all 0.2s;
+    }
+    .nav-github:hover { color: var(--text); border-color: var(--blue); }
+    .nav-right { display: flex; align-items: center; gap: 8px; }
+    .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 4px; }
+    .hamburger span { width: 22px; height: 2px; background: var(--text); border-radius: 2px; transition: all 0.3s; }
 
-    .flow-step {
-      background: var(--bg-card);
+    /* ===== HERO ===== */
+    #hero {
+      padding: 160px 0 100px;
+      position: relative; overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute; inset: 0; z-index: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(59,130,246,0.08) 0%, transparent 70%);
+    }
+    .hero-grid {
+      position: absolute; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 0%, transparent 80%);
+      opacity: 0.4;
+    }
+    .hero-inner { position: relative; z-index: 1; max-width: 800px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(59,130,246,0.1);
+      border: 1px solid rgba(59,130,246,0.25);
+      color: var(--blue);
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.06em;
+      padding: 5px 14px; border-radius: 100px;
+      margin-bottom: 28px;
+    }
+    .hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    h1 {
+      font-size: clamp(36px, 6vw, 62px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 24px;
+    }
+    h1 .accent { color: var(--blue); }
+    .hero-sub {
+      font-size: clamp(16px, 2vw, 19px);
+      color: var(--text-muted);
+      line-height: 1.7;
+      max-width: 600px;
+      margin-bottom: 40px;
+    }
+    .hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 56px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 15px; font-weight: 600;
+      padding: 12px 22px; border-radius: 8px;
+      transition: all 0.2s; cursor: pointer; border: none;
+    }
+    .btn-primary {
+      background: var(--blue);
+      color: #fff;
+      box-shadow: 0 0 0 1px var(--blue), 0 4px 20px rgba(59,130,246,0.3);
+    }
+    .btn-primary:hover { background: var(--blue-dim); box-shadow: 0 0 0 1px var(--blue-dim), 0 4px 28px rgba(59,130,246,0.4); transform: translateY(-1px); }
+    .btn-secondary {
+      background: var(--bg3);
+      color: var(--text);
+      border: 1px solid var(--border2);
+    }
+    .btn-secondary:hover { border-color: var(--blue); color: var(--blue); transform: translateY(-1px); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
       border: 1px solid var(--border);
-      border-radius: 8px;
+    }
+    .btn-ghost:hover { color: var(--text); border-color: var(--border2); }
+    .btn svg { width: 16px; height: 16px; }
+
+    /* Metrics bar */
+    .metrics-bar {
+      display: flex; flex-wrap: wrap; gap: 0;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .metric {
+      flex: 1; min-width: 160px;
       padding: 20px 24px;
-      text-align: center;
-      flex: 1;
-      min-width: 160px;
-      max-width: 220px;
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .metric:last-child { border-right: none; }
+    .metric-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px; font-weight: 600;
+      color: var(--blue);
+    }
+    .metric-label { font-size: 12px; color: var(--text-muted); }
+
+    /* Compat chips */
+    .compat-row {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin-top: 24px; align-items: center;
+    }
+    .compat-label { font-size: 12px; color: var(--text-dim); }
+    .chip {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; font-weight: 500;
+      padding: 4px 10px; border-radius: 5px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      color: var(--text-muted);
     }
 
-    .flow-step-tag {
-      font-family: var(--mono);
-      font-size: 0.65rem;
-      color: var(--accent);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
+    /* ===== PRODUCTS ===== */
+    #produits { background: var(--bg); }
+    .flow-intro {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 14px; color: var(--text-muted);
+      margin-bottom: 48px;
+      padding: 14px 20px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      max-width: fit-content;
     }
-
-    .flow-step-name {
-      font-size: 0.95rem;
-      font-weight: 700;
-      margin-bottom: 6px;
+    .flow-step {
+      display: flex; align-items: center; gap: 8px;
     }
-
-    .flow-step-desc {
-      font-size: 0.78rem;
-      color: var(--muted);
-      line-height: 1.4;
+    .flow-num {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--blue);
+      color: #fff; font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
-
-    .flow-arrow {
-      font-size: 1.2rem;
-      color: var(--accent);
-      padding: 0 12px;
+    .flow-arrow { color: var(--text-dim); font-size: 16px; }
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .product-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      display: flex; flex-direction: column; gap: 20px;
+      transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+      position: relative; overflow: hidden;
+    }
+    .product-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--blue), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .product-card:hover {
+      border-color: var(--border2);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    }
+    .product-card:hover::before { opacity: 1; }
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; font-weight: 500;
+      padding: 3px 8px; border-radius: 4px;
+      background: rgba(59,130,246,0.12);
+      color: var(--blue);
+      border: 1px solid rgba(59,130,246,0.2);
+    }
+    .tag.green { background: rgba(16,185,129,0.1); color: var(--green); border-color: rgba(16,185,129,0.2); }
+    .card-icon {
+      width: 40px; height: 40px; border-radius: 9px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
+      font-size: 18px;
+    }
+    .card-body h3 {
+      font-size: 18px; font-weight: 700;
+      margin-bottom: 8px; color: var(--text);
+    }
+    .card-body p {
+      font-size: 14px; color: var(--text-muted); line-height: 1.65;
+    }
+    .card-specs {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .spec-chip {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 3px 8px; border-radius: 4px;
+      background: var(--bg3);
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+    .card-actions {
+      display: flex; gap: 10px;
+    }
+    .card-link {
+      font-size: 13px; font-weight: 600;
+      color: var(--blue);
+      display: inline-flex; align-items: center; gap: 5px;
+      transition: gap 0.2s;
+    }
+    .card-link:hover { gap: 8px; }
+    .beta-badge {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 2px 7px; border-radius: 4px;
+      background: rgba(251,191,36,0.12);
+      color: #fbbf24;
+      border: 1px solid rgba(251,191,36,0.2);
     }
 
-    @media (max-width: 600px) {
-      .flow-arrow { transform: rotate(90deg); padding: 10px 0; }
-      .pipeline-flow { flex-direction: column; align-items: stretch; }
-      .flow-step { max-width: 100%; }
+    /* Vigie mock dashboard */
+    .vigie-mock {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #7d8590;
+      line-height: 1.7;
+      overflow: hidden;
+    }
+    .vigie-mock .mock-bar {
+      display: flex; gap: 5px; margin-bottom: 8px;
+    }
+    .vigie-mock .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .vigie-mock .dot-r { background: #ff5f57; }
+    .vigie-mock .dot-y { background: #febc2e; }
+    .vigie-mock .dot-g { background: #28c840; }
+    .vigie-mock .mock-title { color: #58a6ff; margin-bottom: 6px; font-size: 9px; }
+    .vigie-mock .mock-row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .vigie-mock .ok { color: #3fb950; }
+    .vigie-mock .alert { color: #f85149; }
+    .vigie-mock .warn { color: #d29922; }
+    .vigie-mock .val { color: #e6edf3; }
+    .vigie-mock .bar-wrap { height: 3px; background: #21262d; border-radius: 2px; margin: 6px 0 4px; overflow: hidden; }
+    .vigie-mock .bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #1d4ed8, #3b82f6); width: 72%; }
+    .vigie-mock .placeholder-note {
+      text-align: center; margin-top: 8px; font-size: 9px;
+      color: #3d4552; border-top: 1px solid #21262d; padding-top: 8px;
     }
 
-    /* ── Use cases ── */
+    /* ===== POURQUOI ===== */
+    #pourquoi { background: var(--bg2); }
+    .pillars-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .pillar {
+      padding: 36px;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.2s;
+    }
+    .pillar:hover { background: var(--bg3); }
+    .pillar:nth-child(2), .pillar:nth-child(4) { border-right: none; }
+    .pillar:nth-child(3), .pillar:nth-child(4) { border-bottom: none; }
+    .pillar-icon {
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      background: var(--blue-glow);
+      border: 1px solid rgba(59,130,246,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+    .pillar h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+    .pillar p { font-size: 14px; color: var(--text-muted); line-height: 1.7; }
+    .pillar .technical-note {
+      margin-top: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--blue);
+      padding: 6px 10px;
+      background: rgba(59,130,246,0.07);
+      border-left: 2px solid var(--blue);
+      border-radius: 0 4px 4px 0;
+    }
+
+    /* ===== CAS D'USAGE ===== */
+    #cas-usage { background: var(--bg); }
     .usecases-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-top: 16px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
     }
-
     .usecase-card {
-      background: var(--bg-card);
+      background: var(--bg2);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 22px;
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      transition: border-color 0.2s, transform 0.2s;
     }
-
-    .usecase-sector {
-      font-family: var(--mono);
-      font-size: 0.65rem;
-      color: var(--accent);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 10px;
+    .usecase-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+    .usecase-icon {
+      font-size: 28px; margin-bottom: 18px;
     }
-
-    .usecase-title {
-      font-size: 0.9rem;
-      font-weight: 600;
-      margin-bottom: 6px;
+    .usecase-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .usecase-card .scenario {
+      font-size: 13px; color: var(--text-muted); line-height: 1.65;
+      margin-bottom: 16px;
     }
-
-    .usecase-desc {
-      font-size: 0.8rem;
-      color: var(--muted);
-      line-height: 1.5;
+    .usecase-meta {
+      display: flex; flex-direction: column; gap: 6px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
     }
-
-    /* ── License badge ── */
-    .license-note {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-top: 16px;
+    .usecase-meta-row {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--text-dim);
     }
+    .usecase-meta-row span:first-child { color: var(--blue); font-size: 14px; }
+    .usecase-meta-row strong { color: var(--text-muted); }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 600;
+      padding: 3px 9px; border-radius: 100px;
+      background: rgba(16,185,129,0.1);
+      color: var(--green);
+      border: 1px solid rgba(16,185,129,0.2);
+      margin-top: 12px;
+    }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
 
-    .license-note a { color: var(--muted); text-decoration: underline; }
-    .license-note a:hover { color: var(--text); }
-
-    /* ── GitHub link ── */
-    .github-link {
-      display: inline-flex;
+    /* ===== À PROPOS ===== */
+    #a-propos { background: var(--bg2); }
+    .about-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
       align-items: center;
-      gap: 7px;
-      color: var(--muted);
-      font-size: 0.875rem;
-      transition: color 0.15s;
+    }
+    .about-text h2 { margin-bottom: 20px; }
+    .about-text p { font-size: 15px; color: var(--text-muted); line-height: 1.8; margin-bottom: 16px; }
+    .about-values { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
+    .about-value {
+      display: flex; align-items: flex-start; gap: 12px;
+    }
+    .value-icon {
+      width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+      background: var(--blue-glow);
+      border: 1px solid rgba(59,130,246,0.2);
+      display: flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+    .value-content h4 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .value-content p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+    .about-profile {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      text-align: center;
+    }
+    .profile-avatar {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 700; color: #fff;
+      margin: 0 auto 20px;
+      border: 3px solid rgba(59,130,246,0.3);
+    }
+    .profile-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .profile-role {
+      font-size: 13px; color: var(--blue); margin-bottom: 16px;
+      font-weight: 500;
+    }
+    .profile-bio { font-size: 13px; color: var(--text-muted); line-height: 1.7; margin-bottom: 20px; }
+    .profile-tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 20px; }
+    .profile-links { display: flex; justify-content: center; gap: 10px; }
+    .profile-link {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 500; color: var(--text-muted);
+      padding: 7px 14px; border-radius: 7px;
+      background: var(--bg2); border: 1px solid var(--border);
+      transition: all 0.2s;
+    }
+    .profile-link:hover { border-color: var(--blue); color: var(--blue); }
+
+    /* ===== CONTACT ===== */
+    #contact { background: var(--bg); }
+    .contact-inner {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 56px;
+      align-items: start;
+    }
+    .contact-left h2 { margin-bottom: 14px; }
+    .contact-left .section-sub { margin-bottom: 32px; }
+    .contact-infos { display: flex; flex-direction: column; gap: 12px; }
+    .contact-info-item {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 14px; color: var(--text-muted);
+    }
+    .contact-info-item .ci-icon {
+      width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+      background: var(--bg2); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center; font-size: 15px;
+    }
+    .contact-info-item a { color: var(--blue); }
+    .contact-info-item a:hover { text-decoration: underline; }
+    .contact-note {
+      margin-top: 24px;
+      padding: 14px 16px;
+      background: rgba(59,130,246,0.06);
+      border: 1px solid rgba(59,130,246,0.15);
+      border-radius: var(--radius);
+      font-size: 13px; color: var(--text-muted);
+    }
+    .contact-note strong { color: var(--blue); }
+
+    /* Form */
+    .contact-form {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
+    .form-group:last-of-type { margin-bottom: 0; }
+    label {
+      font-size: 13px; font-weight: 500; color: var(--text-muted);
+    }
+    label .req { color: var(--blue); }
+    input, select, textarea {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 7px;
+      padding: 11px 14px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      width: 100%;
+      -webkit-appearance: none;
+    }
+    input::placeholder, textarea::placeholder { color: var(--text-dim); }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    }
+    select { cursor: pointer; }
+    select option { background: var(--bg3); color: var(--text); }
+    textarea { resize: vertical; min-height: 110px; line-height: 1.6; }
+    .form-check {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 12px; color: var(--text-muted);
+      margin: 16px 0;
+    }
+    .form-check input[type=checkbox] {
+      width: 16px; height: 16px; margin-top: 1px; flex-shrink: 0;
+      border-radius: 4px; cursor: pointer;
+    }
+    .btn-submit {
+      width: 100%;
+      background: var(--blue);
+      color: #fff;
+      border: none; border-radius: 8px;
+      padding: 13px;
+      font-size: 15px; font-weight: 600; font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-submit:hover { background: var(--blue-dim); transform: translateY(-1px); }
+    .form-status {
+      display: none;
+      margin-top: 14px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: center;
+    }
+    .form-status.success {
+      display: block;
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.3);
+      color: var(--green);
+    }
+    .form-status.error {
+      display: block;
+      background: rgba(248,81,73,0.1);
+      border: 1px solid rgba(248,81,73,0.3);
+      color: #f85149;
     }
 
-    .github-link:hover { color: var(--text); text-decoration: none; }
+    /* ===== FOOTER ===== */
+    footer {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      padding: 48px 0 32px;
+    }
+    .footer-top {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+    .footer-brand .nav-logo { font-size: 22px; margin-bottom: 12px; display: block; }
+    .footer-brand p { font-size: 13px; color: var(--text-muted); line-height: 1.7; max-width: 240px; }
+    .footer-col h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 14px; letter-spacing: 0.04em; }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .footer-col ul a {
+      font-size: 13px; color: var(--text-muted);
+      transition: color 0.2s;
+    }
+    .footer-col ul a:hover { color: var(--text); }
+    .footer-bottom {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--text-dim);
+    }
+    .footer-bottom-links { display: flex; gap: 16px; }
+    .footer-bottom-links a { color: var(--text-dim); transition: color 0.2s; }
+    .footer-bottom-links a:hover { color: var(--text-muted); }
 
-    .github-link svg {
-      width: 18px;
-      height: 18px;
-      fill: currentColor;
-      flex-shrink: 0;
+    /* ===== DIVIDER ===== */
+    .section-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border2), transparent);
+      margin: 0 auto;
+      max-width: 600px;
     }
 
-    /* ── Responsive ── */
-    @media (max-width: 600px) {
-      .hero { padding: 64px 0 56px; }
-      .hero-metrics { gap: 28px; }
-      .contact-block { padding: 28px; }
-      nav ul { gap: 20px; }
+    /* ===== MOBILE ===== */
+    @media (max-width: 900px) {
+      section { padding: 72px 0; }
+      .products-grid { grid-template-columns: 1fr; }
+      .usecases-grid { grid-template-columns: 1fr; }
+      .pillars-grid { grid-template-columns: 1fr; }
+      .pillar:nth-child(2), .pillar:nth-child(4) { border-right: none; }
+      .about-inner { grid-template-columns: 1fr; gap: 40px; }
+      .contact-inner { grid-template-columns: 1fr; gap: 40px; }
+      .footer-top { grid-template-columns: 1fr 1fr; gap: 32px; }
+      .footer-bottom { flex-direction: column; gap: 16px; text-align: center; }
     }
+    @media (max-width: 680px) {
+      .nav-links, .nav-right { display: none; }
+      .hamburger { display: flex; }
+      .metrics-bar { flex-direction: column; }
+      .metric { border-right: none; border-bottom: 1px solid var(--border); }
+      .metric:last-child { border-bottom: none; }
+      .hero-ctas { flex-direction: column; }
+      .btn { justify-content: center; }
+      .form-row { grid-template-columns: 1fr; }
+      .footer-top { grid-template-columns: 1fr; }
+      .flow-intro { flex-direction: column; align-items: flex-start; gap: 6px; }
+    }
+    /* Mobile menu */
+    .mobile-menu {
+      display: none; position: fixed; top: 64px; left: 0; right: 0; z-index: 99;
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 16px 24px; flex-direction: column; gap: 4px;
+    }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu a {
+      font-size: 15px; font-weight: 500; color: var(--text-muted);
+      padding: 10px 12px; border-radius: 6px;
+      transition: background 0.2s, color 0.2s;
+    }
+    .mobile-menu a:hover { background: var(--bg3); color: var(--text); }
   </style>
 </head>
 <body>
 
-  <!-- Nav -->
-  <nav>
-    <div class="container">
-      <span class="nav-logo">fovet<span>.</span>eu</span>
-      <ul>
-        <li><a href="#produits">Produits</a></li>
-        <li><a href="#usecases">Cas d'usage</a></li>
-        <li><a href="#pourquoi">Pourquoi</a></li>
-        <li><a href="#contact">Contact</a></li>
-        <li>
-          <a href="https://github.com/Antoine005/fovet" target="_blank" rel="noopener" class="github-link">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/>
-            </svg>
-            GitHub
-          </a>
-        </li>
-      </ul>
+<!-- ===== NAVIGATION ===== -->
+<nav>
+  <div class="container nav-inner">
+    <a href="#" class="nav-logo">F<span>o</span>vet</a>
+    <ul class="nav-links">
+      <li><a href="#produits">Produits</a></li>
+      <li><a href="#pourquoi">Pourquoi Fovet</a></li>
+      <li><a href="#cas-usage">Cas d'usage</a></li>
+      <li><a href="#a-propos">À propos</a></li>
+    </ul>
+    <div class="nav-right">
+      <a href="https://github.com/Antoine005/fovet" target="_blank" rel="noopener" class="nav-github">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        GitHub
+      </a>
+      <a href="#contact" class="btn btn-primary nav-cta" style="padding:8px 18px;font-size:14px;">Demander une démo</a>
     </div>
-  </nav>
+    <div class="hamburger" id="hamburger" onclick="toggleMenu()">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobileMenu">
+  <a href="#produits" onclick="toggleMenu()">Produits</a>
+  <a href="#pourquoi" onclick="toggleMenu()">Pourquoi Fovet</a>
+  <a href="#cas-usage" onclick="toggleMenu()">Cas d'usage</a>
+  <a href="#a-propos" onclick="toggleMenu()">À propos</a>
+  <a href="#contact" onclick="toggleMenu()" style="color:var(--blue);">Demander une démo →</a>
+</div>
 
-  <!-- Hero -->
-  <div class="hero">
-    <div class="container">
-      <p class="hero-label">SDK Embarqué Souverain</p>
-      <h1>Détection d'anomalies<br /><em>temps réel</em> sur microcontrôleur</h1>
-      <p>
-        Fovet est un SDK C/C++ pour la détection d'anomalies en edge.
-        Zéro cloud étranger. Conçu pour la défense, l'industrie et l'aéronautique.
+<!-- ===== HERO ===== -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="container">
+    <div class="hero-inner">
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        Bêta ouverte · Souverain · France
+      </div>
+      <h1>
+        Protégez vos systèmes critiques.<br/>
+        <span class="accent">En local. En temps réel.</span><br/>
+        Sans dépendre de personne.
+      </h1>
+      <p class="hero-sub">
+        Fovet est la suite embarquée française pour la détection d'anomalies sur microcontrôleurs.
+        Conçue pour la défense, l'industrie et l'aéronautique.
+        Zéro cloud étranger. Code C99 auditable.
       </p>
-      <div class="hero-cta">
-        <a href="#contact" class="btn-primary">Demander une démo</a>
-        <a href="#produits" class="btn-ghost">Découvrir les produits →</a>
-        <a href="https://github.com/Antoine005/fovet" target="_blank" rel="noopener" class="github-link">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
+      <div class="hero-ctas">
+        <a href="#contact" class="btn btn-primary">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0L10 9.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+          Demander une démo
+        </a>
+        <a href="#produits" class="btn btn-secondary">Découvrir la suite →</a>
+        <a href="https://github.com/Antoine005/fovet" target="_blank" rel="noopener" class="btn btn-ghost">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           Voir sur GitHub
         </a>
       </div>
-      <div class="hero-metrics">
-        <div>
-          <div class="metric-value">&lt; 1 ms</div>
-          <div class="metric-label">par échantillon à 80 MHz</div>
+
+      <!-- Métriques -->
+      <div class="metrics-bar">
+        <div class="metric">
+          <span class="metric-value mono">&lt; 1 ms</span>
+          <span class="metric-label">par échantillon à 80 MHz</span>
         </div>
-        <div>
-          <div class="metric-value">&lt; 4 KB</div>
-          <div class="metric-label">RAM par détecteur</div>
+        <div class="metric">
+          <span class="metric-value mono">&lt; 4 KB</span>
+          <span class="metric-label">RAM par détecteur</span>
         </div>
-        <div>
-          <div class="metric-value">C99</div>
-          <div class="metric-label">zéro dépendance externe</div>
+        <div class="metric">
+          <span class="metric-value mono">C99</span>
+          <span class="metric-label">zéro dépendance externe</span>
         </div>
-        <div>
-          <div class="metric-value">115+</div>
-          <div class="metric-label">tests natifs PC validés</div>
+        <div class="metric">
+          <span class="metric-value mono">0</span>
+          <span class="metric-label">allocation dynamique</span>
+        </div>
+      </div>
+
+      <!-- Compatibilité -->
+      <div class="compat-row">
+        <span class="compat-label">Compatible :</span>
+        <span class="chip">ESP32</span>
+        <span class="chip">STM32</span>
+        <span class="chip">RISC-V</span>
+        <span class="chip">FreeRTOS</span>
+        <span class="chip">PlatformIO</span>
+        <span class="chip">CMake</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ===== PRODUITS ===== -->
+<section id="produits">
+  <div class="container">
+    <div class="section-header">
+      <p class="section-label">La suite Fovet</p>
+      <h2 class="section-title">De l'entraînement à la supervision,<br/>une chaîne souveraine de bout en bout</h2>
+      <p class="section-sub">Trois modules conçus pour fonctionner ensemble — ou indépendamment selon vos besoins.</p>
+    </div>
+
+    <div class="flow-intro">
+      <div class="flow-step"><span class="flow-num">1</span><span>Forge <span style="color:var(--text-dim)">— entraîner le modèle</span></span></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="flow-num">2</span><span>Sentinelle <span style="color:var(--text-dim)">— déployer sur le MCU</span></span></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="flow-num">3</span><span>Vigie <span style="color:var(--text-dim)">— superviser la flotte</span></span></div>
+    </div>
+
+    <div class="products-grid">
+
+      <!-- Sentinelle -->
+      <div class="product-card">
+        <div class="card-header">
+          <div class="card-tags">
+            <span class="tag">C99</span>
+            <span class="tag">Embarqué</span>
+            <span class="beta-badge">Bêta</span>
+          </div>
+          <div class="card-icon">🛡️</div>
+        </div>
+        <div class="card-body">
+          <h3>Fovet Sentinelle</h3>
+          <p>La détection d'anomalies directement dans votre firmware. Intégrez Sentinelle à votre code C/C++ en quelques heures grâce à son HAL abstrait et à l'algorithme de Welford incrémental — aucune allocation dynamique, stack only.</p>
+        </div>
+        <div class="card-specs">
+          <span class="spec-chip">ESP32</span>
+          <span class="spec-chip">STM32</span>
+          <span class="spec-chip">RISC-V</span>
+          <span class="spec-chip">FreeRTOS</span>
+          <span class="spec-chip">PlatformIO/CMake</span>
+        </div>
+        <div class="card-actions">
+          <a href="https://github.com/Antoine005/fovet" target="_blank" class="card-link">Documentation →</a>
+          <a href="#contact" class="card-link" style="color:var(--text-muted)">Démo →</a>
+        </div>
+      </div>
+
+      <!-- Forge -->
+      <div class="product-card">
+        <div class="card-header">
+          <div class="card-tags">
+            <span class="tag">AutoML</span>
+            <span class="tag">Python</span>
+            <span class="beta-badge">Bêta</span>
+          </div>
+          <div class="card-icon">⚒️</div>
+        </div>
+        <div class="card-body">
+          <h3>Fovet Forge</h3>
+          <p>Entraînez sur vos données industrielles, exportez vers votre cible embarquée. Un pipeline AutoML Python qui génère automatiquement le modèle C optimisé pour votre microcontrôleur — hébergement Scaleway souverain.</p>
+        </div>
+        <div class="card-specs">
+          <span class="spec-chip">scikit-learn</span>
+          <span class="spec-chip">TensorFlow</span>
+          <span class="spec-chip">TFLite Micro</span>
+          <span class="spec-chip">GPU</span>
+          <span class="spec-chip">Scaleway 🇫🇷</span>
+        </div>
+        <div class="card-actions">
+          <a href="https://github.com/Antoine005/fovet" target="_blank" class="card-link">Documentation →</a>
+          <a href="#contact" class="card-link" style="color:var(--text-muted)">Démo →</a>
+        </div>
+      </div>
+
+      <!-- Vigie -->
+      <div class="product-card">
+        <div class="card-header">
+          <div class="card-tags">
+            <span class="tag">Dashboard</span>
+            <span class="tag">MQTT</span>
+            <span class="beta-badge">Bêta</span>
+          </div>
+          <div class="card-icon">👁️</div>
+        </div>
+        <!-- Vigie mock dashboard -->
+        <div class="vigie-mock">
+          <div class="mock-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+          </div>
+          <div class="mock-title">▶ fovet-vigie — dashboard</div>
+          <div class="mock-row"><span>Capteur ESP32-A1</span><span class="ok">● NORMAL</span></div>
+          <div class="mock-row"><span>Capteur STM32-B4</span><span class="alert">● ALERTE</span></div>
+          <div class="mock-row"><span>Capteur STM32-C7</span><span class="warn">● SEUIL ↑</span></div>
+          <div class="mock-row"><span>Capteur ESP32-D2</span><span class="ok">● NORMAL</span></div>
+          <div class="mock-row"><span style="color:var(--text-dim)">Anomalies / 1h</span><span class="val">3 détections</span></div>
+          <div class="bar-wrap"><div class="bar-fill"></div></div>
+          <div class="mock-row"><span>MQTT broker</span><span class="ok">Connecté 🇫🇷</span></div>
+          <div class="placeholder-note">[ Remplacer par un GIF du vrai dashboard ]</div>
+        </div>
+        <div class="card-body">
+          <h3>Fovet Vigie</h3>
+          <p>Supervisez votre flotte de capteurs depuis un dashboard souverain. Alertes instantanées, historique TimescaleDB, hébergement sur infrastructure française.</p>
+        </div>
+        <div class="card-specs">
+          <span class="spec-chip">Next.js</span>
+          <span class="spec-chip">Hono</span>
+          <span class="spec-chip">MQTT</span>
+          <span class="spec-chip">TimescaleDB</span>
+          <span class="spec-chip">Docker</span>
+        </div>
+        <div class="card-actions">
+          <a href="https://github.com/Antoine005/fovet" target="_blank" class="card-link">Documentation →</a>
+          <a href="#contact" class="card-link" style="color:var(--text-muted)">Démo →</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ===== POURQUOI ===== -->
+<section id="pourquoi">
+  <div class="container">
+    <div class="section-header">
+      <p class="section-label">Souverain par conception</p>
+      <h2 class="section-title">Pourquoi Fovet ?</h2>
+      <p class="section-sub">Dans les systèmes critiques, chaque dépendance est un risque. Fovet est conçu pour en éliminer le maximum.</p>
+    </div>
+
+    <div class="pillars-grid">
+      <div class="pillar">
+        <div class="pillar-icon">🚫</div>
+        <h3>Aucun cloud étranger</h3>
+        <p>Le traitement s'effectue en local, directement sur le microcontrôleur. Vos données ne quittent jamais votre infrastructure — elles ne peuvent pas être interceptées, revendues ni soumises à des législations extraterritoriales.</p>
+        <div class="technical-note">CLOUD Act · FISA : inapplicables par conception</div>
+      </div>
+      <div class="pillar">
+        <div class="pillar-icon">⚡</div>
+        <h3>Temps réel garanti</h3>
+        <p>Moins d'une milliseconde par échantillon à 80 MHz. Dans les systèmes embarqués critiques, une anomalie non détectée en temps réel peut compromettre une mission, une machine ou une vie. Fovet ne fait aucune concession sur la latence.</p>
+        <div class="technical-note">&lt; 1 ms · déterministe · pas de jitter RTOS</div>
+      </div>
+      <div class="pillar">
+        <div class="pillar-icon">📦</div>
+        <h3>Empreinte minimale</h3>
+        <p>Zéro allocation dynamique. Moins de 4 KB RAM par détecteur. Fovet fonctionne sur les microcontrôleurs les plus contraints — là où un RTOS lourd ou un modèle ML classique ne passerait pas. Optimisé pour les MCU d'entrée de gamme comme pour les cœurs haute performance.</p>
+        <div class="technical-note">&lt; 4 KB RAM · stack only · 0 malloc</div>
+      </div>
+      <div class="pillar">
+        <div class="pillar-icon">🔍</div>
+        <h3>Auditabilité totale</h3>
+        <p>Code C99 pur, lisible, sans dépendance opaque. Vos équipes sécurité peuvent auditer chaque ligne. Aucun blob binaire, aucune bibliothèque tierce mystérieuse, aucune surface d'attaque cachée. Licence duale : open-source pour les projets publics, commerciale pour les usages industriels.</p>
+        <div class="technical-note">C99 · open-source · licence duale</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ===== CAS D'USAGE ===== -->
+<section id="cas-usage">
+  <div class="container">
+    <div class="section-header">
+      <p class="section-label">Cas d'usage</p>
+      <h2 class="section-title">Conçu pour les environnements<br/>les plus exigeants</h2>
+      <p class="section-sub">Validation terrain en cours dans plusieurs contextes critiques. Fovet est pensé pour les situations où la défaillance n'est pas une option.</p>
+    </div>
+
+    <div class="usecases-grid">
+      <div class="usecase-card">
+        <div class="usecase-icon">🛡️</div>
+        <h3>Défense & Sécurité nationale</h3>
+        <p class="scenario">Détection d'anomalies comportementales sur systèmes embarqués autonomes : drone, engin blindé, capteur tactique. Décision en local, zéro exfiltration, code certifiable.</p>
+        <div class="usecase-meta">
+          <div class="usecase-meta-row"><span>⚙️</span><strong>Cibles MCU :</strong> STM32H7 · RISC-V</div>
+          <div class="usecase-meta-row"><span>📋</span><strong>Contraintes :</strong> aucun cloud, code auditable</div>
+        </div>
+        <span class="status-pill"><span class="status-dot"></span>Validation en cours</span>
+      </div>
+
+      <div class="usecase-card">
+        <div class="usecase-icon">⚙️</div>
+        <h3>Industrie 4.0 & Maintenance prédictive</h3>
+        <p class="scenario">Surveillance vibratoire temps réel de moteurs, compresseurs et lignes de production. Détection précoce des dérives avant la panne — sans connexion réseau permanente.</p>
+        <div class="usecase-meta">
+          <div class="usecase-meta-row"><span>⚙️</span><strong>Cibles MCU :</strong> ESP32 · STM32F4</div>
+          <div class="usecase-meta-row"><span>📋</span><strong>Stack :</strong> PlatformIO · FreeRTOS · Vigie</div>
+        </div>
+        <span class="status-pill"><span class="status-dot"></span>Validation en cours</span>
+      </div>
+
+      <div class="usecase-card">
+        <div class="usecase-icon">✈️</div>
+        <h3>Aéronautique & Systèmes avioniques</h3>
+        <p class="scenario">Monitoring d'état sur systèmes embarqués à ressources ultra-limitées. Empreinte RAM inférieure à 4 KB, code C99 pur compatible avec les exigences de traçabilité avionique.</p>
+        <div class="usecase-meta">
+          <div class="usecase-meta-row"><span>⚙️</span><strong>Cibles MCU :</strong> RISC-V · ARM Cortex-M</div>
+          <div class="usecase-meta-row"><span>📋</span><strong>Contraintes :</strong> C99 pur · empreinte minimale</div>
+        </div>
+        <span class="status-pill"><span class="status-dot"></span>Validation en cours</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ===== À PROPOS ===== -->
+<section id="a-propos">
+  <div class="container">
+    <div class="about-inner">
+      <div class="about-text">
+        <p class="section-label">À propos</p>
+        <h2 class="section-title">Pourquoi Fovet existe</h2>
+        <p>Les systèmes embarqués critiques méritent des outils à la hauteur de leurs contraintes. Fovet est né du constat qu'aucune solution existante ne combinait à la fois la souveraineté, la légèreté et l'auditabilité nécessaires aux environnements industriels et de défense.</p>
+        <p>Conçu par un ingénieur issu du monde aéronautique et de l'embarqué, Fovet privilégie l'ingénierie de précision à la complexité superflue — chaque kilooctet compte, chaque milliseconde compte.</p>
+
+        <div class="about-values">
+          <div class="about-value">
+            <div class="value-icon">🇫🇷</div>
+            <div class="value-content">
+              <h4>Souveraineté numérique</h4>
+              <p>Infrastructure française, code ouvert, aucune dépendance étrangère critique.</p>
+            </div>
+          </div>
+          <div class="about-value">
+            <div class="value-icon">🎯</div>
+            <div class="value-content">
+              <h4>Ingénierie de précision</h4>
+              <p>Chaque ligne de code est justifiée. Pas de sur-ingénierie, pas d'abstraction inutile.</p>
+            </div>
+          </div>
+          <div class="about-value">
+            <div class="value-icon">📖</div>
+            <div class="value-content">
+              <h4>Transparence radicale</h4>
+              <p>Code source ouvert, algorithmes documentés, licence claire.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="about-profile">
+        <div class="profile-avatar">AP</div>
+        <div class="profile-name">Antoine Porte</div>
+        <div class="profile-role">Fondateur · Ingénieur embarqué</div>
+        <p class="profile-bio">Ingénieur en cognitique (ENSC Bordeaux INP), spécialisé en systèmes embarqués et intelligence artificielle. Expérience en aéronautique et en implémentation de modèles ML sur microcontrôleurs. Fovet est la concrétisation d'une conviction : la souveraineté numérique commence au niveau du firmware.</p>
+        <div class="profile-tags">
+          <span class="chip">C / C++</span>
+          <span class="chip">Python</span>
+          <span class="chip">TinyML</span>
+          <span class="chip">Aéronautique</span>
+          <span class="chip">Embarqué</span>
+        </div>
+        <div class="profile-links">
+          <a href="https://github.com/Antoine005/fovet" target="_blank" class="profile-link">
+            <svg viewBox="0 0 16 16" width="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            GitHub
+          </a>
+          <a href="mailto:contact@fovet.eu" class="profile-link">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/></svg>
+            Contact
+          </a>
         </div>
       </div>
     </div>
   </div>
+</section>
 
-  <!-- Produits -->
-  <section id="produits">
-    <div class="container">
-      <p class="section-label">01 — Suite</p>
-      <h2 class="section-title">La suite Fovet</h2>
-      <div class="products-grid">
+<div class="section-divider"></div>
 
-        <div class="product-card">
-          <div class="product-tag">edge · C99</div>
-          <div class="product-name">Fovet Sentinelle</div>
-          <p class="product-desc">
-            SDK embarqué pour la détection d'anomalies en temps réel sur microcontrôleurs.
-            Algorithme de Welford, stack uniquement, HAL abstrait.
-          </p>
-          <div class="product-specs">
-            <span class="spec">ESP32, STM32, RISC-V</span>
-            <span class="spec">PlatformIO / CMake</span>
-            <span class="spec">FreeRTOS compatible</span>
+<!-- ===== CONTACT ===== -->
+<section id="contact">
+  <div class="container">
+    <div class="contact-inner">
+      <div class="contact-left">
+        <p class="section-label">Contact</p>
+        <h2 class="section-title">Discutons de votre projet</h2>
+        <p class="section-sub">Vous évaluez Fovet pour un projet industriel, de défense ou de recherche ? Décrivez votre contexte, nous vous répondons sous 48h.</p>
+
+        <div class="contact-infos">
+          <div class="contact-info-item">
+            <span class="ci-icon">📧</span>
+            <span><a href="mailto:contact@fovet.eu">contact@fovet.eu</a></span>
+          </div>
+          <div class="contact-info-item">
+            <span class="ci-icon">💻</span>
+            <span><a href="https://github.com/Antoine005/fovet" target="_blank">github.com/Antoine005/fovet</a></span>
+          </div>
+          <div class="contact-info-item">
+            <span class="ci-icon">🇫🇷</span>
+            <span>France — Infrastructure souveraine</span>
           </div>
         </div>
 
-        <div class="product-card">
-          <div class="product-tag">automl · python</div>
-          <div class="product-name">Fovet Forge</div>
-          <p class="product-desc">
-            Pipeline AutoML pour l'entraînement de modèles et l'export vers les cibles embarquées.
-            Du dataset au firmware en une commande.
-          </p>
-          <div class="product-specs">
-            <span class="spec">scikit-learn, TensorFlow</span>
-            <span class="spec">Export TFLite Micro</span>
-            <span class="spec">GPU Scaleway souverain</span>
+        <div class="contact-note">
+          <strong>Projet open-source ?</strong> Fovet Sentinelle est disponible librement sur GitHub. La licence commerciale (Pro) est destinée aux usages industriels et de défense.
+        </div>
+      </div>
+
+      <div class="contact-form">
+        <!--
+          FORMSPREE : remplacez YOUR_FORM_ID par votre vrai ID Formspree
+          Créer votre formulaire sur https://formspree.io
+          Puis remplacer "YOUR_FORM_ID" ci-dessous
+        -->
+        <form id="contactForm" action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="prenom">Prénom <span class="req">*</span></label>
+              <input type="text" id="prenom" name="prenom" placeholder="Jean" required />
+            </div>
+            <div class="form-group">
+              <label for="nom">Nom <span class="req">*</span></label>
+              <input type="text" id="nom" name="nom" placeholder="Dupont" required />
+            </div>
           </div>
-        </div>
-
-        <div class="product-card">
-          <div class="product-tag">dashboard · web</div>
-          <div class="product-name">Fovet Vigie</div>
-          <p class="product-desc">
-            Dashboard de supervision temps réel pour la gestion de flottes de capteurs.
-            MQTT souverain, alertes instantanées, historique TimescaleDB.
-          </p>
-          <div class="product-specs">
-            <span class="spec">Next.js / Hono</span>
-            <span class="spec">MQTT Mosquitto</span>
-            <span class="spec">PostgreSQL + TimescaleDB</span>
+          <div class="form-group">
+            <label for="email">Email professionnel <span class="req">*</span></label>
+            <input type="email" id="email" name="email" placeholder="jean.dupont@organisation.fr" required />
           </div>
-        </div>
-
+          <div class="form-group">
+            <label for="organisation">Organisation <span class="req">*</span></label>
+            <input type="text" id="organisation" name="organisation" placeholder="Nom de votre entreprise / labo / administration" required />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="secteur">Secteur <span class="req">*</span></label>
+              <select id="secteur" name="secteur" required>
+                <option value="" disabled selected>Choisir…</option>
+                <option value="defense">Défense / Sécurité</option>
+                <option value="industrie">Industrie 4.0</option>
+                <option value="aero">Aéronautique / Spatial</option>
+                <option value="recherche">Recherche / Académique</option>
+                <option value="autre">Autre</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="mcu">Microcontrôleur cible</label>
+              <input type="text" id="mcu" name="mcu" placeholder="ESP32, STM32, RISC-V…" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="message">Votre besoin <span class="req">*</span></label>
+            <textarea id="message" name="message" placeholder="Décrivez votre cas d'usage en quelques lignes : quel capteur, quelle anomalie à détecter, quelles contraintes…" required></textarea>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" id="rgpd" name="rgpd" required />
+            <label for="rgpd" style="font-size:12px;color:var(--text-muted);cursor:pointer;">
+              J'accepte que mes données soient utilisées pour traiter ma demande, conformément à la <a href="/mentions-legales" style="color:var(--blue)">politique de confidentialité</a>.
+            </label>
+          </div>
+          <button type="submit" class="btn-submit">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+            Envoyer ma demande
+          </button>
+          <div class="form-status" id="formStatus"></div>
+        </form>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- Pipeline -->
-  <section id="pipeline">
-    <div class="container">
-      <p class="section-label">02 — Pipeline</p>
-      <h2 class="section-title">Du capteur au dashboard en 3 étapes</h2>
-
-      <div class="pipeline-flow">
-        <div class="flow-step">
-          <div class="flow-step-tag">edge · C99</div>
-          <div class="flow-step-name">Sentinelle</div>
-          <div class="flow-step-desc">SDK embarqué sur MCU<br />Z-Score · MAD · Drift</div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-step">
-          <div class="flow-step-tag">automl · python</div>
-          <div class="flow-step-name">Forge</div>
-          <div class="flow-step-desc">Entraîne + exporte<br /><code style="font-size:0.75rem">forge run --config cfg.yaml</code></div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-step">
-          <div class="flow-step-tag">dashboard · web</div>
-          <div class="flow-step-name">Vigie</div>
-          <div class="flow-step-desc">Supervision temps réel<br />MQTT · alertes · flotte</div>
-        </div>
+<!-- ===== FOOTER ===== -->
+<footer>
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <span class="nav-logo">F<span style="color:var(--blue)">o</span>vet</span>
+        <p>Suite embarquée souveraine pour la détection d'anomalies temps réel sur microcontrôleurs.</p>
       </div>
-
-      <div class="code-section">
-        <div class="code-header">
-          <span class="code-lang">C99</span>
-          <span>Fovet Sentinelle — intégration en 4 lignes</span>
-        </div>
-        <pre><span class="c-cmt">// Initialiser le détecteur (5σ, 50 échantillons de chauffe)</span>
-<span class="c-type">FovetZScore</span> ctx;
-<span class="c-fn">fovet_zscore_init</span>(&amp;ctx, <span class="c-num">5.0f</span>, <span class="c-num">50</span>);
-
-<span class="c-cmt">// Dans la boucle d'acquisition :</span>
-<span class="c-kw">float</span> sample = <span class="c-fn">hal_adc_read</span>(<span class="c-num">0</span>);
-<span class="c-kw">bool</span> anomaly = <span class="c-fn">fovet_zscore_update</span>(&amp;ctx, sample);
-<span class="c-kw">if</span> (anomaly) <span class="c-fn">hal_uart_write</span>(<span class="c-str">"ANOMALY\n"</span>, <span class="c-num">8</span>);</pre>
+      <div class="footer-col">
+        <h4>Produits</h4>
+        <ul>
+          <li><a href="#produits">Fovet Sentinelle</a></li>
+          <li><a href="#produits">Fovet Forge</a></li>
+          <li><a href="#produits">Fovet Vigie</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Ressources</h4>
+        <ul>
+          <li><a href="https://github.com/Antoine005/fovet" target="_blank">Documentation</a></li>
+          <li><a href="https://github.com/Antoine005/fovet" target="_blank">GitHub</a></li>
+          <li><a href="#contact">Demander une démo</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Entreprise</h4>
+        <ul>
+          <li><a href="#a-propos">À propos</a></li>
+          <li><a href="#cas-usage">Cas d'usage</a></li>
+          <li><a href="mailto:contact@fovet.eu">Contact</a></li>
+        </ul>
       </div>
     </div>
-  </section>
-
-  <!-- Cas d'usage -->
-  <section id="usecases">
-    <div class="container">
-      <p class="section-label">03 — Cas d'usage</p>
-      <h2 class="section-title">Déployé dans des environnements critiques</h2>
-      <div class="usecases-grid">
-
-        <div class="usecase-card">
-          <div class="usecase-sector">Défense</div>
-          <div class="usecase-title">Protection travailleur isolé (PTI)</div>
-          <p class="usecase-desc">Détection de chute, immobilité et SOS sur MPU-6050. Alerte MQTT temps réel. Zéro cloud US.</p>
-        </div>
-
-        <div class="usecase-card">
-          <div class="usecase-sector">Industriel</div>
-          <div class="usecase-title">Détection d'incendie / fumée</div>
-          <p class="usecase-desc">Analyse RGB565 OV2640 en temps réel. 3× Z-Score sur canaux R/ratio/variance. Flash sur ESP32-CAM.</p>
-        </div>
-
-        <div class="usecase-card">
-          <div class="usecase-sector">Aéronautique</div>
-          <div class="usecase-title">Surveillance vibratoire</div>
-          <p class="usecase-desc">Z-Score sur accéléromètre I2C. Détection d'anomalies de signature mécanique sur MCU contraint.</p>
-        </div>
-
-        <div class="usecase-card">
-          <div class="usecase-sector">Santé / Sécurité</div>
-          <div class="usecase-title">Fatigue cardiaque (MAX30102)</div>
-          <p class="usecase-desc">Surveillance HR/SpO₂ temps réel. Seuils WARN/DANGER/CRITICAL. Historique TimescaleDB.</p>
-        </div>
-
+    <div class="footer-bottom">
+      <span>© 2026 Antoine Porte — Fovet. Tous droits réservés.</span>
+      <div class="footer-bottom-links">
+        <a href="/mentions-legales">Mentions légales</a>
+        <a href="/mentions-legales">Politique de confidentialité</a>
+        <a href="https://github.com/Antoine005/fovet" target="_blank">GitHub</a>
       </div>
     </div>
-  </section>
+  </div>
+</footer>
 
-  <!-- Pourquoi -->
-  <section id="pourquoi">
-    <div class="container">
-      <p class="section-label">04 — Pourquoi Fovet</p>
-      <h2 class="section-title">Souverain par conception</h2>
-      <div class="why-grid">
+<!-- ===== JS ===== -->
+<script>
+  // Mobile menu
+  function toggleMenu() {
+    const menu = document.getElementById('mobileMenu');
+    menu.classList.toggle('open');
+  }
 
-        <div class="why-item">
-          <span class="why-icon">◈</span>
-          <h3>Aucun cloud étranger</h3>
-          <p>Traitement en local sur le microcontrôleur. Infrastructure hébergée en France. Vos données ne quittent jamais votre périmètre.</p>
-        </div>
+  // Nav active link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav-links a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => {
+          a.style.color = '';
+          if (a.getAttribute('href') === '#' + e.target.id) {
+            a.style.color = 'var(--text)';
+          }
+        });
+      }
+    });
+  }, { threshold: 0.4 });
+  sections.forEach(s => observer.observe(s));
 
-        <div class="why-item">
-          <span class="why-icon">◈</span>
-          <h3>Temps réel garanti</h3>
-          <p>Moins d'une milliseconde par échantillon à 80 MHz. Conçu pour les systèmes à contraintes dures où la latence est critique.</p>
-        </div>
+  // Formspree AJAX submit
+  const form = document.getElementById('contactForm');
+  const status = document.getElementById('formStatus');
 
-        <div class="why-item">
-          <span class="why-icon">◈</span>
-          <h3>Empreinte minimale</h3>
-          <p>Zéro allocation dynamique. Moins de 4 KB RAM par détecteur. Fonctionne sur les MCU les plus contraints.</p>
-        </div>
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = form.querySelector('.btn-submit');
+    btn.textContent = 'Envoi en cours…';
+    btn.disabled = true;
+    status.className = 'form-status';
+    status.style.display = 'none';
 
-        <div class="why-item">
-          <span class="why-icon">◈</span>
-          <h3>Auditabilité totale</h3>
-          <p>Code C99 pur, lisible, sans dépendance opaque. Adapté aux environnements nécessitant une qualification logicielle.</p>
-        </div>
+    try {
+      const data = new FormData(form);
+      const res = await fetch(form.action, {
+        method: 'POST',
+        body: data,
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        status.textContent = '✓ Message envoyé ! Nous vous répondrons sous 48h.';
+        status.className = 'form-status success';
+        form.reset();
+      } else {
+        throw new Error();
+      }
+    } catch {
+      status.textContent = '✗ Erreur lors de l\'envoi. Contactez-nous directement à contact@fovet.eu';
+      status.className = 'form-status error';
+    }
 
-      </div>
-    </div>
-  </section>
-
-  <!-- Contact -->
-  <section id="contact">
-    <div class="container">
-      <p class="section-label">05 — Contact</p>
-      <div class="contact-block">
-        <div>
-          <h2>Discutons de votre projet</h2>
-          <p>Intégration sur mesure, licence commerciale, démo technique — contactez-nous.</p>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:12px;align-items:flex-end;">
-          <a href="mailto:contact@fovet.eu" class="btn-primary">contact@fovet.eu</a>
-          <a href="https://github.com/Antoine005/fovet" target="_blank" rel="noopener" class="github-link" style="justify-content:flex-end;">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
-            Démarrer sur GitHub (LGPL v3)
-          </a>
-        </div>
-      </div>
-      <p class="license-note" style="margin-top:20px;">Fovet est distribué sous <a href="https://github.com/Antoine005/fovet/blob/master/LICENSE" target="_blank" rel="noopener">LGPL v3</a> pour les usages non commerciaux. Licence commerciale disponible pour les entreprises.</p>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer>
-    <div class="container">
-      <p>© 2026 Antoine Porte — Fovet. Tous droits réservés.</p>
-      <div class="footer-legal">
-        <a href="mailto:contact@fovet.eu">contact@fovet.eu</a>
-        <a href="https://github.com/Antoine005/fovet" target="_blank" rel="noopener" class="github-link">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-          GitHub
-        </a>
-        <a href="#">Mentions légales</a>
-      </div>
-    </div>
-  </footer>
+    status.style.display = 'block';
+    btn.textContent = 'Envoyer ma demande';
+    btn.disabled = false;
+  });
+</script>
 
 </body>
 </html>
