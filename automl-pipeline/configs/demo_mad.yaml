@@ -31,6 +31,14 @@ export:
   targets: [c_header, json_config]
   output_dir: models/demo_mad
 
+manifest:
+  sensor: synthetic
+  unit: mad_score
+  value_min: 0.0
+  value_max: 10.0
+  label_normal: normal
+  label_anomaly: anomaly
+
 report:
   enabled: true
   format: html

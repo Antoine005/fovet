@@ -32,6 +32,15 @@ export:
   output_dir: models/demo_zscore
   quantization: float32  # non utilisé pour Z-Score (export C header uniquement)
 
+# Métadonnées pour fovet_model_manifest.h — copier dans src/ du projet PlatformIO
+manifest:
+  sensor: synthetic          # "synthetic" | "imu" | "camera" | "temperature" | "hr"
+  unit: z_score              # unité affichée sur l'axe Y de Vigie
+  value_min: -6.0            # borne basse pour l'auto-scale du graphe Vigie
+  value_max: 6.0             # borne haute
+  label_normal: normal
+  label_anomaly: anomaly
+
 report:
   enabled: true
   format: html
