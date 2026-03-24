@@ -188,6 +188,8 @@ def test_export_header_contains_sdk_struct(tmp_path: Path):
     assert "fovet/zscore.h" in content
     assert "threshold_sigma" in content
     assert "FOVET_ZSCORE_CONFIG_H" in content
+    assert "min_samples" in content          # new field since struct v2
+    assert ".min_samples      = 0U" in content  # pre-calibrated = no warm-up
 
 
 def test_export_header_contains_calibrated_values(tmp_path: Path):

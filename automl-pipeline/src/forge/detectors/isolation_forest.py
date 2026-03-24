@@ -1,12 +1,23 @@
 """
 Isolation Forest detector -- scikit-learn backend.
 
-Suited for multivariate sensor data and contextual anomalies that
-Z-Score misses. Does NOT require the signal to be Gaussian.
+DEPLOYMENT MODEL (architectural decision — 2026-03-14):
+  IsolationForest is CLOUD-ONLY / GATEWAY-ONLY. It is NOT deployed on MCUs.
+
+  Reason: A 100-tree IsolationForest requires storing the full tree structure
+  in C (hundreds of if/else branches per tree), which is incompatible with the
+  Fovet Sentinelle constraints (< 4 KB RAM, < 1 ms/sample).
+
+  Intended usage:
+    1. Forge trains and scores on a gateway or Scaleway server.
+    2. JSON export contains the detection threshold for pipeline documentation.
+    3. The MCU runs Z-Score or a quantized AutoEncoder (TFLite Micro) instead.
+    4. IsolationForest results are compared offline to validate edge detector quality.
 
 Export:
-  - json_config: model metadata + decision threshold (for documentation / client report)
-  - tflite_micro: planned Forge-4 (ONNX -> TFLite conversion)
+  - json_config: model metadata + decision threshold (documentation / offline audit)
+  - C header: NOT supported — use ZScoreDetector for edge C export
+  - TFLite: NOT planned — tree structure is not convertible to TFLite
 """
 
 from __future__ import annotations
@@ -90,9 +101,10 @@ class IsolationForestDetector(Detector):
             "contamination": self.config.contamination,
             "random_state": self.config.random_state,
             "decision_threshold": self._threshold,
+            "deployment": "cloud_or_gateway_only",
             "note": (
-                "decision_threshold: anomaly_score > threshold -> anomaly. "
-                "TFLite export planned in Forge-4."
+                "IsolationForest is cloud/gateway-only — too large for MCU RAM. "
+                "Use fovet_zscore or autoencoder (TFLite Micro) for edge deployment."
             ),
         }
 

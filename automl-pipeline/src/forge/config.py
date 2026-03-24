@@ -228,6 +228,29 @@ class ExportConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Preprocessing config
+# ---------------------------------------------------------------------------
+
+class PreprocessingConfig(BaseModel):
+    """Optional feature normalization applied before detector training.
+
+    When enabled, a StandardScaler is fit on training data and applied to
+    both train and test sets. This is important for multi-feature AutoEncoder
+    training where raw feature scales can differ by orders of magnitude.
+
+    Note: Z-Score computes per-feature statistics independently, so
+    normalization is redundant for single-detector Z-Score pipelines.
+    For multi-feature AutoEncoder and IsolationForest, normalization is
+    strongly recommended.
+
+    The fitted scaler parameters (mean, scale) are exported alongside
+    detector artifacts so that firmware can apply the same transformation.
+    """
+
+    normalize: bool = False
+
+
+# ---------------------------------------------------------------------------
 # Report config
 # ---------------------------------------------------------------------------
 
@@ -303,6 +326,7 @@ class PipelineConfig(BaseModel):
     detectors: list[DetectorConfig] = Field(min_length=1)
     preprocessing: PreprocessingConfig = Field(default_factory=PreprocessingConfig)
     split: TrainTestSplitConfig = Field(default_factory=TrainTestSplitConfig)
+    preprocessing: PreprocessingConfig = Field(default_factory=PreprocessingConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
     report: ReportConfig = Field(default_factory=ReportConfig)
     manifest: ManifestConfig = Field(default_factory=ManifestConfig)
