@@ -66,6 +66,7 @@ app.use("/alerts/*", cookieAuth);
 app.use("/pti/*", cookieAuth);
 app.use("/fleet/*", cookieAuth);
 app.use("/workers/*", cookieAuth);
+app.use("/forge/*", cookieAuth);
 
 // -------------------------------------------------------------------------
 // Rate limiting — /auth/token: max 5 attempts per 15 min per IP
@@ -774,4 +775,283 @@ app.patch("/alerts/:id/ack", cookieAuth, async (c) => {
     data: { acknowledged: true, acknowledgedAt: new Date() },
   });
   return c.json(alert);
+});
+
+// =========================================================================
+// FORGE — Model registry, training jobs, drift scores, OTA deploy, audit
+// =========================================================================
+
+// Zod schemas for Forge
+const ForgeModelSchema = z.object({
+  name:      z.string().min(1).max(100),
+  type:      z.string().min(1).max(20),
+  version:   z.string().min(1).max(50),
+  status:    z.enum(["PROD", "TRAIN", "ARCH"]),
+  sizeKb:    z.number().positive().optional(),
+  latencyMs: z.number().positive().optional(),
+  accuracy:  z.number().min(0).max(100).optional(),
+});
+
+const ForgeJobSchema = z.object({
+  baseModelId:     z.string().optional(),
+  totalEpochs:     z.number().int().min(1).max(1000).default(50),
+  datasetSessions: z.number().int().positive().optional(),
+  dataFrom:        z.string().optional(),
+  dataTo:          z.string().optional(),
+  profile:         z.string().optional(),
+});
+
+const ForgeDeploySchema = z.object({
+  modelId:   z.string().min(1),
+  deviceIds: z.array(z.string().min(1)).min(1),
+});
+
+const ForgeValidateSchema = z.object({
+  decision: z.enum(["PROMOTE", "REJECT"]),
+  actor:    z.string().min(1).max(100),
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/models — list all models
+// -------------------------------------------------------------------------
+app.get("/forge/models", async (c) => {
+  const models = await prisma.forgeModel.findMany({
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+  });
+  return c.json(models);
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/models/:id — single model detail
+// -------------------------------------------------------------------------
+app.get("/forge/models/:id", async (c) => {
+  const { id } = c.req.param();
+  const model = await prisma.forgeModel.findUnique({
+    where: { id },
+    include: {
+      jobs:    { orderBy: { createdAt: "desc" }, take: 10 },
+      deploys: { orderBy: { deployedAt: "desc" }, take: 5 },
+    },
+  });
+  if (!model) return c.json({ error: "Model not found" }, 404);
+  return c.json(model);
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/jobs — job history (most recent first)
+// ?status=RUNNING  — filter by status
+// -------------------------------------------------------------------------
+app.get("/forge/jobs", async (c) => {
+  const statusFilter = c.req.query("status");
+
+  const jobs = await prisma.forgeJob.findMany({
+    where: statusFilter ? { status: statusFilter } : undefined,
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    include: { model: { select: { name: true, version: true, type: true } } },
+  });
+  return c.json(jobs);
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/jobs/:id/logs — logs for a specific job
+// -------------------------------------------------------------------------
+app.get("/forge/jobs/:id/logs", async (c) => {
+  const { id } = c.req.param();
+  const job = await prisma.forgeJob.findUnique({
+    where: { id },
+    select: { id: true, jobRef: true, logs: true, status: true },
+  });
+  if (!job) return c.json({ error: "Job not found" }, 404);
+  return c.json(job);
+});
+
+// -------------------------------------------------------------------------
+// POST /api/forge/jobs — launch a new training job
+// -------------------------------------------------------------------------
+app.post("/forge/jobs", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = ForgeJobSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
+  }
+
+  // Generate a sequential job ref based on last job
+  const lastJob = await prisma.forgeJob.findFirst({ orderBy: { createdAt: "desc" }, select: { jobRef: true } });
+  const lastNum = lastJob ? parseInt(lastJob.jobRef.replace("#JB-", ""), 10) : 0;
+  const jobRef  = `#JB-${String(lastNum + 1).padStart(4, "0")}`;
+
+  const job = await prisma.forgeJob.create({
+    data: {
+      jobRef,
+      modelId:         parsed.data.baseModelId ?? null,
+      status:          "RUNNING",
+      progress:        0,
+      currentEpoch:    0,
+      totalEpochs:     parsed.data.totalEpochs,
+      datasetSessions: parsed.data.datasetSessions ?? null,
+      startedAt:       new Date(),
+    },
+  });
+
+  // Append audit entry
+  await prisma.forgeAudit.create({
+    data: {
+      actor:     "system",
+      action:    "JOB_START",
+      label:     `Job ${jobRef} lancé`,
+      jobRef,
+    },
+  });
+
+  // NOTE: in production, trigger automl-pipeline CLI here via child_process or queue
+  return c.json(job, 201);
+});
+
+// -------------------------------------------------------------------------
+// PATCH /api/forge/jobs/:id/validate — promote to STAGING or reject
+// -------------------------------------------------------------------------
+app.patch("/forge/jobs/:id/validate", async (c) => {
+  const { id } = c.req.param();
+  const body   = await c.req.json().catch(() => null);
+  const parsed = ForgeValidateSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
+  }
+
+  const job = await prisma.forgeJob.findUnique({ where: { id }, select: { id: true, jobRef: true, status: true, modelId: true } });
+  if (!job) return c.json({ error: "Job not found" }, 404);
+  if (job.status !== "DONE") return c.json({ error: "Job must be DONE to validate" }, 400);
+
+  const { decision, actor } = parsed.data;
+
+  if (decision === "PROMOTE" && job.modelId) {
+    await prisma.forgeModel.update({
+      where: { id: job.modelId },
+      data:  { status: "PROD" },
+    });
+  } else if (decision === "REJECT" && job.modelId) {
+    await prisma.forgeModel.update({
+      where: { id: job.modelId },
+      data:  { status: "ARCH" },
+    });
+  }
+
+  await prisma.forgeAudit.create({
+    data: {
+      actor,
+      action:    decision === "PROMOTE" ? "PROMOTE" : "REJECT",
+      label:     `${actor} a ${decision === "PROMOTE" ? "promu" : "rejeté"} le job ${job.jobRef}`,
+      jobRef:    job.jobRef,
+    },
+  });
+
+  return c.json({ ok: true, decision });
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/drift — drift scores for all PROD models
+// -------------------------------------------------------------------------
+app.get("/forge/drift", async (c) => {
+  const models = await prisma.forgeModel.findMany({
+    where:   { status: "PROD", driftScore: { not: null } },
+    orderBy: { driftScore: "desc" },
+    select: {
+      id: true, name: true, version: true,
+      driftScore: true, driftLevel: true, driftNote: true,
+    },
+  });
+  return c.json(
+    models.map((m) => ({
+      id:    m.id,
+      name:  `${m.name} ${m.version}`,
+      score: m.driftScore!,
+      level: (m.driftLevel ?? "ok") as "ok" | "med" | "crit",
+      note:  m.driftNote ?? "Stable",
+    }))
+  );
+});
+
+// -------------------------------------------------------------------------
+// POST /api/forge/deploy — deploy a model to one or more devices via OTA
+// -------------------------------------------------------------------------
+app.post("/forge/deploy", async (c) => {
+  const body   = await c.req.json().catch(() => null);
+  const parsed = ForgeDeploySchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
+  }
+
+  const model = await prisma.forgeModel.findUnique({ where: { id: parsed.data.modelId } });
+  if (!model) return c.json({ error: "Model not found" }, 404);
+
+  // Generate deploy ref
+  const lastDeploy  = await prisma.forgeDeploy.findFirst({ orderBy: { createdAt: "desc" }, select: { deployRef: true } });
+  const lastDepNum  = lastDeploy ? parseInt(lastDeploy.deployRef.replace("#DEP-", ""), 10) : 0;
+  const deployRef   = `#DEP-${String(lastDepNum + 1).padStart(4, "0")}`;
+
+  // Initial results: all pending
+  const results = Object.fromEntries(parsed.data.deviceIds.map((id) => [id, "pending"]));
+
+  const deploy = await prisma.forgeDeploy.create({
+    data: {
+      deployRef,
+      modelId:   model.id,
+      deviceIds: JSON.stringify(parsed.data.deviceIds),
+      status:    "PENDING",
+      results:   JSON.stringify(results),
+      deployedAt: new Date(),
+    },
+  });
+
+  await prisma.forgeAudit.create({
+    data: {
+      actor:     "system",
+      action:    "DEPLOY",
+      label:     `Déploiement ${deployRef} — ${model.name} ${model.version} → ${parsed.data.deviceIds.length} dispositif(s)`,
+      modelRef:  `${model.name} ${model.version}`,
+      deployRef,
+    },
+  });
+
+  // NOTE: in production, publish OTA MQTT messages here per device
+  return c.json({ ...deploy, deviceIds: parsed.data.deviceIds, results }, 201);
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/deploys — list of past OTA deployments
+// ?limit=20 (max 100)
+// -------------------------------------------------------------------------
+app.get("/forge/deploys", async (c) => {
+  const rawLimit = parseInt(c.req.query("limit") ?? "20", 10);
+  const limit    = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 20, 100);
+
+  const deploys = await prisma.forgeDeploy.findMany({
+    orderBy: { deployedAt: "desc" },
+    take: limit,
+    include: { model: { select: { name: true, version: true } } },
+  });
+
+  return c.json(
+    deploys.map((d) => ({
+      ...d,
+      deviceIds: JSON.parse(d.deviceIds) as string[],
+      results:   d.results ? JSON.parse(d.results) as Record<string, string> : null,
+    }))
+  );
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/audit — recent audit log entries
+// ?limit=50 (max 200)
+// -------------------------------------------------------------------------
+app.get("/forge/audit", async (c) => {
+  const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
+  const limit    = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
+
+  const entries = await prisma.forgeAudit.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+  return c.json(entries);
 });

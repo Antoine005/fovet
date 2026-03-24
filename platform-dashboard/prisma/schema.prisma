@@ -66,6 +66,94 @@ model Reading {
 }
 
 // -------------------------------------------------------------------------
+// Forge — Model registry
+// -------------------------------------------------------------------------
+model ForgeModel {
+  id         String   @id @default(cuid())
+  name       String   // "Fovet-Fatigue"
+  type       String   // "FAT" | "PTI" | "STR"
+  version    String   // "v2.3.1"
+  status     String   // "PROD" | "TRAIN" | "ARCH"
+  sizeKb     Float?
+  latencyMs  Float?
+  accuracy   Float?
+  driftScore Float?
+  driftLevel String?  // "ok" | "med" | "crit"
+  driftNote  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  jobs       ForgeJob[]
+  deploys    ForgeDeploy[]
+
+  @@map("forge_models")
+}
+
+// -------------------------------------------------------------------------
+// Forge — Training jobs
+// -------------------------------------------------------------------------
+model ForgeJob {
+  id              String    @id @default(cuid())
+  jobRef          String    @unique  // "#JB-0041"
+  modelId         String?
+  status          String    // "RUNNING" | "DONE" | "FAILED" | "CANCELLED"
+  progress        Int       @default(0)
+  currentEpoch    Int       @default(0)
+  totalEpochs     Int       @default(50)
+  eta             String?
+  datasetSessions Int?
+  logs            String?   @db.Text
+  trainLoss       Float?
+  valLoss         Float?
+  valAccuracy     Float?
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  model           ForgeModel? @relation(fields: [modelId], references: [id])
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("forge_jobs")
+}
+
+// -------------------------------------------------------------------------
+// Forge — OTA deployments
+// -------------------------------------------------------------------------
+model ForgeDeploy {
+  id         String   @id @default(cuid())
+  deployRef  String   @unique  // "#DEP-0038"
+  modelId    String
+  deviceIds  String   // JSON array of device ids
+  status     String   // "PENDING" | "SUCCESS" | "FAILED" | "PARTIAL"
+  results    String?  // JSON: { deviceId: "ok" | "fail" }
+  deployedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  model      ForgeModel @relation(fields: [modelId], references: [id])
+
+  @@index([deployedAt(sort: Desc)])
+  @@map("forge_deploys")
+}
+
+// -------------------------------------------------------------------------
+// Forge — Audit log (deploy, retrain, promote, reject)
+// -------------------------------------------------------------------------
+model ForgeAudit {
+  id        String   @id @default(cuid())
+  actor     String   // "a.porte"
+  action    String   // "JOB_START" | "JOB_CANCEL" | "DATASET_VALIDATED" | "DEPLOY" | "PROMOTE" | "REJECT"
+  label     String?  // human-readable description
+  modelRef  String?  // model name + version for display
+  jobRef    String?
+  deployRef String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@map("forge_audit")
+}
+
+// -------------------------------------------------------------------------
 // Alert — an anomaly event persisted for notification and history
 // -------------------------------------------------------------------------
 model Alert {
