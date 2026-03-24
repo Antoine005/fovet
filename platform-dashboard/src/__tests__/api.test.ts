@@ -152,7 +152,10 @@ describe("GET /api/devices", () => {
   });
 
   it("returns 200 with device list", async () => {
-    const mockDevices = [{ id: "d1", name: "ESP32", mqttClientId: "esp32-001", active: true }];
+    const mockDevices = [{
+      id: "d1", name: "ESP32", mqttClientId: "esp32-001", active: true,
+      readings: [], _count: { readings: 0 },
+    }];
     vi.mocked(prisma.device.findMany).mockResolvedValue(mockDevices as never);
 
     const res = await app.request("/api/devices", {
@@ -160,7 +163,11 @@ describe("GET /api/devices", () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual(mockDevices);
+    expect(body).toEqual([{
+      id: "d1", name: "ESP32", mqttClientId: "esp32-001", active: true,
+      lastReadingAt: null, readingCount: 0,
+      latestFirmware: null, latestModelId: null, latestUnit: null, latestLabel: null,
+    }]);
   });
 });
 

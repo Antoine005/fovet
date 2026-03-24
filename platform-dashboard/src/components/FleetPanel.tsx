@@ -190,8 +190,8 @@ export function FleetPanel({ deviceId, deviceName, mqttClientId, location, readi
                   fontSize: 11,
                 }}
                 labelFormatter={() => ""}
-                formatter={(v: number | undefined) => [
-                  v !== undefined ? v.toFixed(4) : "",
+                formatter={(v) => [
+                  typeof v === "number" ? v.toFixed(4) : "",
                   "val",
                 ]}
               />

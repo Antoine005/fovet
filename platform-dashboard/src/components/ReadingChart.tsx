@@ -226,7 +226,8 @@ export function ReadingChart({ deviceId }: Props) {
     : undefined;
 
   // Custom tooltip formatter to show unit
-  const tooltipFormatter = (value: number, name: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tooltipFormatter = (value: any, name: any) => {
     if (name === "Valeur" && unit) return [`${value} ${unit}`, name];
     if (name === "Anomalie" && value !== null) return [`${value} ${unit || ""}`, name];
     return [value, name];

@@ -50,9 +50,16 @@ app.use(
 // -------------------------------------------------------------------------
 // Cookie auth — protect all routes except /health and /auth/*
 // -------------------------------------------------------------------------
-// DEV BYPASS: auth disabled — all routes are public
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const cookieAuth: MiddlewareHandler = async (_c, next) => { await next(); };
+const cookieAuth: MiddlewareHandler = async (c, next) => {
+  const token = getCookie(c, "fovet_token");
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    await verify(token, jwtSecret, "HS256");
+  } catch {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  await next();
+};
 
 app.use("/devices/*", cookieAuth);
 app.use("/alerts/*", cookieAuth);
