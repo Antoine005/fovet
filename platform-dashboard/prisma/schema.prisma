@@ -68,7 +68,7 @@ model Reading {
 // -------------------------------------------------------------------------
 // Forge — Model registry
 // -------------------------------------------------------------------------
-model CastModel {
+model ForgeModel {
   id         String   @id @default(cuid())
   name       String   // "Ardent-Fatigue"
   type       String   // "FAT" | "PTI" | "STR"
@@ -83,8 +83,8 @@ model CastModel {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  jobs       CastJob[]
-  deploys    CastDeploy[]
+  jobs       ForgeJob[]
+  deploys    ForgeDeploy[]
 
   @@map("forge_models")
 }
@@ -92,7 +92,7 @@ model CastModel {
 // -------------------------------------------------------------------------
 // Forge — Training jobs
 // -------------------------------------------------------------------------
-model CastJob {
+model ForgeJob {
   id              String    @id @default(cuid())
   jobRef          String    @unique  // "#JB-0041"
   modelId         String?
@@ -110,7 +110,7 @@ model CastJob {
   finishedAt      DateTime?
   createdAt       DateTime  @default(now())
 
-  model           CastModel? @relation(fields: [modelId], references: [id])
+  model           ForgeModel? @relation(fields: [modelId], references: [id])
 
   @@index([status])
   @@index([createdAt(sort: Desc)])
@@ -120,7 +120,7 @@ model CastJob {
 // -------------------------------------------------------------------------
 // Forge — OTA deployments
 // -------------------------------------------------------------------------
-model CastDeploy {
+model ForgeDeploy {
   id         String   @id @default(cuid())
   deployRef  String   @unique  // "#DEP-0038"
   modelId    String
@@ -130,7 +130,7 @@ model CastDeploy {
   deployedAt DateTime @default(now())
   createdAt  DateTime @default(now())
 
-  model      CastModel @relation(fields: [modelId], references: [id])
+  model      ForgeModel @relation(fields: [modelId], references: [id])
 
   @@index([deployedAt(sort: Desc)])
   @@map("forge_deploys")
@@ -139,7 +139,7 @@ model CastDeploy {
 // -------------------------------------------------------------------------
 // Forge — Audit log (deploy, retrain, promote, reject)
 // -------------------------------------------------------------------------
-model CastAudit {
+model ForgeAudit {
   id        String   @id @default(cuid())
   actor     String   // "a.porte"
   action    String   // "JOB_START" | "JOB_CANCEL" | "DATASET_VALIDATED" | "DEPLOY" | "PROMOTE" | "REJECT"

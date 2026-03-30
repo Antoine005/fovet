@@ -10,7 +10,7 @@ import { FleetPanel } from "@/components/FleetPanel";
 import FleetHealth from "@/components/FleetHealth";
 import WorkerDetail from "@/components/WorkerDetail";
 import { FleetAlertTimeline } from "@/components/FleetAlertTimeline";
-import CastTab from "@/components/CastTab";
+import ForgeTab from "@/components/ForgeTab";
 
 interface Device {
   id: string;
@@ -209,7 +209,7 @@ pio run --target upload --environment zscore_demo`}
       )}
 
       {/* Forge view — model management pipeline */}
-      {view === "forge" && <CastTab />}
+      {view === "forge" && <ForgeTab />}
 
       {/* Fleet view — devices + alert timeline */}
       {view === "fleet" && devices.length > 0 && (

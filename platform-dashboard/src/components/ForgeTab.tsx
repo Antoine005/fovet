@@ -158,7 +158,7 @@ function stepLabelCls(state: StepState) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function CastTab() {
+export default function ForgeTab() {
   const [selectedModel,   setSelectedModel]   = useState<string | null>(null);
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [showTrainModal,  setShowTrainModal]  = useState(false);
