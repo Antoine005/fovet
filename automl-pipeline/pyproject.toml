@@ -1,7 +1,7 @@
 [project]
-name = "fovet-forge"
+name = "ardent-forge"
 version = "0.1.0"
-description = "Fovet Forge — AutoML pipeline for anomaly detection on embedded targets"
+description = "Ardent Forge — AutoML pipeline for anomaly detection on embedded targets"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

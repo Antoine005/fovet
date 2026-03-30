@@ -1,4 +1,4 @@
-# Fovet SDK — Native unit tests (PC / gcc)
+# Ardent SDK — Native unit tests (PC / gcc)
 # Usage:
 #   make           → build all + run all
 #   make build     → build only
@@ -7,11 +7,11 @@
 CC      = gcc
 CFLAGS  = -std=c99 -Wall -Wextra -Wpedantic -O2 \
           -I../include \
-          -DFOVET_NATIVE_TEST
+          -DARD_NATIVE_TEST
 LDFLAGS = -lm
 
 SRC_DIR         = ..
-FORGE_MODELS    = ../../automl-pipeline/models/demo_zscore
+CAST_MODELS    = ../../automl-pipeline/models/demo_zscore
 
 TESTS = test_zscore test_drift test_forge_integration test_mad test_i2c_hal test_mpu6050
 
@@ -31,7 +31,7 @@ test_drift: $(SRC_DIR)/src/zscore.c $(SRC_DIR)/src/drift.c test_drift.c
 
 # --- test_forge_integration ---
 test_forge_integration: $(SRC_DIR)/src/zscore.c test_forge_integration.c
-	$(CC) $(CFLAGS) -I$(FORGE_MODELS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -I$(CAST_MODELS) -o $@ $^ $(LDFLAGS)
 
 # --- run all ---
 run: $(addprefix run_,$(TESTS))

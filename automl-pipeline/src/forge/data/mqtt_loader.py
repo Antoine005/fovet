@@ -79,7 +79,7 @@ def load(config: "MqttDataConfig") -> Dataset:
 
     client = paho.Client(
         paho.CallbackAPIVersion.VERSION2,
-        client_id=f"fovet-forge-collector-{int(time.time())}",
+        client_id=f"ardent-forge-collector-{int(time.time())}",
         clean_session=True,
     )
     client.on_connect = on_connect

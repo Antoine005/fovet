@@ -40,7 +40,7 @@ class Pipeline:
 
     def run(self) -> None:
         """Execute the full pipeline: load data → split → fit → predict → export → report."""
-        console.rule(f"[bold blue]Fovet Forge -- {self.config.name}")
+        console.rule(f"[bold blue]Ardent Forge -- {self.config.name}")
         console.print(f"[dim]{self.config.description}[/dim]\n")
 
         # --- Data loading ---------------------------------------------------

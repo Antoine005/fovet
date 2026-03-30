@@ -1,4 +1,4 @@
-# Fovet Vigie — Integration smoke test stack
+# Ardent Watch — Integration smoke test stack
 # Usage: scripts/smoke-test.sh
 #
 # Spins up postgres + mosquitto + dashboard with test credentials,
@@ -10,11 +10,11 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: fovet_test
-      POSTGRES_PASSWORD: fovet_test
-      POSTGRES_DB: fovet_vigie_test
+      POSTGRES_USER: ard_test
+      POSTGRES_PASSWORD: ard_test
+      POSTGRES_DB: ard_watch_test
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fovet_test"]
+      test: ["CMD-SHELL", "pg_isready -U ard_test"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -35,7 +35,7 @@ services:
       mosquitto:
         condition: service_started
     environment:
-      DATABASE_URL: "postgresql://fovet_test:fovet_test@db:5432/fovet_vigie_test"
+      DATABASE_URL: "postgresql://ard_test:ard_test@db:5432/ard_watch_test"
       JWT_SECRET: "smoke-test-secret-32-chars-ok-xx"
       DASHBOARD_PASSWORD: "smoke-password"
       ALLOWED_ORIGIN: "http://localhost:3000"

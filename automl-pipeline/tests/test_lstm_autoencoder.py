@@ -192,7 +192,7 @@ def test_export_creates_three_files(tmp_path: Path):
     names = {p.name for p in written}
     assert "lstm_autoencoder.tflite" in names
     assert "lstm_autoencoder_config.json" in names
-    assert "fovet_lstm_autoencoder_model.h" in names
+    assert "ard_lstm_autoencoder_model.h" in names
 
 
 def test_export_tflite_is_non_empty(tmp_path: Path):
@@ -221,8 +221,8 @@ def test_export_c_header_guard(tmp_path: Path):
     d = LSTMAutoEncoderDetector(_lstm_cfg())
     d.fit(ds)
     d.export(tmp_path, stem="test")
-    content = (tmp_path / "fovet_lstm_autoencoder_model.h").read_text()
-    assert "FOVET_LSTM_AUTOENCODER_MODEL_H" in content
+    content = (tmp_path / "ard_lstm_autoencoder_model.h").read_text()
+    assert "ARD_LSTM_AUTOENCODER_MODEL_H" in content
     assert "g_lstm_autoencoder_model_data" in content
     assert "g_lstm_autoencoder_threshold" in content
     assert "g_lstm_autoencoder_seq_len" in content
@@ -235,7 +235,7 @@ def test_export_c_header_seq_len_matches_config(tmp_path: Path):
     d = LSTMAutoEncoderDetector(_lstm_cfg(sequence_length=seq_len))
     d.fit(ds)
     d.export(tmp_path, stem="test")
-    content = (tmp_path / "fovet_lstm_autoencoder_model.h").read_text()
+    content = (tmp_path / "ard_lstm_autoencoder_model.h").read_text()
     assert f"g_lstm_autoencoder_seq_len   = {seq_len};" in content
 
 

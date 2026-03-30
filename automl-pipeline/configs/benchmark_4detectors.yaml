@@ -1,4 +1,4 @@
-# Fovet Forge — Benchmark comparatif des 4 détecteurs
+# Ardent Forge — Benchmark comparatif des 4 détecteurs
 #
 # Compare ZScore / IsolationForest / AutoEncoder / LSTMAutoEncoder
 # sur un signal synthétique avec anomalies injectées.

@@ -10,7 +10,7 @@ import { FleetPanel } from "@/components/FleetPanel";
 import FleetHealth from "@/components/FleetHealth";
 import WorkerDetail from "@/components/WorkerDetail";
 import { FleetAlertTimeline } from "@/components/FleetAlertTimeline";
-import ForgeTab from "@/components/ForgeTab";
+import CastTab from "@/components/CastTab";
 
 interface Device {
   id: string;
@@ -84,10 +84,10 @@ export default function DashboardPage() {
       <header className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
-            Fovet Vigie
+            Ardent Watch
           </h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            Supervision temps réel — Fovet Sentinelle
+            Supervision temps réel — Ardent Pulse
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -209,7 +209,7 @@ pio run --target upload --environment zscore_demo`}
       )}
 
       {/* Forge view — model management pipeline */}
-      {view === "forge" && <ForgeTab />}
+      {view === "forge" && <CastTab />}
 
       {/* Fleet view — devices + alert timeline */}
       {view === "fleet" && devices.length > 0 && (

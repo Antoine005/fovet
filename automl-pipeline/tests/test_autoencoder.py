@@ -157,7 +157,7 @@ def test_export_creates_three_files(tmp_path: Path):
     names = {p.name for p in written}
     assert "autoencoder.tflite" in names
     assert "autoencoder_config.json" in names
-    assert "fovet_autoencoder_model.h" in names
+    assert "ard_autoencoder_model.h" in names
 
 
 def test_export_tflite_is_valid_bytes(tmp_path: Path):
@@ -188,8 +188,8 @@ def test_export_c_header_guard(tmp_path: Path):
     d = AutoEncoderDetector(_ae_cfg())
     d.fit(ds)
     d.export(tmp_path, stem="test")
-    content = (tmp_path / "fovet_autoencoder_model.h").read_text()
-    assert "FOVET_AUTOENCODER_MODEL_H" in content
+    content = (tmp_path / "ard_autoencoder_model.h").read_text()
+    assert "ARD_AUTOENCODER_MODEL_H" in content
     assert "g_autoencoder_model_data" in content
     assert "g_autoencoder_threshold" in content
     assert "uint8_t" in content

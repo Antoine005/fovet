@@ -1,15 +1,15 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  *
  * config.h.example — Copier vers config.h et remplir les credentials.
  * config.h est gitignored et ne doit JAMAIS être commité.
  */
 
-#ifndef FOVET_CONFIG_H
-#define FOVET_CONFIG_H
+#ifndef ARD_CONFIG_H
+#define ARD_CONFIG_H
 
 /* WiFi credentials */
 #define WIFI_SSID      "your_wifi_ssid"
@@ -18,10 +18,10 @@
 /* MQTT broker — Mosquitto local (port 1883) ou VPS Scaleway */
 #define MQTT_BROKER    "192.168.1.x"   /* IP de la machine qui exécute Mosquitto */
 #define MQTT_PORT      1883
-#define MQTT_USER      "fovet-device"
+#define MQTT_USER      "ardent-device"
 #define MQTT_PASSWORD  "change_me"
 
-/* Identité du device — doit correspondre au mqttClientId enregistré dans Vigie */
+/* Identité du device — doit correspondre au mqttClientId enregistré dans Watch */
 #define DEVICE_ID      "esp32cam_001"
 
-#endif /* FOVET_CONFIG_H */
+#endif /* ARD_CONFIG_H */

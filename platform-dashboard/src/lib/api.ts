@@ -1,8 +1,8 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
@@ -31,7 +31,7 @@ export const app = new Hono().basePath("/api");
 // CORS — allow one or more configured origins
 //
 // ALLOWED_ORIGIN supports comma-separated values for multi-origin setups:
-//   ALLOWED_ORIGIN=https://vigie.fovet.eu,https://vigie-staging.fovet.eu
+//   ALLOWED_ORIGIN=https://watch.ardent.io,https://watch-staging.ardent.io
 // -------------------------------------------------------------------------
 const _allowedOrigins = (process.env.ALLOWED_ORIGIN ?? "http://localhost:3000")
   .split(",")
@@ -51,7 +51,7 @@ app.use(
 // Cookie auth — protect all routes except /health and /auth/*
 // -------------------------------------------------------------------------
 const cookieAuth: MiddlewareHandler = async (c, next) => {
-  const token = getCookie(c, "fovet_token");
+  const token = getCookie(c, "ard_token");
   if (!token) return c.json({ error: "Unauthorized" }, 401);
   try {
     await verify(token, jwtSecret, "HS256");
@@ -97,7 +97,7 @@ const DeviceSchema = z.object({
 // -------------------------------------------------------------------------
 // GET /api/health — public (lightweight ping)
 // -------------------------------------------------------------------------
-app.get("/health", (c) => c.json({ status: "ok", service: "fovet-vigie" }));
+app.get("/health", (c) => c.json({ status: "ok", service: "ardent-watch" }));
 
 // -------------------------------------------------------------------------
 // GET /api/healthz — extended health check (MQTT + DB) — public
@@ -168,8 +168,8 @@ app.post("/auth/token", async (c) => {
     secure: process.env.NODE_ENV === "production",
     path: "/",
   };
-  setCookie(c, "fovet_token",   token,        { ...cookieOpts, maxAge: ACCESS_TOKEN_TTL });
-  setCookie(c, "fovet_refresh", refreshToken, { ...cookieOpts, maxAge: REFRESH_TOKEN_TTL });
+  setCookie(c, "ard_token",   token,        { ...cookieOpts, maxAge: ACCESS_TOKEN_TTL });
+  setCookie(c, "ard_refresh", refreshToken, { ...cookieOpts, maxAge: REFRESH_TOKEN_TTL });
   return c.json({ ok: true });
 });
 
@@ -177,7 +177,7 @@ app.post("/auth/token", async (c) => {
 // POST /api/auth/refresh — exchange refresh token for a new access token
 // -------------------------------------------------------------------------
 app.post("/auth/refresh", async (c) => {
-  const refreshToken = getCookie(c, "fovet_refresh");
+  const refreshToken = getCookie(c, "ard_refresh");
   if (!refreshToken) return c.json({ error: "Unauthorized" }, 401);
 
   try {
@@ -194,7 +194,7 @@ app.post("/auth/refresh", async (c) => {
     jwtSecret,
     "HS256"
   );
-  setCookie(c, "fovet_token", token, {
+  setCookie(c, "ard_token", token, {
     httpOnly: true,
     sameSite: "Lax",
     secure: process.env.NODE_ENV === "production",
@@ -208,8 +208,8 @@ app.post("/auth/refresh", async (c) => {
 // POST /api/auth/logout — clear both auth cookies
 // -------------------------------------------------------------------------
 app.post("/auth/logout", (c) => {
-  deleteCookie(c, "fovet_token",   { path: "/" });
-  deleteCookie(c, "fovet_refresh", { path: "/" });
+  deleteCookie(c, "ard_token",   { path: "/" });
+  deleteCookie(c, "ard_refresh", { path: "/" });
   return c.json({ ok: true });
 });
 
@@ -475,7 +475,7 @@ app.get("/fleet/health", cookieAuth, async (c) => {
       const ptiMotionless = pti.some((a) => a.ptiType === "MOTIONLESS");
       const ptiStatus     = ptiFall ? "CRITICAL" : ptiMotionless ? "WARN" : pti.length > 0 ? "WARN" : "OK";
 
-      // Worst level for FATIGUE / THERMAL: respect Sentinelle level ordering
+      // Worst level for FATIGUE / THERMAL: respect Pulse level ordering
       const worstLevel = (alerts: { alertLevel: string | null }[]) => {
         if (alerts.some((a) => a.alertLevel === "CRITICAL" || a.alertLevel === "DANGER")) return "DANGER";
         if (alerts.some((a) => a.alertLevel === "WARN" || a.alertLevel === "COLD")) return "WARN";
@@ -629,7 +629,7 @@ app.get("/devices/:id/report", cookieAuth, async (c) => {
       ].join(",")
     );
     const csv      = [header, ...rows].join("\r\n");
-    const filename = `fovet_${device.mqttClientId}_${fromDate.toISOString().slice(0, 10)}.csv`;
+    const filename = `ard_${device.mqttClientId}_${fromDate.toISOString().slice(0, 10)}.csv`;
     return new Response(csv, {
       headers: {
         "Content-Type":        "text/csv; charset=utf-8",
@@ -782,7 +782,7 @@ app.patch("/alerts/:id/ack", cookieAuth, async (c) => {
 // =========================================================================
 
 // Zod schemas for Forge
-const ForgeModelSchema = z.object({
+const CastModelSchema = z.object({
   name:      z.string().min(1).max(100),
   type:      z.string().min(1).max(20),
   version:   z.string().min(1).max(50),
@@ -792,7 +792,7 @@ const ForgeModelSchema = z.object({
   accuracy:  z.number().min(0).max(100).optional(),
 });
 
-const ForgeJobSchema = z.object({
+const CastJobSchema = z.object({
   baseModelId:     z.string().optional(),
   totalEpochs:     z.number().int().min(1).max(1000).default(50),
   datasetSessions: z.number().int().positive().optional(),
@@ -801,7 +801,7 @@ const ForgeJobSchema = z.object({
   profile:         z.string().optional(),
 });
 
-const ForgeDeploySchema = z.object({
+const CastDeploySchema = z.object({
   modelId:   z.string().min(1),
   deviceIds: z.array(z.string().min(1)).min(1),
 });
@@ -871,7 +871,7 @@ app.get("/forge/jobs/:id/logs", async (c) => {
 // -------------------------------------------------------------------------
 app.post("/forge/jobs", async (c) => {
   const body = await c.req.json().catch(() => null);
-  const parsed = ForgeJobSchema.safeParse(body);
+  const parsed = CastJobSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
   }
@@ -977,7 +977,7 @@ app.get("/forge/drift", async (c) => {
 // -------------------------------------------------------------------------
 app.post("/forge/deploy", async (c) => {
   const body   = await c.req.json().catch(() => null);
-  const parsed = ForgeDeploySchema.safeParse(body);
+  const parsed = CastDeploySchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
   }

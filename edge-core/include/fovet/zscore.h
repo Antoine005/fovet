@@ -1,12 +1,12 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 
-#ifndef FOVET_ZSCORE_H
-#define FOVET_ZSCORE_H
+#ifndef ARD_ZSCORE_H
+#define ARD_ZSCORE_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -27,7 +27,7 @@ extern "C" {
  *   sensors where slow drift would otherwise corrupt the running mean.
  *   Set window_size = 0 (default) to disable (infinite window).
  *
- * RAM usage: sizeof(FovetZScore) = 24 bytes.
+ * RAM usage: sizeof(ArdentZScore) = 24 bytes.
  */
 typedef struct {
     uint32_t count;           /**< Number of samples processed (saturates at UINT32_MAX) */
@@ -36,7 +36,7 @@ typedef struct {
     float    threshold_sigma; /**< Anomaly threshold (e.g. 3.0f = 3σ) */
     uint32_t min_samples;     /**< Warm-up: detection suppressed until count >= min_samples */
     uint32_t window_size;     /**< Auto-reset period: 0 = disabled (infinite window) */
-} FovetZScore;
+} ArdentZScore;
 
 /**
  * @brief Initialize a Z-Score detector.
@@ -46,7 +46,7 @@ typedef struct {
  *                        Minimum enforced to 2 (variance requires at least 2 samples).
  *                        Pass 0 for a pre-calibrated struct (Forge-exported header).
  */
-void fovet_zscore_init(FovetZScore *ctx, float threshold_sigma, uint32_t min_samples);
+void ard_zscore_init(ArdentZScore *ctx, float threshold_sigma, uint32_t min_samples);
 
 /**
  * @brief Feed a new sample and check for anomaly.
@@ -59,35 +59,35 @@ void fovet_zscore_init(FovetZScore *ctx, float threshold_sigma, uint32_t min_sam
  * @param sample New measurement
  * @return true  if sample is an anomaly, false otherwise
  */
-bool fovet_zscore_update(FovetZScore *ctx, float sample);
+bool ard_zscore_update(ArdentZScore *ctx, float sample);
 
 /**
  * @brief Get current running mean.
  * @param ctx Pointer to detector context (const)
  * @return Current mean value
  */
-float fovet_zscore_get_mean(const FovetZScore *ctx);
+float ard_zscore_get_mean(const ArdentZScore *ctx);
 
 /**
  * @brief Get current standard deviation.
  * @param ctx Pointer to detector context (const)
  * @return Current standard deviation (0.0f if count < 2)
  */
-float fovet_zscore_get_stddev(const FovetZScore *ctx);
+float ard_zscore_get_stddev(const ArdentZScore *ctx);
 
 /**
  * @brief Get current sample count.
  * @param ctx Pointer to detector context (const)
  * @return Number of samples processed so far
  */
-uint32_t fovet_zscore_get_count(const FovetZScore *ctx);
+uint32_t ard_zscore_get_count(const ArdentZScore *ctx);
 
 /**
  * @brief Reset detector stats to initial state.
  *        Preserves threshold_sigma, min_samples, and window_size.
  * @param ctx Pointer to detector context
  */
-void fovet_zscore_reset(FovetZScore *ctx);
+void ard_zscore_reset(ArdentZScore *ctx);
 
 /**
  * @brief Configure windowed (adaptive) mode.
@@ -105,10 +105,10 @@ void fovet_zscore_reset(FovetZScore *ctx);
  * @return true  on success
  * @return false if window_size > 0 and window_size < min_samples (invalid)
  */
-bool fovet_zscore_set_window(FovetZScore *ctx, uint32_t window_size);
+bool ard_zscore_set_window(ArdentZScore *ctx, uint32_t window_size);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* FOVET_ZSCORE_H */
+#endif /* ARD_ZSCORE_H */

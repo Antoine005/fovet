@@ -185,7 +185,7 @@ def _render_benchmark_html(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fovet Forge — Benchmark</title>
+  <title>Ardent Forge — Benchmark</title>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             max-width: 960px; margin: 40px auto; padding: 0 20px;
@@ -208,7 +208,7 @@ def _render_benchmark_html(
   </style>
 </head>
 <body>
-  <h1>Fovet Forge — Benchmark comparatif</h1>
+  <h1>Ardent Forge — Benchmark comparatif</h1>
 
   <div class="meta">
     <p><strong>Configs :</strong> {config_names}</p>
@@ -229,7 +229,7 @@ def _render_benchmark_html(
   </table>
 
   <div class="footer">
-    Fovet Forge &nbsp;·&nbsp; fovet.eu &nbsp;·&nbsp; contact@fovet.eu
+    Ardent Forge &nbsp;·&nbsp; ardent.io &nbsp;·&nbsp; contact@ardent.io
   </div>
 </body>
 </html>"""

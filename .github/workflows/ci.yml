@@ -122,7 +122,7 @@ jobs:
 
   # -------------------------------------------------------------------------
   # landing — deploy to GitHub Pages (push to master only)
-  # Custom domain: fovet.eu (CNAME record must point to antoine005.github.io)
+  # Custom domain: ardent.io (CNAME record must point to antoine005.github.io)
   # -------------------------------------------------------------------------
   deploy-landing:
     name: Deploy landing (GitHub Pages)

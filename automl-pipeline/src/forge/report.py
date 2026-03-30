@@ -107,7 +107,7 @@ def _render_html(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fovet Forge — {config.name}</title>
+  <title>Ardent Forge — {config.name}</title>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             max-width: 900px; margin: 40px auto; padding: 0 20px;
@@ -137,7 +137,7 @@ def _render_html(
   </style>
 </head>
 <body>
-  <h1>Fovet Forge — Rapport d'évaluation</h1>
+  <h1>Ardent Forge — Rapport d'évaluation</h1>
 
   <div class="meta">
     <p><strong>Pipeline :</strong> {config.name}</p>
@@ -151,7 +151,7 @@ def _render_html(
   {detector_sections}
 
   <div class="footer">
-    Fovet Forge &nbsp;·&nbsp; fovet.eu &nbsp;·&nbsp; contact@fovet.eu
+    Ardent Forge &nbsp;·&nbsp; ardent.io &nbsp;·&nbsp; contact@ardent.io
   </div>
 </body>
 </html>"""

@@ -1,12 +1,12 @@
 """
-Tests for MADDetector — Forge Python counterpart to fovet_mad C99.
+Tests for MADDetector — Forge Python counterpart to ard_mad C99.
 
 Coverage:
     - Config validation
     - Fit: warm-up, threshold calibration, explicit threshold override
     - Score: warm-up zeros, normal vs anomalous samples, multi-feature
     - Predict: labels, threshold boundary
-    - Export: fovet_mad_config.h content, mad_config.json
+    - Export: ard_mad_config.h content, mad_config.json
     - Registry: build_detectors() dispatch
     - Pipeline integration: PipelineConfig YAML round-trip
     - Unfitted: RuntimeError on score/predict/export
@@ -269,39 +269,39 @@ class TestMADDetectorExport:
             det = self._fitted_detector()
             paths = det.export(Path(tmpdir), stem="test_pipeline")
             names = {p.name for p in paths}
-            assert "fovet_mad_config.h" in names
+            assert "ard_mad_config.h" in names
             assert "mad_config.json" in names
 
     def test_c_header_guard(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             det = self._fitted_detector()
             det.export(Path(tmpdir), stem="test_pipeline")
-            header = (Path(tmpdir) / "fovet_mad_config.h").read_text()
-            assert "#ifndef FOVET_MAD_CONFIG_H" in header
-            assert "#define FOVET_MAD_CONFIG_H" in header
-            assert "#endif /* FOVET_MAD_CONFIG_H */" in header
+            header = (Path(tmpdir) / "ard_mad_config.h").read_text()
+            assert "#ifndef ARD_MAD_CONFIG_H" in header
+            assert "#define ARD_MAD_CONFIG_H" in header
+            assert "#endif /* ARD_MAD_CONFIG_H */" in header
 
     def test_c_header_includes_mad_h(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             det = self._fitted_detector()
             det.export(Path(tmpdir), stem="p")
-            header = (Path(tmpdir) / "fovet_mad_config.h").read_text()
-            assert '#include "fovet/mad.h"' in header
+            header = (Path(tmpdir) / "ard_mad_config.h").read_text()
+            assert '#include "ardent/mad.h"' in header
 
     def test_c_header_struct_threshold(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             det = self._fitted_detector()
             det.export(Path(tmpdir), stem="p")
-            header = (Path(tmpdir) / "fovet_mad_config.h").read_text()
-            assert "fovet_mad_value" in header
+            header = (Path(tmpdir) / "ard_mad_config.h").read_text()
+            assert "ard_mad_value" in header
             assert ".threshold_mad = 3.500000f" in header
 
     def test_c_header_window_size_128(self):
-        """Window array must always have 128 entries (FOVET_MAD_MAX_WINDOW)."""
+        """Window array must always have 128 entries (ARD_MAD_MAX_WINDOW)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             det = self._fitted_detector(win_size=16)
             det.export(Path(tmpdir), stem="p")
-            header = (Path(tmpdir) / "fovet_mad_config.h").read_text()
+            header = (Path(tmpdir) / "ard_mad_config.h").read_text()
             # Count the float literal entries (ending in 'f') in .window = {...}
             m = re.search(r"\.window\s*=\s*\{([^}]+)\}", header, re.DOTALL)
             assert m is not None
@@ -335,9 +335,9 @@ class TestMADDetectorExport:
         det.fit(_make_dataset(train, ["temp", "hr"]))
         with tempfile.TemporaryDirectory() as tmpdir:
             det.export(Path(tmpdir), stem="p")
-            header = (Path(tmpdir) / "fovet_mad_config.h").read_text()
-            assert "fovet_mad_temp" in header
-            assert "fovet_mad_hr" in header
+            header = (Path(tmpdir) / "ard_mad_config.h").read_text()
+            assert "ard_mad_temp" in header
+            assert "ard_mad_hr" in header
 
 
 # ---------------------------------------------------------------------------

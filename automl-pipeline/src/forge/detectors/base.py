@@ -37,7 +37,7 @@ class DetectionResult:
 
 
 class Detector(ABC):
-    """Common interface for all Fovet Forge anomaly detectors."""
+    """Common interface for all Ardent Forge anomaly detectors."""
 
     @abstractmethod
     def fit(self, dataset: Dataset) -> None:

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fovet Vigie — Supervision capteurs",
-  description: "Dashboard temps réel Fovet Sentinelle — détection d'anomalies sur MCU",
+  title: "Ardent Watch — Supervision capteurs",
+  description: "Dashboard temps réel Ardent Pulse — détection d'anomalies sur MCU",
 };
 
 export default function RootLayout({

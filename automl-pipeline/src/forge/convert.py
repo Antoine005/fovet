@@ -1,5 +1,5 @@
 """
-Fovet Forge — convert.py
+Ardent Forge — convert.py
 
 Converts a trained Keras/TF model to TFLite optimised for MCU deployment.
 
@@ -222,7 +222,7 @@ def _main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Fovet Forge — convert a Keras model to TFLite for ESP32."
+        description="Ardent Forge — convert a Keras model to TFLite for ESP32."
     )
     parser.add_argument("--model", "-m", required=True, help="Path to Keras model (.h5 or SavedModel)")
     parser.add_argument("--output", "-o", help="Output .tflite path (default: <model>.tflite)")

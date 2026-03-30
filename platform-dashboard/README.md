@@ -1,4 +1,4 @@
-# Fovet Vigie — Dashboard de supervision
+# Ardent Watch — Dashboard de supervision
 
 Dashboard temps réel pour la supervision de flottes de capteurs embarqués.
 Reçoit les lectures MQTT des ESP32, stocke en PostgreSQL, expose une API REST sécurisée et un flux SSE temps réel.
@@ -24,7 +24,7 @@ Reçoit les lectures MQTT des ESP32, stocke en PostgreSQL, expose une API REST s
 ### Prérequis
 
 - Node.js 20+
-- PostgreSQL 18 (`fovet_vigie` base créée)
+- PostgreSQL 18 (`ard_watch` base créée)
 - Mosquitto broker local (ou distant)
 
 ### Installation
@@ -41,12 +41,12 @@ npm run dev             # http://localhost:3000
 
 | Variable | Description | Exemple |
 |---|---|---|
-| `DATABASE_URL` | Connexion PostgreSQL | `postgresql://antoine:mdp@localhost:5432/fovet_vigie` |
+| `DATABASE_URL` | Connexion PostgreSQL | `postgresql://antoine:mdp@localhost:5432/ard_watch` |
 | `JWT_SECRET` | Clé HS256 (32+ chars) | `openssl rand -hex 32` |
 | `DASHBOARD_PASSWORD` | Mot de passe login | `monmotdepasse` |
 | `ALLOWED_ORIGIN` | CORS origin autorisée | `http://localhost:3000` |
 | `MQTT_BROKER_URL` | URL broker Mosquitto | `mqtt://localhost:1883` |
-| `MQTT_USERNAME` | Compte lecture MQTT | `fovet-vigie` |
+| `MQTT_USERNAME` | Compte lecture MQTT | `ardent-watch` |
 | `MQTT_PASSWORD` | Mot de passe MQTT | `monmotdepasse` |
 | `ALERT_WEBHOOK_URL` | URL POST notifiée à chaque alerte (optionnel) | `https://hooks.slack.com/…` |
 | `ALERT_WEBHOOK_MIN_LEVEL` | Niveau minimum déclenchant le webhook : `ALL` / `DANGER` (défaut) / `CRITICAL` | `DANGER` |
@@ -89,13 +89,13 @@ platform-dashboard/
 
 ## API REST
 
-Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent le cookie `fovet_token`.
+Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent le cookie `ard_token`.
 
 | Méthode | Route | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/health` | Non | État de l'API (ping léger) |
 | `GET` | `/api/healthz` | Non | Santé étendue — MQTT + DB (200 OK / 503 degraded) |
-| `POST` | `/api/auth/token` | Non | Login — retourne cookie httpOnly `fovet_token` |
+| `POST` | `/api/auth/token` | Non | Login — retourne cookie httpOnly `ard_token` |
 | `POST` | `/api/auth/refresh` | JWT | Renouvelle le token (sliding session) |
 | `POST` | `/api/auth/logout` | Non | Supprime le cookie de session |
 | `GET` | `/api/devices` | JWT | Liste tous les dispositifs |
@@ -163,7 +163,7 @@ curl -b cookies.txt http://localhost:3000/api/devices
 
 ## MQTT — Format des messages
 
-Les ESP32 publient sur le topic `fovet/devices/<DEVICE_ID>/readings` :
+Les ESP32 publient sur le topic `ardent/devices/<DEVICE_ID>/readings` :
 
 ```json
 {
@@ -183,7 +183,7 @@ Les ESP32 publient sur le topic `fovet/devices/<DEVICE_ID>/readings` :
 
 Seuls `value`, `mean`, `stddev`, `zScore` et `anomaly` sont requis — tous les autres champs sont optionnels (firmwares existants sans modification). `ptiType` est exclusif au module IMU (`"FALL"` | `"MOTIONLESS"` | `"SOS"`).
 
-Vigie souscrit à `fovet/devices/+/readings`, insère chaque reading, crée une alerte si `anomaly: true` ou si `level ∈ {WARN, DANGER, COLD, CRITICAL}`, et émet sur le bus interne pour diffuser aux clients SSE connectés.
+Watch souscrit à `ardent/devices/+/readings`, insère chaque reading, crée une alerte si `anomaly: true` ou si `level ∈ {WARN, DANGER, COLD, CRITICAL}`, et émet sur le bus interne pour diffuser aux clients SSE connectés.
 
 ---
 
@@ -198,7 +198,7 @@ ESP32 → MQTT → mqtt-ingestion.ts → prisma.reading.create()
                                    Browser EventSource (ReadingChart.tsx)
 ```
 
-Le singleton `global.__fovetEventBus` survit aux hot-reloads Next.js en développement.
+Le singleton `global.__ardentEventBus` survit aux hot-reloads Next.js en développement.
 
 ---
 
@@ -273,9 +273,9 @@ La vue **Santé** (`FleetHealth.tsx`) est accessible via l'onglet **Santé** dan
 - `Reading.sensorType` — module producteur (ex: `"IMU"`, `"HR"`, `"TEMP"`)
 - `Reading.value2` — valeur secondaire (ex: humidité % pour capteur TEMP)
 - `Alert.alertModule` — module responsable de l'alerte
-- `Alert.alertLevel` (`"WARN" | "DANGER" | "COLD" | "CRITICAL"`) — niveau Sentinelle
+- `Alert.alertLevel` (`"WARN" | "DANGER" | "COLD" | "CRITICAL"`) — niveau Pulse
 
-### Payload MQTT étendu (Sentinelle → Vigie)
+### Payload MQTT étendu (Pulse → Watch)
 
 ```json
 {
@@ -307,7 +307,7 @@ Tests couverts : health, auth/login, rate limiting (429), JWT validation, Zod va
 
 ## Notifications webhook sortantes — U3
 
-Quand `ALERT_WEBHOOK_URL` est défini, Vigie envoie un `POST` JSON à cette URL pour chaque alerte créée.
+Quand `ALERT_WEBHOOK_URL` est défini, Watch envoie un `POST` JSON à cette URL pour chaque alerte créée.
 
 **Payload :**
 

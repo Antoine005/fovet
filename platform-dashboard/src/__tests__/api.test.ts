@@ -1,5 +1,5 @@
 /*
- * Fovet Vigie — API route tests
+ * Ardent Watch — API route tests
  * Uses Hono's app.request() test helper — no HTTP server needed.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -42,7 +42,7 @@ async function cookieToken() {
     SECRET,
     "HS256"
   );
-  return `fovet_token=${token}`;
+  return `ard_token=${token}`;
 }
 
 function json(body: unknown, extra?: RequestInit) {
@@ -67,7 +67,7 @@ describe("GET /api/health", () => {
     const res = await app.request("/api/health");
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ status: "ok", service: "fovet-vigie" });
+    expect(body).toEqual({ status: "ok", service: "ardent-watch" });
   });
 });
 
@@ -81,7 +81,7 @@ describe("POST /api/auth/token", () => {
     const body = await res.json();
     expect(body).toEqual({ ok: true });
     const cookie = res.headers.get("set-cookie");
-    expect(cookie).toContain("fovet_token=");
+    expect(cookie).toContain("ard_token=");
     expect(cookie).toContain("HttpOnly");
   });
 
@@ -366,7 +366,7 @@ describe("POST /api/auth/refresh", () => {
       SECRET,
       "HS256"
     );
-    return `fovet_refresh=${token}`;
+    return `ard_refresh=${token}`;
   }
 
   it("returns 401 when no refresh cookie", async () => {
@@ -383,12 +383,12 @@ describe("POST /api/auth/refresh", () => {
     const body = await res.json();
     expect(body).toEqual({ ok: true });
     const cookie = res.headers.get("set-cookie");
-    expect(cookie).toContain("fovet_token=");
+    expect(cookie).toContain("ard_token=");
     expect(cookie).toContain("HttpOnly");
   });
 
   it("returns 401 when access token presented as refresh token", async () => {
-    // fovet_refresh cookie contains an access-type token → rejected
+    // ard_refresh cookie contains an access-type token → rejected
     const accessToken = await sign(
       { role: "dashboard", type: "access", exp: Math.floor(Date.now() / 1000) + 3600 },
       SECRET,
@@ -396,7 +396,7 @@ describe("POST /api/auth/refresh", () => {
     );
     const res = await app.request("/api/auth/refresh", {
       method: "POST",
-      headers: { Cookie: `fovet_refresh=${accessToken}` },
+      headers: { Cookie: `ard_refresh=${accessToken}` },
     });
     expect(res.status).toBe(401);
   });
@@ -409,7 +409,7 @@ describe("POST /api/auth/refresh", () => {
     );
     const res = await app.request("/api/auth/refresh", {
       method: "POST",
-      headers: { Cookie: `fovet_refresh=${expired}` },
+      headers: { Cookie: `ard_refresh=${expired}` },
     });
     expect(res.status).toBe(401);
   });
@@ -426,8 +426,8 @@ describe("POST /api/auth/logout", () => {
     expect(body).toEqual({ ok: true });
     // set-cookie header may be a comma-separated list or multiple headers
     const cookie = res.headers.get("set-cookie") ?? "";
-    expect(cookie).toContain("fovet_token=");
-    expect(cookie).toContain("fovet_refresh=");
+    expect(cookie).toContain("ard_token=");
+    expect(cookie).toContain("ard_refresh=");
   });
 });
 
@@ -436,12 +436,12 @@ describe("POST /api/auth/logout", () => {
 // ---------------------------------------------------------------------------
 describe("CORS multi-origin", () => {
   it("reflects allowed origin in Access-Control-Allow-Origin", async () => {
-    // ALLOWED_ORIGIN in vitest.config.ts: 'http://localhost:3000,https://vigie.fovet.eu'
+    // ALLOWED_ORIGIN in vitest.config.ts: 'http://localhost:3000,https://watch.ardent.io'
     const res = await app.request("/api/health", {
-      headers: { Origin: "https://vigie.fovet.eu" },
+      headers: { Origin: "https://watch.ardent.io" },
     });
     expect(res.status).toBe(200);
-    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://vigie.fovet.eu");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://watch.ardent.io");
   });
 
   it("reflects first allowed origin", async () => {

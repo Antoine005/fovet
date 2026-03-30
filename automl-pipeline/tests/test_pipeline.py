@@ -126,18 +126,18 @@ class TestPipelineNormalize:
     def test_normalize_exports_c_header(self, tmp_path):
         cfg = _make_config(normalize=True, output_dir=tmp_path)
         Pipeline(cfg).run()
-        h = tmp_path / "fovet_scaler_params.h"
+        h = tmp_path / "ard_scaler_params.h"
         assert h.exists()
         content = h.read_text()
-        assert "#ifndef FOVET_SCALER_PARAMS_H" in content
-        assert "#define FOVET_SCALER_N_FEATURES 2" in content
-        assert "fovet_scaler_mean" in content
-        assert "fovet_scaler_scale" in content
+        assert "#ifndef ARD_SCALER_PARAMS_H" in content
+        assert "#define ARD_SCALER_N_FEATURES 2" in content
+        assert "ard_scaler_mean" in content
+        assert "ard_scaler_scale" in content
 
     def test_normalize_no_c_header_without_normalize(self, tmp_path):
         cfg = _make_config(normalize=False, output_dir=tmp_path)
         Pipeline(cfg).run()
-        assert not (tmp_path / "fovet_scaler_params.h").exists()
+        assert not (tmp_path / "ard_scaler_params.h").exists()
 
     def test_normalized_train_has_near_zero_mean(self, tmp_path):
         cfg = _make_config(normalize=True, split=True, output_dir=tmp_path)
@@ -165,8 +165,8 @@ class TestPipelineNormalize:
         p = Pipeline(cfg)
         p.run()
         assert p.scaler is not None
-        assert (tmp_path / "fovet_scaler_params.h").exists()
-        assert (tmp_path / "fovet_mad_config.h").exists()
+        assert (tmp_path / "ard_scaler_params.h").exists()
+        assert (tmp_path / "ard_mad_config.h").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -199,4 +199,4 @@ report:
         pipeline = Pipeline.from_yaml(p_file)
         pipeline.run()
         assert pipeline.scaler is not None
-        assert (tmp_path / "fovet_scaler_params.h").exists()
+        assert (tmp_path / "ard_scaler_params.h").exists()

@@ -1,4 +1,4 @@
-# Fovet Forge — Client config template: vibration monitoring (MPU-6050)
+# Ardent Forge — Client config template: vibration monitoring (MPU-6050)
 # Personnaliser : remplacer data.path et ajuster les paramètres des détecteurs.
 # Run: uv run forge run --config configs/client_vibration.yaml
 

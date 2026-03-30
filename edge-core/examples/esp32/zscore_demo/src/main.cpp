@@ -1,15 +1,15 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  *
  * Demo: Z-Score + EWMA Drift detection on ESP32-CAM with MQTT publishing.
  *
  * Two complementary detectors run in parallel:
  *
- *   FovetZScore  — catches sudden spikes (5-sigma, injected every 200 samples)
- *   FovetDrift   — catches slow baseline shifts (ramp +0.05/sample injected
+ *   ArdentZScore  — catches sudden spikes (5-sigma, injected every 200 samples)
+ *   ArdentDrift   — catches slow baseline shifts (ramp +0.05/sample injected
  *                  every 600 samples over 100 samples) that Welford absorbs
  *
  * This demonstrates why both detectors are needed:
@@ -21,20 +21,20 @@
  *   2. Register the device: POST /api/devices { mqttClientId: "esp32-cam-001" }
  *   3. Mosquitto listener must bind 0.0.0.0 (not localhost) for LAN access.
  *
- * MQTT topic: fovet/devices/<DEVICE_ID>/readings
+ * MQTT topic: ardent/devices/<DEVICE_ID>/readings
  * Serial monitor: 115200 baud
  * Serial format: index,value,mean,stddev,drift_mag,spike,drift,event
  */
 
 #include "config.h"              /* WiFi/MQTT credentials — DO NOT COMMIT */
-#include "fovet_model_manifest.h" /* Forge-generated model metadata       */
+#include "ard_model_manifest.h" /* Forge-generated model metadata       */
 
 extern "C" {
-#include "fovet/zscore.h"
-#include "fovet/drift.h"
-#include "fovet/hal/hal_uart.h"
-#include "fovet/hal/hal_time.h"
-#include "fovet/hal/hal_gpio.h"
+#include "ardent/zscore.h"
+#include "ardent/drift.h"
+#include "ardent/hal/hal_uart.h"
+#include "ardent/hal/hal_time.h"
+#include "ardent/hal/hal_gpio.h"
 }
 
 #include <Arduino.h>
@@ -71,8 +71,8 @@ extern "C" {
  * Globals
  * ------------------------------------------------------------------------- */
 
-static FovetZScore  g_zscore;
-static FovetDrift   g_drift;
+static ArdentZScore  g_zscore;
+static ArdentDrift   g_drift;
 static uint32_t     g_sample_index = 0;
 static char         g_log_buf[384];
 
@@ -137,27 +137,27 @@ static void mqtt_publish_reading(float zscore_val, bool spike, bool drift_alert)
     int len = snprintf(g_log_buf, sizeof(g_log_buf),
         "{"
         "\"device_id\":\"%s\","
-        "\"model_id\":\"" FOVET_MODEL_ID "\","
+        "\"model_id\":\"" ARD_MODEL_ID "\","
         "\"firmware\":\"zscore_demo\","
-        "\"sensor\":\"" FOVET_MODEL_SENSOR "\","
+        "\"sensor\":\"" ARD_MODEL_SENSOR "\","
         "\"value\":%.4f,"
         "\"value_min\":%.4f,"
         "\"value_max\":%.4f,"
         "\"label\":\"%s\","
-        "\"unit\":\"" FOVET_MODEL_UNIT "\","
+        "\"unit\":\"" ARD_MODEL_UNIT "\","
         "\"anomaly\":%s,"
         "\"ts\":%lu"
         "}",
         DEVICE_ID,
         zscore_val,
-        (double)FOVET_MODEL_VALUE_MIN,
-        (double)FOVET_MODEL_VALUE_MAX,
+        (double)ARD_MODEL_VALUE_MIN,
+        (double)ARD_MODEL_VALUE_MAX,
         label,
         anomaly ? "true" : "false",
         (unsigned long)hal_time_ms());
 
     char topic[64];
-    snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+    snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
 
     if (!g_mqtt.publish(topic, g_log_buf, (unsigned int)len)) {
         hal_uart_print("[MQTT] Publish failed\r\n");
@@ -175,12 +175,12 @@ void setup(void)
     hal_gpio_write(LED_PIN, HAL_GPIO_HIGH); /* LED off (active LOW) */
 
     /* Z-Score: 3-sigma threshold, warm-up 30 samples */
-    fovet_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMPLES);
+    ard_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMPLES);
 
     /* EWMA Drift: fast/slow EWMA, alert when gap exceeds DRIFT_THRESHOLD */
-    fovet_drift_init(&g_drift, DRIFT_ALPHA_FAST, DRIFT_ALPHA_SLOW, DRIFT_THRESHOLD);
+    ard_drift_init(&g_drift, DRIFT_ALPHA_FAST, DRIFT_ALPHA_SLOW, DRIFT_THRESHOLD);
 
-    hal_uart_print("\r\n=== Fovet Sentinelle — Z-Score + Drift Demo ===\r\n");
+    hal_uart_print("\r\n=== Ardent Pulse — Z-Score + Drift Demo ===\r\n");
     hal_uart_print("Device: " DEVICE_ID "\r\n");
     hal_uart_print("Signal : sine 1 Hz @ 100 Hz\r\n");
     hal_uart_print("Spikes : 5-sigma every 200 samples  → Z-Score detects\r\n");
@@ -221,8 +221,8 @@ void loop(void)
     bool spike_injected = false;
     if (g_sample_index > ZSCORE_MIN_SAMPLES
         && (g_sample_index % SPIKE_EVERY) == 0U) {
-        float spike_amp = fovet_zscore_get_mean(&g_zscore)
-                        + 5.0f * fovet_zscore_get_stddev(&g_zscore)
+        float spike_amp = ard_zscore_get_mean(&g_zscore)
+                        + 5.0f * ard_zscore_get_stddev(&g_zscore)
                         + 1.0f;
         signal        += spike_amp;
         spike_injected = true;
@@ -241,15 +241,15 @@ void loop(void)
 
     /* --- Run detectors --------------------------------------------------- */
 
-    bool  spike_detected = fovet_zscore_update(&g_zscore, signal);
-    bool  drift_detected = fovet_drift_update(&g_drift, signal);
+    bool  spike_detected = ard_zscore_update(&g_zscore, signal);
+    bool  drift_detected = ard_drift_update(&g_drift, signal);
 
-    float mean       = fovet_zscore_get_mean(&g_zscore);
-    float stddev     = fovet_zscore_get_stddev(&g_zscore);
+    float mean       = ard_zscore_get_mean(&g_zscore);
+    float stddev     = ard_zscore_get_stddev(&g_zscore);
     float zscore_val = (stddev > 0.0f)
                      ? ((signal - mean) / stddev)
                      : 0.0f;
-    float drift_mag  = fovet_drift_get_magnitude(&g_drift);
+    float drift_mag  = ard_drift_get_magnitude(&g_drift);
 
     /* --- LED feedback ---------------------------------------------------- */
 

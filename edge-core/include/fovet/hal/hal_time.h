@@ -1,12 +1,12 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 
-#ifndef FOVET_HAL_TIME_H
-#define FOVET_HAL_TIME_H
+#ifndef ARD_HAL_TIME_H
+#define ARD_HAL_TIME_H
 
 #include <stdint.h>
 
@@ -36,4 +36,4 @@ void hal_delay_ms(uint32_t ms);
 }
 #endif
 
-#endif /* FOVET_HAL_TIME_H */
+#endif /* ARD_HAL_TIME_H */

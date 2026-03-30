@@ -155,7 +155,7 @@ def test_mqtt_config():
         "data": {
             "source": "mqtt",
             "broker": "localhost",
-            "topic": "fovet/devices/+/readings",
+            "topic": "ardent/devices/+/readings",
             "columns": ["value"],
         },
         "detectors": [{"type": "zscore"}],

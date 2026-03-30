@@ -1,5 +1,5 @@
 /*
- * Fovet Vigie — In-process event bus for real-time SSE streaming
+ * Ardent Watch — In-process event bus for real-time SSE streaming
  *
  * Used to broadcast new readings from the MQTT ingestion service to
  * open SSE connections (GET /api/devices/:id/stream).
@@ -11,7 +11,7 @@
  *                                          ↓
  *                                     Browser EventSource
  *
- * Singleton pattern: global.__fovetEventBus avoids duplicate emitters on
+ * Singleton pattern: global.__ardentEventBus avoids duplicate emitters on
  * Next.js hot reloads in development.
  */
 
@@ -19,16 +19,16 @@ import { EventEmitter } from "events";
 
 declare global {
   // eslint-disable-next-line no-var
-  var __fovetEventBus: EventEmitter | undefined;
+  var __ardentEventBus: EventEmitter | undefined;
 }
 
 function getBus(): EventEmitter {
-  if (!global.__fovetEventBus) {
+  if (!global.__ardentEventBus) {
     const bus = new EventEmitter();
     bus.setMaxListeners(200); // support many concurrent SSE clients
-    global.__fovetEventBus = bus;
+    global.__ardentEventBus = bus;
   }
-  return global.__fovetEventBus;
+  return global.__ardentEventBus;
 }
 
 export function emitReading(deviceId: string, reading: unknown): void {

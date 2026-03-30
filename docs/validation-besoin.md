@@ -1,9 +1,9 @@
-# Fovet — Validation du besoin marché
+# Ardent — Validation du besoin marché
 
 > Document généré le 2026-03-14. À traiter indépendamment du backlog technique.
 >
 > Objectif : avant d'investir davantage en développement, valider que des clients
-> cibles existent et seraient prêts à payer pour ce que Fovet résout.
+> cibles existent et seraient prêts à payer pour ce que Ardent résout.
 
 ---
 
@@ -92,7 +92,7 @@ Obtenir 3 signaux positifs de prospects qui diraient :
 | **TensorFlow Lite Micro** | Open source, multi-cible | Pas de pipeline AutoML, intégration manuelle | Gratuit |
 | **Eloquent Arduino** | Simple, Arduino-first | Très limité, pas industriel | Gratuit |
 
-**Question clé :** y a-t-il un concurrent qui fait "Forge + Sentinelle + Vigie" sur hardware non-ST, souverain ?
+**Question clé :** y a-t-il un concurrent qui fait "Forge + Pulse + Watch" sur hardware non-ST, souverain ?
 → À compléter après recherche.
 
 ---
@@ -109,7 +109,7 @@ Sur la base des interviews et de l'analyse concurrents, décider :
 - Conditions : signal fort sur un secteur (pompes, moteurs, CNC)
 - Action : spécialiser le SDK (MPU-6050 first-class), partenariat OEM
 
-### Option C — Abandonner Sentinelle, se concentrer sur Vigie + Forge as-a-service
+### Option C — Abandonner Pulse, se concentrer sur Watch + Forge as-a-service
 - Conditions : personne ne veut intégrer un SDK C, mais veulent une plateforme clé en main
 - Action : pivot SaaS, ESP32 devient le device référence fourni avec le service
 

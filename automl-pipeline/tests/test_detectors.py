@@ -165,7 +165,7 @@ def test_welford_std_matches_numpy():
 
 
 # ---------------------------------------------------------------------------
-# Export -- fovet_zscore_config.h
+# Export -- ard_zscore_config.h
 # ---------------------------------------------------------------------------
 
 def test_export_creates_header_file(tmp_path: Path):
@@ -174,7 +174,7 @@ def test_export_creates_header_file(tmp_path: Path):
     d.fit(ds)
     written = d.export(tmp_path, stem="test-pipeline")
     assert len(written) == 1
-    assert written[0].name == "fovet_zscore_config.h"
+    assert written[0].name == "ard_zscore_config.h"
     assert written[0].exists()
 
 
@@ -183,11 +183,11 @@ def test_export_header_contains_sdk_struct(tmp_path: Path):
     d = ZScoreDetector(_zscore_cfg())
     d.fit(ds)
     d.export(tmp_path, stem="test")
-    content = (tmp_path / "fovet_zscore_config.h").read_text()
-    assert "FovetZScore" in content
-    assert "fovet/zscore.h" in content
+    content = (tmp_path / "ard_zscore_config.h").read_text()
+    assert "ArdentZScore" in content
+    assert "ardent/zscore.h" in content
     assert "threshold_sigma" in content
-    assert "FOVET_ZSCORE_CONFIG_H" in content
+    assert "ARD_ZSCORE_CONFIG_H" in content
     assert "min_samples" in content          # new field since struct v2
     assert ".min_samples      = 0U" in content  # pre-calibrated = no warm-up
 
@@ -199,7 +199,7 @@ def test_export_header_contains_calibrated_values(tmp_path: Path):
     d = ZScoreDetector(_zscore_cfg(threshold_sigma=3.5))
     d.fit(ds)
     d.export(tmp_path, stem="test")
-    content = (tmp_path / "fovet_zscore_config.h").read_text()
+    content = (tmp_path / "ard_zscore_config.h").read_text()
     # Mean should be near 2.5
     assert "2.5" in content or "2.4" in content
     assert "3.500000f" in content  # threshold
@@ -210,9 +210,9 @@ def test_export_multi_feature_has_one_struct_per_feature(tmp_path: Path):
     d = ZScoreDetector(_zscore_cfg())
     d.fit(ds)
     d.export(tmp_path, stem="test")
-    content = (tmp_path / "fovet_zscore_config.h").read_text()
-    # Three FovetZScore contexts
-    assert content.count("static FovetZScore") == 3
+    content = (tmp_path / "ard_zscore_config.h").read_text()
+    # Three ArdentZScore contexts
+    assert content.count("static ArdentZScore") == 3
 
 
 def test_export_before_fit_raises(tmp_path: Path):

@@ -1,4 +1,4 @@
-# Exemples ESP32 — Fovet Sentinelle
+# Exemples ESP32 — Ardent Pulse
 
 > Tous les exemples ciblent l'ESP32-CAM (AI-Thinker) avec adaptateur CH340 sur COM4.
 > **Toujours utiliser `board=esp32dev`** — `board=esp32cam` crashe silencieusement sur l'init PSRAM. Voir `CLAUDE.md` § Hardware gotchas.
@@ -88,7 +88,7 @@ Détection de personne par inférence TFLite Micro (Visual Wake Words) + suivi t
 ```
 OV2640 GRAYSCALE 96×96 ──► TFLite Micro (MobileNetV1 0.25×) ──► person_score [0.0–1.0]
                                                                          │
-                                                                   FovetZScore ──► MQTT → Vigie
+                                                                   ArdentZScore ──► MQTT → Watch
 ```
 
 Le modèle VWW produit un score de présence humaine. Le Z-Score modélise le comportement normal de la scène (WARMUP_FRAMES premières inférences, scène vide) et signale une anomalie quand une personne entre dans le champ.
@@ -114,7 +114,7 @@ Copier `src/config.h.example` → `src/config.h` et remplir :
 ### Topic MQTT publié
 
 ```
-fovet/devices/<DEVICE_ID>/readings
+ardent/devices/<DEVICE_ID>/readings
 ```
 
 ### Format JSON
@@ -134,18 +134,18 @@ fovet/devices/<DEVICE_ID>/readings
 
 ---
 
-## 4. `zscore_demo` — Z-Score + Drift vers Vigie
+## 4. `zscore_demo` — Z-Score + Drift vers Watch
 
 **Environnement PIO :** `esp32cam`
 
 ### Description
 
-Démo complète de deux détecteurs complémentaires en parallèle sur un signal sinusoïdal synthétique, avec publication MQTT vers Fovet Vigie :
+Démo complète de deux détecteurs complémentaires en parallèle sur un signal sinusoïdal synthétique, avec publication MQTT vers Ardent Watch :
 
 | Détecteur | Cible | Signal injecté |
 |---|---|---|
-| `FovetZScore` | Pics soudains (spike ±5σ) | Toutes les 200 samples |
-| `FovetDrift` | Dérive lente de la baseline | Rampe +0.05/sample sur 100 samples, toutes les 600 samples |
+| `ArdentZScore` | Pics soudains (spike ±5σ) | Toutes les 200 samples |
+| `ArdentDrift` | Dérive lente de la baseline | Rampe +0.05/sample sur 100 samples, toutes les 600 samples |
 
 Cette démo illustre pourquoi les deux détecteurs sont nécessaires : le Z-Score absorbe les dérives lentes dans sa moyenne courante, le Drift ne détecte pas les spikes isolés.
 
@@ -165,7 +165,7 @@ Copier `src/config.h.example` → `src/config.h` et remplir :
 #define DEVICE_ID     "esp32-cam-001"
 ```
 
-### Prérequis Vigie
+### Prérequis Watch
 
 1. Mosquitto doit écouter sur `0.0.0.0:1883` (pas `localhost`) pour l'accès LAN depuis l'ESP32.
 2. Enregistrer le device : `POST /api/devices { "mqttClientId": "esp32-cam-001" }`
@@ -173,7 +173,7 @@ Copier `src/config.h.example` → `src/config.h` et remplir :
 ### Topic MQTT publié
 
 ```
-fovet/devices/<DEVICE_ID>/readings
+ardent/devices/<DEVICE_ID>/readings
 ```
 
 ### Format JSON

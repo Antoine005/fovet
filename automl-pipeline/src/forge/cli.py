@@ -1,5 +1,5 @@
 """
-Fovet Forge CLI -- entry point.
+Ardent Forge CLI -- entry point.
 
 Usage:
     forge run --config configs/demo_zscore.yaml
@@ -26,7 +26,7 @@ from forge.benchmark import run_benchmark
 
 app = typer.Typer(
     name="forge",
-    help="Fovet Forge -- AutoML pipeline for anomaly detection on embedded targets.",
+    help="Ardent Forge -- AutoML pipeline for anomaly detection on embedded targets.",
     no_args_is_help=True,
 )
 console = Console()
@@ -195,7 +195,7 @@ def deploy(
     """Deploy a TFLite model to ESP32: generate model_data.cpp -> pio compile -> flash."""
     from forge.deploy import deploy as _deploy, _BUILTIN_TARGETS  # noqa: PLC0415
 
-    console.print(f"[bold]Fovet Forge deploy[/bold] -- target: [cyan]{target}[/cyan]")
+    console.print(f"[bold]Ardent Forge deploy[/bold] -- target: [cyan]{target}[/cyan]")
     console.print(f"  Model  : {model}")
     console.print(f"  Port   : {port}")
     console.print(f"  Mode   : {'compile only' if compile_only else 'compile + flash'}")
@@ -233,7 +233,7 @@ def deploy_manifest(
         help="PlatformIO project directory -- manifest will be copied to <project-dir>/src/"
     ),
 ) -> None:
-    """Copy the generated fovet_model_manifest.h to a PlatformIO project.
+    """Copy the generated ard_model_manifest.h to a PlatformIO project.
 
     Run after `forge run` to embed the Forge model metadata into firmware:
 
@@ -248,7 +248,7 @@ def deploy_manifest(
     if cfg is None:
         raise typer.Exit(1)
 
-    src = Path(cfg.export.output_dir) / "fovet_model_manifest.h"
+    src = Path(cfg.export.output_dir) / "ard_model_manifest.h"
     if not src.exists():
         err_console.print(
             f"Manifest not found: {src}\n"
@@ -261,7 +261,7 @@ def deploy_manifest(
         err_console.print(f"Project src/ directory not found: {dest_dir}")
         raise typer.Exit(1)
 
-    dest = dest_dir / "fovet_model_manifest.h"
+    dest = dest_dir / "ard_model_manifest.h"
     shutil.copy2(src, dest)
 
     console.print(f"[green]OK[/green] Copied manifest to [cyan]{dest}[/cyan]")
@@ -320,7 +320,7 @@ def new_usecase(
         err_console.print("Could not find repo root (no edge-core/ directory found).")
         raise typer.Exit(1)
 
-    console.print(f"[bold]Fovet Forge new-usecase[/bold]")
+    console.print(f"[bold]Ardent Forge new-usecase[/bold]")
     console.print(f"  Name     : [cyan]{name}[/cyan]")
     console.print(f"  Sensor   : {sensor}")
     console.print(f"  Detector : {detector}")
@@ -354,7 +354,7 @@ def new_usecase(
     console.print(f"  1. Copy [cyan]{result.project_dir}/src/config.h.example[/cyan] -> [cyan]config.h[/cyan] and fill in WiFi/MQTT credentials")
     console.print(f"  2. [cyan]uv run forge run --config configs/{slug}.yaml[/cyan]")
     console.print(f"  3. [cyan]uv run forge deploy-full --config configs/{slug}.yaml --project-dir {result.project_dir}[/cyan]")
-    console.print(f"  4. Open Vigie and register the device: POST /api/devices {{\"mqttClientId\": \"esp32-{slug[:16]}\"}}")
+    console.print(f"  4. Open Watch and register the device: POST /api/devices {{\"mqttClientId\": \"esp32-{slug[:16]}\"}}")
 
 
 @app.command(name="deploy-full")
@@ -364,7 +364,7 @@ def deploy_full(
     port: str = typer.Option("COM4", "--port", help="Serial upload port"),
     compile_only: bool = typer.Option(False, "--compile-only", help="Compile only, skip flash"),
 ) -> None:
-    """Run the full Forge -> Sentinelle pipeline in one command.
+    """Run the full Forge -> Pulse pipeline in one command.
 
     Chains: forge run -> forge deploy-manifest -> pio compile -> pio flash.
 
@@ -399,11 +399,11 @@ def deploy_full(
 
     # Step 2 — deploy manifest
     console.print(f"\n[bold cyan]Step 2/4[/bold cyan] — Deploying manifest to [cyan]{src_dir}[/cyan]")
-    manifest_src = Path(cfg.export.output_dir) / "fovet_model_manifest.h"
+    manifest_src = Path(cfg.export.output_dir) / "ard_model_manifest.h"
     if not manifest_src.exists():
         err_console.print(f"Manifest not found: {manifest_src}")
         raise typer.Exit(1)
-    manifest_dest = src_dir / "fovet_model_manifest.h"
+    manifest_dest = src_dir / "ard_model_manifest.h"
     shutil.copy2(manifest_src, manifest_dest)
     console.print(f"[green]OK[/green] Manifest -> [cyan]{manifest_dest}[/cyan]")
 
@@ -433,9 +433,9 @@ def deploy_full(
             raise typer.Exit(1)
     else:
         console.print(f"\n[bold cyan]Step 3/4[/bold cyan] — Statistical detector: no TFLite needed")
-        # Copy C header config (fovet_zscore_config.h / fovet_mad_config.h / fovet_drift_config.h)
+        # Copy C header config (ard_zscore_config.h / ard_mad_config.h / ard_drift_config.h)
         output_dir = Path(cfg.export.output_dir)
-        for h_file in output_dir.glob("fovet_*_config.h"):
+        for h_file in output_dir.glob("ard_*_config.h"):
             dest = src_dir / h_file.name
             shutil.copy2(h_file, dest)
             console.print(f"[green]OK[/green] {h_file.name} -> [cyan]{dest}[/cyan]")
@@ -465,13 +465,13 @@ def deploy_full(
     if compile_only:
         console.print("[green]OK[/green] Compile successful.")
     else:
-        console.print("[green]OK[/green] Flash complete. Open Vigie to monitor your device.")
+        console.print("[green]OK[/green] Flash complete. Open Watch to monitor your device.")
 
 
 @app.command()
 def version() -> None:
     """Print Forge version."""
-    console.print(f"fovet-forge {__version__}")
+    console.print(f"ardent-forge {__version__}")
 
 
 def _load_config(path: Path) -> PipelineConfig | None:

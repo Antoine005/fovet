@@ -1,4 +1,4 @@
-// Fovet Vigie — Prisma Schema
+// Ardent Watch — Prisma Schema
 // PostgreSQL + TimescaleDB (timescaledb extension activated in production)
 
 generator client {
@@ -11,7 +11,7 @@ datasource db {
 }
 
 // -------------------------------------------------------------------------
-// Device — a Fovet Sentinelle node (ESP32-CAM or any MCU)
+// Device — a Ardent Pulse node (ESP32-CAM or any MCU)
 // -------------------------------------------------------------------------
 model Device {
   id          String    @id @default(cuid())
@@ -49,9 +49,9 @@ model Reading {
   firmware   String?
   // Forge model identifier — matches pipeline name in manifest (e.g. "demo-zscore-sine")
   modelId    String?
-  // Value unit for Vigie chart Y-axis: "z_score" | "g" | "score" | "bpm" | "C" | "r_mean" | "mad_score"
+  // Value unit for Watch chart Y-axis: "z_score" | "g" | "score" | "bpm" | "C" | "r_mean" | "mad_score"
   unit       String?
-  // Expected value range from manifest — Vigie uses these to auto-scale the chart
+  // Expected value range from manifest — Watch uses these to auto-scale the chart
   valueMin   Float?
   valueMax   Float?
   // Human-readable label: "normal" | "anomaly" | "person" | "no_person" | "fire"
@@ -68,9 +68,9 @@ model Reading {
 // -------------------------------------------------------------------------
 // Forge — Model registry
 // -------------------------------------------------------------------------
-model ForgeModel {
+model CastModel {
   id         String   @id @default(cuid())
-  name       String   // "Fovet-Fatigue"
+  name       String   // "Ardent-Fatigue"
   type       String   // "FAT" | "PTI" | "STR"
   version    String   // "v2.3.1"
   status     String   // "PROD" | "TRAIN" | "ARCH"
@@ -83,8 +83,8 @@ model ForgeModel {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  jobs       ForgeJob[]
-  deploys    ForgeDeploy[]
+  jobs       CastJob[]
+  deploys    CastDeploy[]
 
   @@map("forge_models")
 }
@@ -92,7 +92,7 @@ model ForgeModel {
 // -------------------------------------------------------------------------
 // Forge — Training jobs
 // -------------------------------------------------------------------------
-model ForgeJob {
+model CastJob {
   id              String    @id @default(cuid())
   jobRef          String    @unique  // "#JB-0041"
   modelId         String?
@@ -110,7 +110,7 @@ model ForgeJob {
   finishedAt      DateTime?
   createdAt       DateTime  @default(now())
 
-  model           ForgeModel? @relation(fields: [modelId], references: [id])
+  model           CastModel? @relation(fields: [modelId], references: [id])
 
   @@index([status])
   @@index([createdAt(sort: Desc)])
@@ -120,7 +120,7 @@ model ForgeJob {
 // -------------------------------------------------------------------------
 // Forge — OTA deployments
 // -------------------------------------------------------------------------
-model ForgeDeploy {
+model CastDeploy {
   id         String   @id @default(cuid())
   deployRef  String   @unique  // "#DEP-0038"
   modelId    String
@@ -130,7 +130,7 @@ model ForgeDeploy {
   deployedAt DateTime @default(now())
   createdAt  DateTime @default(now())
 
-  model      ForgeModel @relation(fields: [modelId], references: [id])
+  model      CastModel @relation(fields: [modelId], references: [id])
 
   @@index([deployedAt(sort: Desc)])
   @@map("forge_deploys")
@@ -139,7 +139,7 @@ model ForgeDeploy {
 // -------------------------------------------------------------------------
 // Forge — Audit log (deploy, retrain, promote, reject)
 // -------------------------------------------------------------------------
-model ForgeAudit {
+model CastAudit {
   id        String   @id @default(cuid())
   actor     String   // "a.porte"
   action    String   // "JOB_START" | "JOB_CANCEL" | "DATASET_VALIDATED" | "DEPLOY" | "PROMOTE" | "REJECT"
@@ -167,7 +167,7 @@ model Alert {
   ptiType     String?
   // Module that raised this alert: "PTI" | "FATIGUE" | "THERMAL" — null for legacy z-score alerts
   alertModule String?
-  // Severity level from Sentinelle profile: "WARN" | "DANGER" | "COLD" | "CRITICAL"
+  // Severity level from Pulse profile: "WARN" | "DANGER" | "COLD" | "CRITICAL"
   alertLevel  String?
   acknowledged Boolean  @default(false)
   acknowledgedAt DateTime?

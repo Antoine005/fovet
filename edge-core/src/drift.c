@@ -1,11 +1,11 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 
-#include "fovet/drift.h"
+#include "ardent/drift.h"
 
 #include <math.h>   /* fabsf */
 
@@ -24,7 +24,7 @@
  * First sample seeds both EMAs to x — prevents a spurious alert on startup.
  * ------------------------------------------------------------------------- */
 
-void fovet_drift_init(FovetDrift *ctx,
+void ard_drift_init(ArdentDrift *ctx,
                       float alpha_fast,
                       float alpha_slow,
                       float threshold)
@@ -44,7 +44,7 @@ void fovet_drift_init(FovetDrift *ctx,
     ctx->count      = 0U;
 }
 
-bool fovet_drift_update(FovetDrift *ctx, float sample)
+bool ard_drift_update(ArdentDrift *ctx, float sample)
 {
     if (ctx->count == 0U) {
         /* Seed both EMAs on the first sample — no alert */
@@ -64,25 +64,25 @@ bool fovet_drift_update(FovetDrift *ctx, float sample)
     return (fabsf(ctx->ewma_fast - ctx->ewma_slow) > ctx->threshold);
 }
 
-float fovet_drift_get_fast(const FovetDrift *ctx)
+float ard_drift_get_fast(const ArdentDrift *ctx)
 {
     return ctx->ewma_fast;
 }
 
-float fovet_drift_get_slow(const FovetDrift *ctx)
+float ard_drift_get_slow(const ArdentDrift *ctx)
 {
     return ctx->ewma_slow;
 }
 
-float fovet_drift_get_magnitude(const FovetDrift *ctx)
+float ard_drift_get_magnitude(const ArdentDrift *ctx)
 {
     return fabsf(ctx->ewma_fast - ctx->ewma_slow);
 }
 
-void fovet_drift_reset(FovetDrift *ctx)
+void ard_drift_reset(ArdentDrift *ctx)
 {
     float    saved_alpha_fast = ctx->alpha_fast;
     float    saved_alpha_slow = ctx->alpha_slow;
     float    saved_threshold  = ctx->threshold;
-    fovet_drift_init(ctx, saved_alpha_fast, saved_alpha_slow, saved_threshold);
+    ard_drift_init(ctx, saved_alpha_fast, saved_alpha_slow, saved_threshold);
 }

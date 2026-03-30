@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Fovet Vigie — FleetHealth
+ * Ardent Watch — FleetHealth
  *
  * "Santé flotte" view: one row per active device, three module status badges
  * (PTI / FATIGUE / THERMAL) aggregated from unacknowledged alerts.

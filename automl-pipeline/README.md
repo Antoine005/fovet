@@ -1,6 +1,6 @@
-# Fovet Forge — AutoML Pipeline
+# Ardent Forge — AutoML Pipeline
 
-Pipeline Python pour calibrer des modèles de détection d'anomalies et exporter les paramètres vers le SDK C embarqué (Fovet Sentinelle) ou un modèle TFLite Micro.
+Pipeline Python pour calibrer des modèles de détection d'anomalies et exporter les paramètres vers le SDK C embarqué (Ardent Pulse) ou un modèle TFLite Micro.
 
 ## Stack
 
@@ -53,12 +53,12 @@ automl-pipeline/
 │   │   └── loader.py       ← Factory load_data(config)
 │   └── detectors/
 │       ├── base.py         ← Detector ABC + DetectionResult
-│       ├── zscore.py       ← ZScoreDetector (algo de Welford) + export fovet_zscore_config.h
+│       ├── zscore.py       ← ZScoreDetector (algo de Welford) + export ard_zscore_config.h
 │       ├── isolation_forest.py ← IsolationForestDetector (sklearn) + export JSON
 │       ├── autoencoder.py  ← AutoEncoderDetector (Keras Dense) + export TFLite + C header
 │       ├── lstm_autoencoder.py ← LSTMAutoEncoderDetector (Keras LSTM) + export TFLite + C header
-│       ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export fovet_drift_config.h
-│       ├── mad.py          ← MADDetector (médiane glissante) + export fovet_mad_config.h
+│       ├── ewma_drift.py   ← EWMADriftDetector (double EWMA) + export ard_drift_config.h
+│       ├── mad.py          ← MADDetector (médiane glissante) + export ard_mad_config.h
 │       └── registry.py     ← build_detectors(configs) factory
 ├── configs/
 │   ├── demo_zscore.yaml              ← Démo synthétique sinus + Z-Score
@@ -90,12 +90,12 @@ automl-pipeline/
 
 | Détecteur | Type YAML | Déploiement | Export |
 |---|---|---|---|
-| **Z-Score** | `zscore` | ESP32 / MCU | `fovet_zscore_config.h` (SDK C) |
-| **MAD** | `mad` | ESP32 / MCU | `fovet_mad_config.h` + `mad_config.json` |
-| **EWMA Drift** | `ewma_drift` | ESP32 / MCU | `fovet_drift_config.h` + `drift_config.json` |
+| **Z-Score** | `zscore` | ESP32 / MCU | `ard_zscore_config.h` (SDK C) |
+| **MAD** | `mad` | ESP32 / MCU | `ard_mad_config.h` + `mad_config.json` |
+| **EWMA Drift** | `ewma_drift` | ESP32 / MCU | `ard_drift_config.h` + `drift_config.json` |
 | **Isolation Forest** | `isolation_forest` | Cloud ou gateway uniquement | `isolation_forest_config.json` |
-| **AutoEncoder Dense** | `autoencoder` | ESP32 (TFLite Micro) | `autoencoder.tflite` + `fovet_autoencoder_model.h` |
-| **LSTM AutoEncoder** | `lstm_autoencoder` | ESP32 (TFLite Micro) | `lstm_autoencoder.tflite` + `fovet_lstm_autoencoder_model.h` |
+| **AutoEncoder Dense** | `autoencoder` | ESP32 (TFLite Micro) | `autoencoder.tflite` + `ard_autoencoder_model.h` |
+| **LSTM AutoEncoder** | `lstm_autoencoder` | ESP32 (TFLite Micro) | `lstm_autoencoder.tflite` + `ard_lstm_autoencoder_model.h` |
 
 > **Note LSTM AutoEncoder :** variante avec couche LSTM (séquences temporelles). Capture les corrélations entre échantillons successifs — meilleur sur signaux périodiques (vibrations, ECG). Requiert `window_size` samples glissants. `unroll=True` imposé pour compatibilité TFLite export.
 
@@ -114,14 +114,14 @@ preprocessing:
   normalize: true   # applique StandardScaler sur chaque colonne
 ```
 
-Quand activé, le pipeline exporte `scaler_params.json` et `fovet_scaler_params.h` dans le dossier de sortie :
+Quand activé, le pipeline exporte `scaler_params.json` et `ard_scaler_params.h` dans le dossier de sortie :
 
 ```c
-// fovet_scaler_params.h — inclure directement sur ESP32
-#define FOVET_SCALER_N_FEATURES 2
-static const float fovet_scaler_mean[2]  = { 23.847000f, 61.200000f };
-static const float fovet_scaler_scale[2] = {  0.420000f,  3.100000f };
-// Appliquer : normalized[i] = (raw[i] - fovet_scaler_mean[i]) / fovet_scaler_scale[i]
+// ard_scaler_params.h — inclure directement sur ESP32
+#define ARD_SCALER_N_FEATURES 2
+static const float ard_scaler_mean[2]  = { 23.847000f, 61.200000f };
+static const float ard_scaler_scale[2] = {  0.420000f,  3.100000f };
+// Appliquer : normalized[i] = (raw[i] - ard_scaler_mean[i]) / ard_scaler_scale[i]
 ```
 
 ## Format de config YAML
@@ -155,10 +155,10 @@ export:
   output_dir: models/
   quantization: float32  # ou int8 pour production ESP32
 
-# Manifest — métadonnées intégrées dans le payload MQTT et le graphe Vigie
+# Manifest — métadonnées intégrées dans le payload MQTT et le graphe Watch
 manifest:
   sensor: temperature     # ex: imu, temperature, pressure, vibration
-  unit: "°C"              # unité affichée dans Vigie
+  unit: "°C"              # unité affichée dans Watch
   # value_min / value_max : OPTIONNELS
   # Si absents → calculés automatiquement depuis les percentiles p1/p99 du dataset
   # Si définis → utilisés tels quels (utile si la plage physique est connue)
@@ -183,7 +183,7 @@ manifest:
   label_anomaly: anomaly
 ```
 
-## Boucle Forge → Sentinelle
+## Boucle Forge → Pulse
 
 ### Z-Score (pics soudains)
 
@@ -192,13 +192,13 @@ Données capteurs (CSV / MQTT / synthétique)
     ↓
 Forge : fit() sur données propres → calibration Welford
     ↓
-Export : fovet_zscore_config.h (avec min_samples = 0U)
+Export : ard_zscore_config.h (avec min_samples = 0U)
     ↓
-ESP32 : #include "fovet_zscore_config.h" → détection dès le 1er sample
+ESP32 : #include "ard_zscore_config.h" → détection dès le 1er sample
 ```
 
 ```c
-static FovetZScore fovet_zscore_temperature = {
+static ArdentZScore ard_zscore_temperature = {
     .count            = 10000U,
     .mean             = 23.847f,
     .M2               = 1842.315f,
@@ -214,13 +214,13 @@ Données capteurs (longue séquence stable)
     ↓
 Forge : fit() → calibration double EWMA + seuil auto (99e percentile)
     ↓
-Export : fovet_drift_config.h + drift_config.json
+Export : ard_drift_config.h + drift_config.json
     ↓
-ESP32 : #include "fovet_drift_config.h" → fovet_drift_update() dans HAL loop
+ESP32 : #include "ard_drift_config.h" → ard_drift_update() dans HAL loop
 ```
 
 ```c
-static FovetDrift fovet_drift_temperature = {
+static ArdentDrift ard_drift_temperature = {
     .ewma_fast  = 23.847f,   // état post-calibration
     .ewma_slow  = 23.851f,
     .alpha_fast = 0.100000f,
@@ -237,13 +237,13 @@ Données capteurs (signal bruité, outliers passés possibles)
     ↓
 Forge : fit() sur données propres → ring buffer seedé + seuil auto (99e percentile)
     ↓
-Export : fovet_mad_config.h + mad_config.json
+Export : ard_mad_config.h + mad_config.json
     ↓
-ESP32 : #include "fovet_mad_config.h" → fovet_mad_update() dans HAL loop
+ESP32 : #include "ard_mad_config.h" → ard_mad_update() dans HAL loop
 ```
 
 ```c
-static FovetMAD fovet_mad_temperature = {
+static ArdentMAD ard_mad_temperature = {
     .window        = {23.85f, 23.91f, /* … 128 entrées … */},
     .scratch       = {0},
     .head          = 0U,
@@ -255,7 +255,7 @@ static FovetMAD fovet_mad_temperature = {
 
 ### `forge deploy-manifest` — copier le manifest dans un projet PlatformIO
 
-Après `forge run`, copie `models/<pipeline>/fovet_model_manifest.h` dans le dossier
+Après `forge run`, copie `models/<pipeline>/ard_model_manifest.h` dans le dossier
 `src/` d'un projet PlatformIO. À exécuter à chaque nouvelle calibration.
 
 ```bash
@@ -268,13 +268,13 @@ uv run forge deploy-manifest \
 uv run forge deploy-manifest \
     --config configs/demo_zscore.yaml \
     --project-dir ../edge-core/examples/esp32/zscore_demo
-# → Copie models/demo_zscore/fovet_model_manifest.h
-#   dans edge-core/examples/esp32/zscore_demo/src/fovet_model_manifest.h
+# → Copie models/demo_zscore/ard_model_manifest.h
+#   dans edge-core/examples/esp32/zscore_demo/src/ard_model_manifest.h
 ```
 
 Le manifest embarqué dans le firmware encode : `model_id`, `sensor`, `unit`,
 `value_min`, `value_max`, `label_normal`, `label_anomaly`. Ces valeurs sont publiées
-dans chaque payload MQTT et utilisées par Vigie pour auto-scaler le graphe.
+dans chaque payload MQTT et utilisées par Watch pour auto-scaler le graphe.
 
 ---
 
@@ -369,7 +369,7 @@ uv run forge deploy \
 Le script génère un `model_data.cpp` compatible TFLite Micro :
 
 ```cpp
-// Auto-generated by Fovet Forge deploy.py — do not edit manually.
+// Auto-generated by Ardent Forge deploy.py — do not edit manually.
 alignas(16) const unsigned char g_person_detect_model_data[] = {
     0x1c, 0x00, 0x00, 0x00, ...
 };
@@ -403,12 +403,12 @@ uv run forge deploy \
 |---|---|---|
 | Forge-1 | ✅ | Scaffold uv + Pydantic config + CLI Typer |
 | Forge-2 | ✅ | Data layer : Dataset, synthetic, CSV, loader factory |
-| Forge-3a | ✅ | ZScoreDetector (Welford) + export `fovet_zscore_config.h` |
+| Forge-3a | ✅ | ZScoreDetector (Welford) + export `ard_zscore_config.h` |
 | Forge-3b | ✅ | IsolationForestDetector (sklearn) + export JSON |
 | Forge-4 | ✅ | AutoEncoderDetector (Keras Dense) + export TFLite INT8 + C header |
 | Forge-4b | ✅ | LSTMAutoEncoderDetector (Keras LSTM) + export TFLite + C header |
 | Forge-5 | ✅ | Rapport HTML/JSON + train/test split + métriques évaluation |
 | Forge-6 | ✅ | CI GitHub Actions + workflow GPU Scaleway |
 | Forge-7 | ✅ | Benchmark CLI : `forge benchmark --config a.yaml --config b.yaml` |
-| Forge-8 | ✅ | MADDetector + export `fovet_mad_config.h` (miroir C99 `fovet_mad`) |
+| Forge-8 | ✅ | MADDetector + export `ard_mad_config.h` (miroir C99 `ard_mad`) |
 | Forge-9 | ✅ | `forge convert` + `forge deploy` — pipeline Keras → TFLite → ESP32 |

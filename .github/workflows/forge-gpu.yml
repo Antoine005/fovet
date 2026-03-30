@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run Forge pipeline on GPU instance
+      - name: Run Cast pipeline on GPU instance
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SCALEWAY_GPU_HOST }}
@@ -39,7 +39,7 @@ jobs:
           key: ${{ secrets.SCALEWAY_SSH_KEY }}
           script: |
             set -e
-            cd ~/fovet/automl-pipeline
+            cd ~/ardent/automl-pipeline
             git pull origin master
             uv sync --extra ml
             uv run forge run --config configs/${{ github.event.inputs.config }}
@@ -53,7 +53,7 @@ jobs:
           host: ${{ secrets.SCALEWAY_GPU_HOST }}
           username: ${{ secrets.SCALEWAY_GPU_USER }}
           key: ${{ secrets.SCALEWAY_SSH_KEY }}
-          source: "~/fovet/automl-pipeline/models/"
+          source: "~/ardent/automl-pipeline/models/"
           target: "automl-pipeline/models/"
           strip_components: 5
 

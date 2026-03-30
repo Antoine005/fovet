@@ -1,7 +1,7 @@
 {
-  "name": "fovet-sentinelle",
+  "name": "ardent-pulse",
   "version": "0.1.0",
-  "description": "Fovet SDK — Sentinelle: embedded anomaly detection (C99, zero malloc)",
+  "description": "Ardent SDK — Pulse: embedded anomaly detection (C99, zero malloc)",
   "license": "LGPL-3.0",
   "keywords": ["anomaly-detection", "embedded", "zscore", "ewma", "drift", "esp32"],
   "frameworks": ["arduino", "espidf"],

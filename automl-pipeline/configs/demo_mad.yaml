@@ -1,4 +1,4 @@
-# Fovet Forge — Demo config: MAD detector on synthetic sine signal
+# Ardent Forge — Demo config: MAD detector on synthetic sine signal
 # Run: uv run forge run --config configs/demo_mad.yaml
 
 name: demo-mad-sine
@@ -17,7 +17,7 @@ data:
 
 detectors:
   - type: mad
-    win_size: 32              # taille de la fenêtre glissante (1–128, capée par FOVET_MAD_MAX_WINDOW)
+    win_size: 32              # taille de la fenêtre glissante (1–128, capée par ARD_MAD_MAX_WINDOW)
     threshold_percentile: 99.0 # auto-calibration : flag le top 1% des scores d'entraînement
     # threshold_mad: 3.5      # décommentez pour forcer un seuil explicite (sinon auto-calibré)
 

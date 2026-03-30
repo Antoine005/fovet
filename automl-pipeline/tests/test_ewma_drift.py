@@ -199,7 +199,7 @@ def test_export_creates_both_files(tmp_path: Path):
     d.fit(ds)
     paths = d.export(tmp_path, stem="test-pipeline")
     names = {p.name for p in paths}
-    assert "fovet_drift_config.h" in names
+    assert "ard_drift_config.h" in names
     assert "drift_config.json" in names
     for p in paths:
         assert p.exists()
@@ -216,10 +216,10 @@ def test_export_header_contains_sdk_struct(tmp_path: Path):
     d = EWMADriftDetector(_cfg())
     d.fit(ds)
     d.export(tmp_path, stem="test")
-    content = (tmp_path / "fovet_drift_config.h").read_text()
-    assert "FovetDrift" in content
-    assert "fovet/drift.h" in content
-    assert "FOVET_DRIFT_CONFIG_H" in content
+    content = (tmp_path / "ard_drift_config.h").read_text()
+    assert "ArdentDrift" in content
+    assert "ardent/drift.h" in content
+    assert "ARD_DRIFT_CONFIG_H" in content
     assert "alpha_fast" in content
     assert "alpha_slow" in content
 
@@ -229,8 +229,8 @@ def test_export_header_multi_feature_one_struct_per_feature(tmp_path: Path):
     d = EWMADriftDetector(_cfg())
     d.fit(ds)
     d.export(tmp_path, stem="test")
-    content = (tmp_path / "fovet_drift_config.h").read_text()
-    assert content.count("static FovetDrift") == 3
+    content = (tmp_path / "ard_drift_config.h").read_text()
+    assert content.count("static ArdentDrift") == 3
 
 
 def test_export_json_contains_params(tmp_path: Path):

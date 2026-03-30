@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Fovet Vigie — WorkerDetail (U2)
+ * Ardent Watch — WorkerDetail (U2)
  *
  * Vue individuelle multi-capteur d'un travailleur :
  * statut PTI + niveau fatigue + niveau thermique + chronologie alertes.
@@ -14,7 +14,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/api-client";
 
 // -----------------------------------------------------------------
-// Shared thresholds — must match Sentinelle profile headers
+// Shared thresholds — must match Pulse profile headers
 // -----------------------------------------------------------------
 
 // H2 Fatigue
@@ -204,7 +204,7 @@ function ExportReport({ deviceId }: { deviceId: string }) {
       }
       const blob = await res.blob();
       const ext  = format === "csv" ? "csv" : "json";
-      const name = `fovet_report_${from.toISOString().slice(0, 10)}.${ext}`;
+      const name = `ard_report_${from.toISOString().slice(0, 10)}.${ext}`;
       const objectUrl = URL.createObjectURL(blob);
       const a = anchorRef.current!;
       a.href     = objectUrl;

@@ -1,4 +1,4 @@
-# Fovet Forge — Demo config: EWMA Drift detector on synthetic random-walk signal
+# Ardent Forge — Demo config: EWMA Drift detector on synthetic random-walk signal
 # Run: uv run forge run --config configs/demo_drift.yaml
 
 name: demo-drift-rw
@@ -31,11 +31,11 @@ export:
   targets: [c_header, json_config]
   output_dir: models/demo_drift
 
-# Métadonnées pour fovet_model_manifest.h — copier dans src/ du projet PlatformIO
+# Métadonnées pour ard_model_manifest.h — copier dans src/ du projet PlatformIO
 manifest:
   sensor: synthetic          # "synthetic" | "imu" | "camera" | "temperature" | "hr"
-  unit: drift_score          # unité affichée sur l'axe Y de Vigie
-  value_min: -5.0            # borne basse pour l'auto-scale du graphe Vigie
+  unit: drift_score          # unité affichée sur l'axe Y de Watch
+  value_min: -5.0            # borne basse pour l'auto-scale du graphe Watch
   value_max: 5.0             # borne haute
   label_normal: stable
   label_anomaly: drift

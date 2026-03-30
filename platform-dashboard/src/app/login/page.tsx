@@ -38,8 +38,8 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gray-950 flex items-center justify-center">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-white tracking-tight">Fovet Vigie</h1>
-          <p className="text-sm text-gray-500 mt-1">Supervision Fovet Sentinelle</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Ardent Watch</h1>
+          <p className="text-sm text-gray-500 mt-1">Supervision Ardent Pulse</p>
         </div>
 
         <form

@@ -1,4 +1,4 @@
-# Fovet Forge — Demo config: LSTM Autoencoder on synthetic sine signal
+# Ardent Forge — Demo config: LSTM Autoencoder on synthetic sine signal
 # Trains a sequence-aware reconstruction model and exports TFLite for ESP32.
 #
 # Usage:
@@ -40,7 +40,7 @@ export:
   output_dir: models/demo_lstm_autoencoder
   quantization: float32      # utiliser int8 pour déploiement ESP32 production
 
-# Métadonnées pour fovet_model_manifest.h — copier dans src/ du projet PlatformIO
+# Métadonnées pour ard_model_manifest.h — copier dans src/ du projet PlatformIO
 manifest:
   sensor: synthetic
   unit: recon_error          # MSE de reconstruction (LSTM AE)

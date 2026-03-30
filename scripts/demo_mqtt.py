@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fovet Vigie — Demo MQTT Publisher (U5)
+Ardent Watch — Demo MQTT Publisher (U5)
 
 Simule trois flux capteurs réalistes pour un dispositif de démonstration :
   - IMU  (sensorType=IMU)  : accéléromètre, détection chute/immobilité, 1 Hz
@@ -12,7 +12,7 @@ Cela permet de comparer les deux détecteurs sur le même signal en temps réel 
   - zScore : Welford — sensible aux outliers passés accumulés
   - madScore : médiane glissante — robuste, insensible aux outliers précédents
 
-Publie sur le topic : fovet/devices/<mqttClientId>/readings
+Publie sur le topic : ardent/devices/<mqttClientId>/readings
 
 Usage :
   pip install paho-mqtt python-dotenv   # une seule fois
@@ -85,16 +85,16 @@ class Welford:
 
 
 # ---------------------------------------------------------------------------
-# StreamingMAD — miroir Python de fovet_mad C99 (mad.h / mad.c)
+# StreamingMAD — miroir Python de ard_mad C99 (mad.h / mad.c)
 #
 # Utilise un ring buffer de taille fixe (win_size).  Score calculé AVANT
-# insertion du sample, comme dans fovet_mad_update().
+# insertion du sample, comme dans ard_mad_update().
 # ---------------------------------------------------------------------------
 
 class StreamingMAD:
     """Rolling MAD anomaly scorer.
 
-    Mirrors fovet_mad_update() exactly:
+    Mirrors ard_mad_update() exactly:
     - score is computed against the CURRENT window (before inserting the new sample)
     - returns 0.0 during warm-up (fewer than win_size samples)
     score = |x - median| / (1.4826 * MAD)
@@ -196,7 +196,7 @@ def level_color(level: str) -> str:
 # ---------------------------------------------------------------------------
 
 def publish(client: mqtt.Client, device_id: str, payload: dict, label: str) -> None:
-    topic   = f"fovet/devices/{device_id}/readings"
+    topic   = f"ardent/devices/{device_id}/readings"
     message = json.dumps(payload)
     client.publish(topic, message, qos=1)
 
@@ -258,7 +258,7 @@ def run_imu(client: mqtt.Client, device_id: str, interval: float,
             "anomaly":    anomaly,
             "sensorType": "IMU",
             "level":      level,
-            # Canonical v2 — manifest fields for Vigie auto-scaling
+            # Canonical v2 — manifest fields for Watch auto-scaling
             "model_id":   "demo-imu-accel",
             "unit":       "g",
             "value_min":  0.0,
@@ -310,7 +310,7 @@ def run_hr(client: mqtt.Client, device_id: str, interval: float,
             "anomaly":    z > 3.0,
             "sensorType": "HR",
             "level":      level,
-            # Canonical v2 — manifest fields for Vigie auto-scaling
+            # Canonical v2 — manifest fields for Watch auto-scaling
             "model_id":   "demo-hr-bpm",
             "unit":       "bpm",
             "value_min":  40.0,
@@ -369,7 +369,7 @@ def run_temp(client: mqtt.Client, device_id: str, interval: float,
             "anomaly":    z > 3.0,
             "sensorType": "TEMP",
             "level":      level,
-            # Canonical v2 — manifest fields for Vigie auto-scaling
+            # Canonical v2 — manifest fields for Watch auto-scaling
             "model_id":   "demo-temp-celsius",
             "unit":       "C",
             "value_min":  10.0,
@@ -410,7 +410,7 @@ def anomaly_scheduler(states: dict[str, SimState], period: float,
 # ---------------------------------------------------------------------------
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Fovet Vigie — Demo MQTT Publisher")
+    p = argparse.ArgumentParser(description="Ardent Watch — Demo MQTT Publisher")
     p.add_argument(
         "--broker", default=os.getenv("MQTT_BROKER_URL", "mqtt://localhost:1883"),
         help="URL broker MQTT (défaut: mqtt://localhost:1883)"
@@ -447,7 +447,7 @@ def main() -> None:
     args = parse_args()
     host, port = broker_host_port(args.broker)
 
-    print(f"{C_BOLD}Fovet Vigie — Demo MQTT Publisher{C_RESET}")
+    print(f"{C_BOLD}Ardent Watch — Demo MQTT Publisher{C_RESET}")
     print(f"  Broker  : {args.broker} ({host}:{port})")
     print(f"  Device  : {args.device}")
     print(f"  Interval: {args.interval}s base (IMU ×1, HR ×2, TEMP ×3)")
@@ -458,7 +458,7 @@ def main() -> None:
     print()
 
     # MQTT client
-    client = mqtt.Client(client_id=f"fovet-demo-publisher-{os.getpid()}")
+    client = mqtt.Client(client_id=f"ardent-demo-publisher-{os.getpid()}")
     username = os.getenv("MQTT_USERNAME", "")
     password = os.getenv("MQTT_PASSWORD", "")
     if username:

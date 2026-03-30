@@ -1,12 +1,12 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 
-#ifndef FOVET_HAL_ADC_H
-#define FOVET_HAL_ADC_H
+#ifndef ARD_HAL_ADC_H
+#define ARD_HAL_ADC_H
 
 #include <stdint.h>
 
@@ -39,4 +39,4 @@ uint16_t hal_adc_to_mv(uint16_t raw, uint16_t vref_mv);
 }
 #endif
 
-#endif /* FOVET_HAL_ADC_H */
+#endif /* ARD_HAL_ADC_H */

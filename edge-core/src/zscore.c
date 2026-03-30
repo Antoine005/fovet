@@ -1,11 +1,11 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 
-#include "fovet/zscore.h"
+#include "ardent/zscore.h"
 
 #include <math.h>    /* sqrtf, fabsf */
 #include <stdint.h>  /* UINT32_MAX   */
@@ -18,7 +18,7 @@
  *   var_n  = M2_n / (n - 1)   (sample variance, unbiased)
  * ------------------------------------------------------------------------- */
 
-void fovet_zscore_init(FovetZScore *ctx, float threshold_sigma, uint32_t min_samples)
+void ard_zscore_init(ArdentZScore *ctx, float threshold_sigma, uint32_t min_samples)
 {
     ctx->count           = 0U;
     ctx->mean            = 0.0f;
@@ -29,7 +29,7 @@ void fovet_zscore_init(FovetZScore *ctx, float threshold_sigma, uint32_t min_sam
     ctx->window_size     = 0U; /* disabled by default — infinite window */
 }
 
-bool fovet_zscore_update(FovetZScore *ctx, float sample)
+bool ard_zscore_update(ArdentZScore *ctx, float sample)
 {
     /* Saturate count at UINT32_MAX to avoid overflow on very long sessions */
     if (ctx->count < UINT32_MAX) {
@@ -68,18 +68,18 @@ bool fovet_zscore_update(FovetZScore *ctx, float sample)
      * Reset fires AFTER the anomaly check — the boundary sample is evaluated
      * against the current window's statistics before the stats are discarded. */
     if (ctx->window_size > 0U && ctx->count >= ctx->window_size) {
-        fovet_zscore_reset(ctx);
+        ard_zscore_reset(ctx);
     }
 
     return result;
 }
 
-float fovet_zscore_get_mean(const FovetZScore *ctx)
+float ard_zscore_get_mean(const ArdentZScore *ctx)
 {
     return ctx->mean;
 }
 
-float fovet_zscore_get_stddev(const FovetZScore *ctx)
+float ard_zscore_get_stddev(const ArdentZScore *ctx)
 {
     if (ctx->count < 2U) {
         return 0.0f;
@@ -88,21 +88,21 @@ float fovet_zscore_get_stddev(const FovetZScore *ctx)
     return sqrtf(variance);
 }
 
-uint32_t fovet_zscore_get_count(const FovetZScore *ctx)
+uint32_t ard_zscore_get_count(const ArdentZScore *ctx)
 {
     return ctx->count;
 }
 
-void fovet_zscore_reset(FovetZScore *ctx)
+void ard_zscore_reset(ArdentZScore *ctx)
 {
     float    saved_threshold   = ctx->threshold_sigma;
     uint32_t saved_min_samples = ctx->min_samples;
     uint32_t saved_window_size = ctx->window_size;
-    fovet_zscore_init(ctx, saved_threshold, saved_min_samples);
+    ard_zscore_init(ctx, saved_threshold, saved_min_samples);
     ctx->window_size = saved_window_size;
 }
 
-bool fovet_zscore_set_window(FovetZScore *ctx, uint32_t window_size)
+bool ard_zscore_set_window(ArdentZScore *ctx, uint32_t window_size)
 {
     /* 0 always accepted — disables windowing */
     if (window_size == 0U) {

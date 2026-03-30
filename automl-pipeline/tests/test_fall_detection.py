@@ -363,15 +363,15 @@ class TestFallDetectionPipeline:
 
     def test_header_guard(self, exported_dir):
         content = (exported_dir / "fall_detection_model.h").read_text()
-        assert "FOVET_FALL_DETECTION_MODEL_H" in content
+        assert "ARD_FALL_DETECTION_MODEL_H" in content
 
     def test_header_n_features_define(self, exported_dir):
         content = (exported_dir / "fall_detection_model.h").read_text()
-        assert f"FOVET_FALL_DETECTION_N_FEATURES  {N_FEATURES}" in content
+        assert f"ARD_FALL_DETECTION_N_FEATURES  {N_FEATURES}" in content
 
     def test_header_threshold_define(self, exported_dir):
         content = (exported_dir / "fall_detection_model.h").read_text()
-        assert "FOVET_FALL_DETECTION_THRESHOLD" in content
+        assert "ARD_FALL_DETECTION_THRESHOLD" in content
 
     def test_header_extern_array(self, exported_dir):
         content = (exported_dir / "fall_detection_model.h").read_text()

@@ -218,7 +218,7 @@ def test_export_c_header_creates_file(tmp_path):
     s.fit(ds)
     out = s.export_c_header(tmp_path, stem="test_pipeline")
     assert out.exists()
-    assert out.name == "fovet_scaler_params.h"
+    assert out.name == "ard_scaler_params.h"
 
 
 def test_export_c_header_before_fit_raises(tmp_path):
@@ -233,10 +233,10 @@ def test_export_c_header_content(tmp_path):
     s.fit(ds)
     out = s.export_c_header(tmp_path, stem="test_pipeline")
     content = out.read_text()
-    assert "FOVET_SCALER_PARAMS_H" in content
-    assert "fovet_scaler_mean" in content
-    assert "fovet_scaler_scale" in content
-    assert "FOVET_SCALER_N_FEATURES 2" in content
+    assert "ARD_SCALER_PARAMS_H" in content
+    assert "ard_scaler_mean" in content
+    assert "ard_scaler_scale" in content
+    assert "ARD_SCALER_N_FEATURES 2" in content
     assert "temperature" in content
     assert "vibration" in content
 
@@ -262,7 +262,7 @@ def test_export_c_header_n_features_macro(tmp_path):
     s.fit(ds)
     out = s.export_c_header(tmp_path, stem="test")
     content = out.read_text()
-    assert "#define FOVET_SCALER_N_FEATURES 2" in content
+    assert "#define ARD_SCALER_N_FEATURES 2" in content
 
 
 def test_export_c_header_float_literals(tmp_path):

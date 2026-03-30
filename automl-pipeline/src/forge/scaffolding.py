@@ -1,12 +1,12 @@
 """
-Fovet Forge — scaffolding.py
+Ardent Forge — scaffolding.py
 
 Generate a complete use-case skeleton from a single command:
-  - configs/<name>.yaml          (Forge pipeline config)
+  - configs/<name>.yaml          (Cast pipeline config)
   - edge-core/examples/esp32/<name>/platformio.ini
   - edge-core/examples/esp32/<name>/src/main.cpp
   - edge-core/examples/esp32/<name>/src/config.h.example
-  - edge-core/examples/esp32/<name>/src/fovet_model_manifest.h  (default, replaced by deploy-manifest)
+  - edge-core/examples/esp32/<name>/src/ard_model_manifest.h  (default, replaced by deploy-manifest)
 
 Supported detectors: zscore | mad | drift | autoencoder | lstm_autoencoder
 Supported sensors:   synthetic | imu | temperature | hr | camera | custom
@@ -23,7 +23,7 @@ from textwrap import dedent
 # Metadata defaults per (detector, sensor)
 # ---------------------------------------------------------------------------
 
-# unit, value_min, value_max for the MQTT payload / Vigie chart
+# unit, value_min, value_max for the MQTT payload / Watch chart
 _MANIFEST_DEFAULTS: dict[str, dict[str, object]] = {
     "zscore":           {"unit": "z_score",    "value_min": -6.0,  "value_max": 6.0},
     "mad":              {"unit": "mad_score",   "value_min":  0.0,  "value_max": 10.0},
@@ -150,7 +150,7 @@ def _yaml_template(
     """)
 
     header = dedent(f"""\
-        # Fovet Forge — pipeline config
+        # Ardent Forge — pipeline config
         # Use case : {name}
         # Sensor   : {sensor}
         # Detector : {detector}
@@ -189,7 +189,7 @@ def _yaml_template(
 
 def _platformio_ini(name: str, port: str) -> str:
     return dedent(f"""\
-        ; Fovet SDK — Sentinelle
+        ; Ardent SDK — Pulse
         ; Use case: {name}
         ;
         ; Flash:   pio run --target upload
@@ -206,7 +206,7 @@ def _platformio_ini(name: str, port: str) -> str:
 
         build_flags =
             -std=c++17
-            -DFOVET_PLATFORM_ESP32
+            -DARD_PLATFORM_ESP32
             -DCORE_DEBUG_LEVEL=0
 
         monitor_speed = 115200
@@ -218,7 +218,7 @@ def _platformio_ini(name: str, port: str) -> str:
             ${{PROJECT_DIR}}/../../../../
 
         lib_deps =
-            fovet-sentinelle
+            ardent-pulse
             knolleary/PubSubClient@^2.8
     """)
 
@@ -230,17 +230,17 @@ def _platformio_ini(name: str, port: str) -> str:
 def _config_h_example(device_id: str) -> str:
     return dedent(f"""\
         /*
-         * Fovet SDK — Sentinelle
+         * Ardent SDK — Pulse
          * Copyright (C) 2026 Antoine Porte. All rights reserved.
          * LGPL v3 for non-commercial use.
-         * Commercial licensing: contact@fovet.eu
+         * Commercial licensing: contact@ardent.io
          *
          * config.h.example — copy to config.h and fill in your credentials.
          * config.h is gitignored and must never be committed.
          */
 
-        #ifndef FOVET_CONFIG_H
-        #define FOVET_CONFIG_H
+        #ifndef ARD_CONFIG_H
+        #define ARD_CONFIG_H
 
         /* WiFi credentials */
         #define WIFI_SSID      "your_wifi_ssid"
@@ -249,18 +249,18 @@ def _config_h_example(device_id: str) -> str:
         /* MQTT broker — Mosquitto running on your local machine or Scaleway VPS */
         #define MQTT_BROKER    "192.168.1.x"   /* IP of the machine running Mosquitto */
         #define MQTT_PORT      1883
-        #define MQTT_USER      "fovet-device"
+        #define MQTT_USER      "ardent-device"
         #define MQTT_PASSWORD  "change_me"
 
-        /* Device identity — must match the mqttClientId registered in Vigie */
+        /* Device identity — must match the mqttClientId registered in Watch */
         #define DEVICE_ID      "{device_id}"
 
-        #endif /* FOVET_CONFIG_H */
+        #endif /* ARD_CONFIG_H */
     """)
 
 
 # ---------------------------------------------------------------------------
-# fovet_model_manifest.h default template (overwritten by forge deploy-manifest)
+# ard_model_manifest.h default template (overwritten by forge deploy-manifest)
 # ---------------------------------------------------------------------------
 
 def _manifest_h_default(name: str, sensor: str, detector: str) -> str:
@@ -271,23 +271,23 @@ def _manifest_h_default(name: str, sensor: str, detector: str) -> str:
 
     return dedent(f"""\
         /*
-         * Fovet SDK — Sentinelle
+         * Ardent SDK — Pulse
          * Default manifest for use case: {name}
          * THIS FILE IS OVERWRITTEN by: forge deploy-manifest --config configs/{slug}.yaml
          * Run forge first to get calibrated value_min/value_max from your dataset.
          */
-        #ifndef FOVET_MODEL_MANIFEST_H
-        #define FOVET_MODEL_MANIFEST_H
+        #ifndef ARD_MODEL_MANIFEST_H
+        #define ARD_MODEL_MANIFEST_H
 
-        #define FOVET_MODEL_ID          "{slug}"
-        #define FOVET_MODEL_SENSOR      "{sensor}"
-        #define FOVET_MODEL_UNIT        "{m['unit']}"
-        #define FOVET_MODEL_VALUE_MIN   ({vmin}f)
-        #define FOVET_MODEL_VALUE_MAX   ({vmax}f)
-        #define FOVET_MODEL_LABEL_NORMAL  "normal"
-        #define FOVET_MODEL_LABEL_ANOMALY "anomaly"
+        #define ARD_MODEL_ID          "{slug}"
+        #define ARD_MODEL_SENSOR      "{sensor}"
+        #define ARD_MODEL_UNIT        "{m['unit']}"
+        #define ARD_MODEL_VALUE_MIN   ({vmin}f)
+        #define ARD_MODEL_VALUE_MAX   ({vmax}f)
+        #define ARD_MODEL_LABEL_NORMAL  "normal"
+        #define ARD_MODEL_LABEL_ANOMALY "anomaly"
 
-        #endif /* FOVET_MODEL_MANIFEST_H */
+        #endif /* ARD_MODEL_MANIFEST_H */
     """)
 
 
@@ -306,7 +306,7 @@ def _platformio_ini_ml(name: str, port: str) -> str:
     """
     slug = name.replace(" ", "-").lower()
     return dedent(f"""\
-        ; Fovet SDK — Sentinelle
+        ; Ardent SDK — Pulse
         ; Use case: {name}  [TFLite Micro — autoencoder / lstm_autoencoder]
         ;
         ; Flash:   pio run --target upload
@@ -332,7 +332,7 @@ def _platformio_ini_ml(name: str, port: str) -> str:
 
         build_flags =
             -std=c++17
-            -DFOVET_PLATFORM_ESP32
+            -DARD_PLATFORM_ESP32
             -DCORE_DEBUG_LEVEL=0
             -DNDEBUG
             -O2
@@ -346,7 +346,7 @@ def _platformio_ini_ml(name: str, port: str) -> str:
             ${{PROJECT_DIR}}/../../../../
 
         lib_deps =
-            fovet-sentinelle
+            ardent-pulse
             knolleary/PubSubClient@^2.8
             tanakamasayuki/TensorFlowLite_ESP32@^1.0.0
     """)
@@ -369,10 +369,10 @@ def _model_data_h_ml(name: str, slug: str) -> str:
     """
     return dedent(f"""\
         /*
-         * Fovet SDK — Sentinelle
+         * Ardent SDK — Pulse
          * Copyright (C) 2026 Antoine Porte. All rights reserved.
          * LGPL v3 for non-commercial use.
-         * Commercial licensing: contact@fovet.eu
+         * Commercial licensing: contact@ardent.io
          *
          * model_data.h — TFLite model extern declarations for use case: {name}
          *
@@ -401,10 +401,10 @@ def _model_data_h_ml(name: str, slug: str) -> str:
 
 _MAIN_CPP_HEADER = """\
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  *
  * Use case : {name}
  * Sensor   : {sensor}
@@ -417,22 +417,22 @@ _MAIN_CPP_HEADER = """\
  *   4. Run: forge deploy-full --config configs/{slug}.yaml \\
  *                             --project-dir edge-core/examples/esp32/{slug}
  *
- * MQTT topic : fovet/devices/<DEVICE_ID>/readings
+ * MQTT topic : ardent/devices/<DEVICE_ID>/readings
  * Baud rate  : 115200
  */
 
 #include "config.h"               /* WiFi/MQTT credentials — DO NOT COMMIT */
-#include "fovet_model_manifest.h" /* Forge-generated model metadata        */
+#include "ard_model_manifest.h" /* Forge-generated model metadata        */
 """
 
 _MAIN_CPP_ZSCORE = (
     _MAIN_CPP_HEADER
     + """
 extern "C" {{
-#include "fovet/zscore.h"
-#include "fovet/hal/hal_uart.h"
-#include "fovet/hal/hal_time.h"
-#include "fovet/hal/hal_gpio.h"
+#include "ardent/zscore.h"
+#include "ardent/hal/hal_uart.h"
+#include "ardent/hal/hal_time.h"
+#include "ardent/hal/hal_gpio.h"
 }}
 
 #include <Arduino.h>
@@ -448,7 +448,7 @@ extern "C" {{
 #define MQTT_PUBLISH_EVERY 10U     /* Publish every 10 samples (10 Hz)   */
 #define MQTT_RECONNECT_MS  5000U
 
-static FovetZScore  g_zscore;
+static ArdentZScore  g_zscore;
 static uint32_t     g_sample_index = 0;
 static char         g_buf[384];
 static WiFiClient   g_wifi;
@@ -486,8 +486,8 @@ void setup(void) {{
     hal_uart_init(115200);
     hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
     hal_gpio_write(LED_PIN, HAL_GPIO_HIGH);
-    fovet_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMPLES);
-    hal_uart_print("\\r\\n=== Fovet Sentinelle — {name} ===\\r\\n");
+    ard_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMPLES);
+    hal_uart_print("\\r\\n=== Ardent Pulse — {name} ===\\r\\n");
     wifi_connect();
     g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     g_mqtt.setKeepAlive(30);
@@ -500,27 +500,27 @@ void loop(void) {{
     last_sample_ms = hal_time_ms();
 
     float sample  = read_sensor();
-    bool  anomaly = fovet_zscore_update(&g_zscore, sample);
-    float zscore  = fovet_zscore_get_mean(&g_zscore) != 0.0f
-                    ? (sample - fovet_zscore_get_mean(&g_zscore)) / (fovet_zscore_get_stddev(&g_zscore) + 1e-9f)
+    bool  anomaly = ard_zscore_update(&g_zscore, sample);
+    float zscore  = ard_zscore_get_mean(&g_zscore) != 0.0f
+                    ? (sample - ard_zscore_get_mean(&g_zscore)) / (ard_zscore_get_stddev(&g_zscore) + 1e-9f)
                     : 0.0f;
 
     hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
 
     if (g_sample_index % MQTT_PUBLISH_EVERY == 0 && g_mqtt.connected()) {{
         int n = snprintf(g_buf, sizeof(g_buf),
-            "{{\\"device_id\\":\\"%s\\",\\"model_id\\":\\"" FOVET_MODEL_ID "\\","
-            "\\"sensor\\":\\"" FOVET_MODEL_SENSOR "\\",\\"value\\":%.4f,"
+            "{{\\"device_id\\":\\"%s\\",\\"model_id\\":\\"" ARD_MODEL_ID "\\","
+            "\\"sensor\\":\\"" ARD_MODEL_SENSOR "\\",\\"value\\":%.4f,"
             "\\"value_min\\":%.4f,\\"value_max\\":%.4f,"
-            "\\"unit\\":\\"" FOVET_MODEL_UNIT "\\",\\"label\\":\\"%s\\","
+            "\\"unit\\":\\"" ARD_MODEL_UNIT "\\",\\"label\\":\\"%s\\","
             "\\"anomaly\\":%s,\\"ts\\":%lu}}",
             DEVICE_ID, zscore,
-            (double)FOVET_MODEL_VALUE_MIN, (double)FOVET_MODEL_VALUE_MAX,
-            anomaly ? FOVET_MODEL_LABEL_ANOMALY : FOVET_MODEL_LABEL_NORMAL,
+            (double)ARD_MODEL_VALUE_MIN, (double)ARD_MODEL_VALUE_MAX,
+            anomaly ? ARD_MODEL_LABEL_ANOMALY : ARD_MODEL_LABEL_NORMAL,
             anomaly ? "true" : "false",
             (unsigned long)hal_time_ms());
         char topic[64];
-        snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+        snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
         g_mqtt.publish(topic, g_buf, (unsigned int)n);
     }}
     g_sample_index++;
@@ -533,10 +533,10 @@ _MAIN_CPP_MAD = (
     _MAIN_CPP_HEADER
     + """
 extern "C" {{
-#include "fovet/mad.h"
-#include "fovet/hal/hal_uart.h"
-#include "fovet/hal/hal_time.h"
-#include "fovet/hal/hal_gpio.h"
+#include "ardent/mad.h"
+#include "ardent/hal/hal_uart.h"
+#include "ardent/hal/hal_time.h"
+#include "ardent/hal/hal_gpio.h"
 }}
 
 #include <Arduino.h>
@@ -552,7 +552,7 @@ extern "C" {{
 #define MQTT_PUBLISH_EVERY 10U
 #define MQTT_RECONNECT_MS  5000U
 
-static FovetMAD     g_mad;
+static ArdentMAD     g_mad;
 static uint32_t     g_sample_index = 0;
 static char         g_buf[384];
 static WiFiClient   g_wifi;
@@ -590,8 +590,8 @@ void setup(void) {{
     hal_uart_init(115200);
     hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
     hal_gpio_write(LED_PIN, HAL_GPIO_HIGH);
-    fovet_mad_init(&g_mad, MAD_THRESHOLD, MAD_WINDOW_SIZE);
-    hal_uart_print("\\r\\n=== Fovet Sentinelle — {name} ===\\r\\n");
+    ard_mad_init(&g_mad, MAD_THRESHOLD, MAD_WINDOW_SIZE);
+    hal_uart_print("\\r\\n=== Ardent Pulse — {name} ===\\r\\n");
     wifi_connect();
     g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     g_mqtt.setKeepAlive(30);
@@ -604,25 +604,25 @@ void loop(void) {{
     last_sample_ms = hal_time_ms();
 
     float sample    = read_sensor();
-    float mad_score = fovet_mad_score(&g_mad, sample);
-    bool  anomaly   = fovet_mad_update(&g_mad, sample);
+    float mad_score = ard_mad_score(&g_mad, sample);
+    bool  anomaly   = ard_mad_update(&g_mad, sample);
 
     hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
 
     if (g_sample_index % MQTT_PUBLISH_EVERY == 0 && g_mqtt.connected()) {{
         int n = snprintf(g_buf, sizeof(g_buf),
-            "{{\\"device_id\\":\\"%s\\",\\"model_id\\":\\"" FOVET_MODEL_ID "\\","
-            "\\"sensor\\":\\"" FOVET_MODEL_SENSOR "\\",\\"value\\":%.4f,"
+            "{{\\"device_id\\":\\"%s\\",\\"model_id\\":\\"" ARD_MODEL_ID "\\","
+            "\\"sensor\\":\\"" ARD_MODEL_SENSOR "\\",\\"value\\":%.4f,"
             "\\"value_min\\":%.4f,\\"value_max\\":%.4f,"
-            "\\"unit\\":\\"" FOVET_MODEL_UNIT "\\",\\"label\\":\\"%s\\","
+            "\\"unit\\":\\"" ARD_MODEL_UNIT "\\",\\"label\\":\\"%s\\","
             "\\"anomaly\\":%s,\\"ts\\":%lu}}",
             DEVICE_ID, mad_score,
-            (double)FOVET_MODEL_VALUE_MIN, (double)FOVET_MODEL_VALUE_MAX,
-            anomaly ? FOVET_MODEL_LABEL_ANOMALY : FOVET_MODEL_LABEL_NORMAL,
+            (double)ARD_MODEL_VALUE_MIN, (double)ARD_MODEL_VALUE_MAX,
+            anomaly ? ARD_MODEL_LABEL_ANOMALY : ARD_MODEL_LABEL_NORMAL,
             anomaly ? "true" : "false",
             (unsigned long)hal_time_ms());
         char topic[64];
-        snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+        snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
         g_mqtt.publish(topic, g_buf, (unsigned int)n);
     }}
     g_sample_index++;
@@ -635,10 +635,10 @@ _MAIN_CPP_DRIFT = (
     _MAIN_CPP_HEADER
     + """
 extern "C" {{
-#include "fovet/drift.h"
-#include "fovet/hal/hal_uart.h"
-#include "fovet/hal/hal_time.h"
-#include "fovet/hal/hal_gpio.h"
+#include "ardent/drift.h"
+#include "ardent/hal/hal_uart.h"
+#include "ardent/hal/hal_time.h"
+#include "ardent/hal/hal_gpio.h"
 }}
 
 #include <Arduino.h>
@@ -655,7 +655,7 @@ extern "C" {{
 #define MQTT_PUBLISH_EVERY 10U
 #define MQTT_RECONNECT_MS  5000U
 
-static FovetDrift   g_drift;
+static ArdentDrift   g_drift;
 static uint32_t     g_sample_index = 0;
 static char         g_buf[384];
 static WiFiClient   g_wifi;
@@ -693,8 +693,8 @@ void setup(void) {{
     hal_uart_init(115200);
     hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
     hal_gpio_write(LED_PIN, HAL_GPIO_HIGH);
-    fovet_drift_init(&g_drift, DRIFT_ALPHA_FAST, DRIFT_ALPHA_SLOW, DRIFT_THRESHOLD);
-    hal_uart_print("\\r\\n=== Fovet Sentinelle — {name} ===\\r\\n");
+    ard_drift_init(&g_drift, DRIFT_ALPHA_FAST, DRIFT_ALPHA_SLOW, DRIFT_THRESHOLD);
+    hal_uart_print("\\r\\n=== Ardent Pulse — {name} ===\\r\\n");
     wifi_connect();
     g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     g_mqtt.setKeepAlive(30);
@@ -707,25 +707,25 @@ void loop(void) {{
     last_sample_ms = hal_time_ms();
 
     float sample     = read_sensor();
-    bool  anomaly    = fovet_drift_update(&g_drift, sample);
-    float drift_mag  = fovet_drift_get_magnitude(&g_drift);
+    bool  anomaly    = ard_drift_update(&g_drift, sample);
+    float drift_mag  = ard_drift_get_magnitude(&g_drift);
 
     hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
 
     if (g_sample_index % MQTT_PUBLISH_EVERY == 0 && g_mqtt.connected()) {{
         int n = snprintf(g_buf, sizeof(g_buf),
-            "{{\\"device_id\\":\\"%s\\",\\"model_id\\":\\"" FOVET_MODEL_ID "\\","
-            "\\"sensor\\":\\"" FOVET_MODEL_SENSOR "\\",\\"value\\":%.4f,"
+            "{{\\"device_id\\":\\"%s\\",\\"model_id\\":\\"" ARD_MODEL_ID "\\","
+            "\\"sensor\\":\\"" ARD_MODEL_SENSOR "\\",\\"value\\":%.4f,"
             "\\"value_min\\":%.4f,\\"value_max\\":%.4f,"
-            "\\"unit\\":\\"" FOVET_MODEL_UNIT "\\",\\"label\\":\\"%s\\","
+            "\\"unit\\":\\"" ARD_MODEL_UNIT "\\",\\"label\\":\\"%s\\","
             "\\"anomaly\\":%s,\\"ts\\":%lu}}",
             DEVICE_ID, drift_mag,
-            (double)FOVET_MODEL_VALUE_MIN, (double)FOVET_MODEL_VALUE_MAX,
-            anomaly ? FOVET_MODEL_LABEL_ANOMALY : FOVET_MODEL_LABEL_NORMAL,
+            (double)ARD_MODEL_VALUE_MIN, (double)ARD_MODEL_VALUE_MAX,
+            anomaly ? ARD_MODEL_LABEL_ANOMALY : ARD_MODEL_LABEL_NORMAL,
             anomaly ? "true" : "false",
             (unsigned long)hal_time_ms());
         char topic[64];
-        snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+        snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
         g_mqtt.publish(topic, g_buf, (unsigned int)n);
     }}
     g_sample_index++;
@@ -748,7 +748,7 @@ _MAIN_CPP_ML = (
  * Pipeline :
  *   Sensor ──► features[{n_features}] ──► TFLite Micro ──► MSE (recon error)
  *                                                               │
- *                                                         FovetZScore ──► MQTT → Vigie
+ *                                                         ArdentZScore ──► MQTT → Watch
  *
  * IMPORTANT — model_data.cpp must exist before compilation:
  *   Run: forge deploy-full --config configs/{slug}.yaml \\
@@ -777,10 +777,10 @@ _MAIN_CPP_ML = (
 #include "esp_heap_caps.h"
 
 extern "C" {{
-#include "fovet/zscore.h"
-#include "fovet/hal/hal_uart.h"
-#include "fovet/hal/hal_time.h"
-#include "fovet/hal/hal_gpio.h"
+#include "ardent/zscore.h"
+#include "ardent/hal/hal_uart.h"
+#include "ardent/hal/hal_time.h"
+#include "ardent/hal/hal_gpio.h"
 }}
 
 #include <Arduino.h>
@@ -818,7 +818,7 @@ static tflite::MicroInterpreter   *g_interpreter   = nullptr;
 static TfLiteTensor               *g_input_tensor  = nullptr;
 static TfLiteTensor               *g_output_tensor = nullptr;
 
-static FovetZScore  g_zscore;
+static ArdentZScore  g_zscore;
 static uint32_t     g_sample_index = 0;
 static char         g_buf[384];
 static WiFiClient   g_wifi;
@@ -967,7 +967,7 @@ void setup(void) {{
     hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
     hal_gpio_write(LED_PIN, HAL_GPIO_HIGH);
 
-    hal_uart_print("\\r\\n=== Fovet Sentinelle — {name} ({detector}) ===\\r\\n");
+    hal_uart_print("\\r\\n=== Ardent Pulse — {name} ({detector}) ===\\r\\n");
 
     /* Start WiFi BEFORE TFLite arena allocation to avoid DRAM contention. */
     wifi_connect();
@@ -980,7 +980,7 @@ void setup(void) {{
         while (true) {{ hal_delay_ms(1000); }}
     }}
 
-    fovet_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_WARMUP);
+    ard_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_WARMUP);
 
     hal_uart_print("[READY] Warmup in progress...\\r\\n");
     hal_uart_print("CSV: sample_id,recon_error,z_score,anomaly\\r\\n\\r\\n");
@@ -999,9 +999,9 @@ void loop(void) {{
     read_sensor(features);
 
     float recon_error = tflite_infer(features);
-    bool  anomaly     = fovet_zscore_update(&g_zscore, recon_error);
-    float mean        = fovet_zscore_get_mean  (&g_zscore);
-    float stddev      = fovet_zscore_get_stddev(&g_zscore);
+    bool  anomaly     = ard_zscore_update(&g_zscore, recon_error);
+    float mean        = ard_zscore_get_mean  (&g_zscore);
+    float stddev      = ard_zscore_get_stddev(&g_zscore);
     float z_score     = (stddev > 1e-6f) ? (recon_error - mean) / stddev : 0.0f;
 
     hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
@@ -1015,18 +1015,18 @@ void loop(void) {{
     /* MQTT — canonical payload (same format as zscore / mad / drift templates) */
     if (g_sample_index % MQTT_PUBLISH_EVERY == 0 && g_mqtt.connected()) {{
         int n = snprintf(g_buf, sizeof(g_buf),
-            "{{\\"device_id\\":\\"%s\\",\\"model_id\\":\\"" FOVET_MODEL_ID "\\","
-            "\\"sensor\\":\\"" FOVET_MODEL_SENSOR "\\",\\"value\\":%.4f,"
+            "{{\\"device_id\\":\\"%s\\",\\"model_id\\":\\"" ARD_MODEL_ID "\\","
+            "\\"sensor\\":\\"" ARD_MODEL_SENSOR "\\",\\"value\\":%.4f,"
             "\\"value_min\\":%.4f,\\"value_max\\":%.4f,"
-            "\\"unit\\":\\"" FOVET_MODEL_UNIT "\\",\\"label\\":\\"%s\\","
+            "\\"unit\\":\\"" ARD_MODEL_UNIT "\\",\\"label\\":\\"%s\\","
             "\\"anomaly\\":%s,\\"ts\\":%lu}}",
             DEVICE_ID, recon_error,
-            (double)FOVET_MODEL_VALUE_MIN, (double)FOVET_MODEL_VALUE_MAX,
-            anomaly ? FOVET_MODEL_LABEL_ANOMALY : FOVET_MODEL_LABEL_NORMAL,
+            (double)ARD_MODEL_VALUE_MIN, (double)ARD_MODEL_VALUE_MAX,
+            anomaly ? ARD_MODEL_LABEL_ANOMALY : ARD_MODEL_LABEL_NORMAL,
             anomaly ? "true" : "false",
             (unsigned long)hal_time_ms());
         char topic[64];
-        snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+        snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
         g_mqtt.publish(topic, g_buf, (unsigned int)n);
     }}
     g_sample_index++;
@@ -1139,8 +1139,8 @@ def scaffold_usecase(
     config_h_path.write_text(_config_h_example(device_id), encoding="utf-8")
     files.append(config_h_path)
 
-    # 5. src/fovet_model_manifest.h (default, replaced by deploy-manifest)
-    manifest_h_path = project_dir / "src" / "fovet_model_manifest.h"
+    # 5. src/ard_model_manifest.h (default, replaced by deploy-manifest)
+    manifest_h_path = project_dir / "src" / "ard_model_manifest.h"
     manifest_h_path.write_text(_manifest_h_default(name, sensor, detector), encoding="utf-8")
     files.append(manifest_h_path)
 

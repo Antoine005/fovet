@@ -1,12 +1,12 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 
-#ifndef FOVET_DRIVERS_MPU6050_H
-#define FOVET_DRIVERS_MPU6050_H
+#ifndef ARD_DRIVERS_MPU6050_H
+#define ARD_DRIVERS_MPU6050_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -19,7 +19,7 @@ extern "C" {
  * @brief MPU-6050 3-axis accelerometer + gyroscope (I2C).
  *
  * This driver covers the accelerometer only (sufficient for fall/motion
- * detection in Fovet Sentinelle Phase 3).
+ * detection in Ardent Pulse Phase 3).
  *
  * Wiring on ESP32-CAM (external sensor header):
  *   VCC → 3.3 V
@@ -100,4 +100,4 @@ bool mpu6050_read_accel(uint8_t addr, mpu6050_accel_t *out);
 }
 #endif
 
-#endif /* FOVET_DRIVERS_MPU6050_H */
+#endif /* ARD_DRIVERS_MPU6050_H */

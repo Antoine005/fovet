@@ -1,15 +1,15 @@
-# CLAUDE.md — Fovet SDK Project
+# CLAUDE.md — Ardent SDK Project
 
-> Ce fichier est destiné à Claude Code. Il contient tout le contexte nécessaire pour travailler efficacement sur le projet Fovet sans avoir à redemander les informations de base.
+> Ce fichier est destiné à Claude Code. Il contient tout le contexte nécessaire pour travailler efficacement sur le projet Ardent sans avoir à redemander les informations de base.
 
 ---
 
 ## Projet
 
-**Fovet** est un SDK C/C++ embarqué souverain pour la détection d'anomalies en temps réel sur microcontrôleurs. Zéro cloud US. Cible : défense, industriel, aéronautique.
+**Ardent** est un SDK C/C++ embarqué souverain pour la détection d'anomalies en temps réel sur microcontrôleurs. Zéro cloud US. Cible : défense, industriel, aéronautique.
 
-- **Site :** fovet.eu
-- **Email :** contact@fovet.eu
+- **Site :** ardent.io
+- **Email :** contact@ardent.io
 - **Auteur :** Antoine Porte
 
 ---
@@ -18,9 +18,9 @@
 
 | Nom produit | Rôle |
 |---|---|
-| **Fovet Sentinelle** | SDK C/C++ embarqué (edge-core) — détection d'anomalies sur MCU |
-| **Fovet Forge** | Pipeline AutoML Python — entraînement modèles + export TFLite |
-| **Fovet Vigie** | Dashboard Next.js/Hono — supervision temps réel, flotte capteurs |
+| **Ardent Pulse** | SDK C/C++ embarqué (edge-core) — détection d'anomalies sur MCU |
+| **Ardent Forge** | Pipeline AutoML Python — entraînement modèles + export TFLite |
+| **Ardent Watch** | Dashboard Next.js/Hono — supervision temps réel, flotte capteurs |
 
 ---
 
@@ -39,10 +39,10 @@
 ## Structure du repo (Monorepo)
 
 ```
-fovet/
+ardent/
 ├── edge-core/
 │   ├── include/
-│   │   └── fovet/
+│   │   └── ardent/
 │   │       ├── zscore.h           ← API publique Z-Score detector
 │   │       ├── drift.h            ← API publique Drift detector (EWMA)
 │   │       ├── mad.h              ← API publique MAD detector (Streaming MAD)
@@ -61,15 +61,15 @@ fovet/
 │   │   ├── test_zscore.c          ← 59 tests (master) / 56 (physio branch)
 │   │   ├── test_drift.c           ← 28 tests
 │   │   └── test_mad.c             ← 28 tests
-│   ├── library.json               ← PlatformIO manifest (fovet-sentinelle)
+│   ├── library.json               ← PlatformIO manifest (ardent-pulse)
 │   └── examples/
 │       └── esp32/
 │           ├── smoke_test/        ← Smoke test SDK complet (HAL + Z-Score + LED)
-│           ├── zscore_demo/       ← Z-Score + Drift + MQTT → Vigie
+│           ├── zscore_demo/       ← Z-Score + Drift + MQTT → Watch
 │           ├── fire_detection/    ← Détection feu/fumée OV2640 (3×Z-Score sur RGB565)
-│           └── person_detection/  ← VWW TFLite Micro + Z-Score temporel → Vigie MQTT
-├── automl-pipeline/               ← Fovet Forge (Python AutoML)
-├── platform-dashboard/            ← Fovet Vigie (Next.js/Hono)
+│           └── person_detection/  ← VWW TFLite Micro + Z-Score temporel → Watch MQTT
+├── automl-pipeline/               ← Ardent Forge (Python AutoML)
+├── platform-dashboard/            ← Ardent Watch (Next.js/Hono)
 ├── docs/
 ├── CLAUDE.md                      ← Ce fichier
 └── README.md
@@ -90,7 +90,7 @@ fovet/
 
 ## Architecture HAL
 
-Les algorithmes de détection appellent uniquement des fonctions HAL définies dans `include/fovet/hal/`. Chaque MCU implémente ces interfaces dans `src/platform/platform_<mcu>.c`.
+Les algorithmes de détection appellent uniquement des fonctions HAL définies dans `include/ardent/hal/`. Chaque MCU implémente ces interfaces dans `src/platform/platform_<mcu>.c`.
 
 ```c
 // Exemple d'interface HAL
@@ -120,9 +120,9 @@ Critère de sortie Phase 1 atteint : détecte une anomalie ±5σ injectée dans 
 **Phase 2 — Premier flash hardware** ✅
 - [x] Smoke test SDK complet : `edge-core/examples/esp32/smoke_test/`
 - [x] HAL ESP32 opérationnel (UART GPIO1/3, GPIO, time) — `platform_esp32.cpp`
-- [x] zscore_demo (Z-Score + Drift + MQTT → Vigie) compilé et prêt à flasher
+- [x] zscore_demo (Z-Score + Drift + MQTT → Watch) compilé et prêt à flasher
 - [x] fire_detection (OV2640 QQVGA RGB565 — 3×Z-Score sur R_mean/ratio_rb/variance) ✅
-- [x] person_detection (VWW TFLite Micro — OV2640 96×96 GRAY → MobileNetV1 0.25× → Z-Score → Vigie MQTT) ✅
+- [x] person_detection (VWW TFLite Micro — OV2640 96×96 GRAY → MobileNetV1 0.25× → Z-Score → Watch MQTT) ✅
 - [x] **Validation hardware réelle (2026-03-22)** — ESP32-CAM opérationnel avec person_detection / fire_detection sur hardware physique
 
 **Tests natifs gcc (master) — 115 tests, 0 failing**
@@ -139,15 +139,15 @@ Pré-requis validés : ESP32-CAM opérationnel ✅ — capteurs MPU-6050/MAX3010
 
 - [ ] Brancher MPU-6050 sur I2C : SDA=GPIO13, SCL=GPIO14 sur ESP32-CAM
 - [ ] Implémenter `hal_i2c.h` + I2C read dans `platform_esp32.cpp`
-- [ ] Lire accélération réelle MPU-6050 → `fovet_zscore_update()` en lieu du sinus
+- [ ] Lire accélération réelle MPU-6050 → `ard_zscore_update()` en lieu du sinus
 - [ ] Valider la détection sur un mouvement réel (secousse, chute)
-- [ ] Flasher la `zscore_demo` complète avec credentials WiFi/MQTT → données dans Vigie
+- [ ] Flasher la `zscore_demo` complète avec credentials WiFi/MQTT → données dans Watch
 
-**Phase 3.5 — Pipeline Forge→Sentinelle→Vigie standardisée** ✅ (2026-03-22)
+**Phase 3.5 — Pipeline Forge→Pulse→Watch standardisée** ✅ (2026-03-22)
 - [x] `ManifestConfig` dans Forge — champs `sensor`, `unit`, `value_min`, `value_max`, `label_normal/anomaly`
-- [x] `forge/manifest.py` — génère `fovet_model_manifest.h` à chaque `forge run`
-- [x] `include/fovet/model_manifest.h` — documentation du format manifest dans le SDK
-- [x] Manifests par défaut dans chaque exemple ESP32 (`fovet_model_manifest.h` dans `src/`)
+- [x] `forge/manifest.py` — génère `ard_model_manifest.h` à chaque `forge run`
+- [x] `include/ardent/model_manifest.h` — documentation du format manifest dans le SDK
+- [x] Manifests par défaut dans chaque exemple ESP32 (`ard_model_manifest.h` dans `src/`)
 - [x] Payload MQTT canonique v2 — `model_id`, `value_min`, `value_max` dans chaque publish
 - [x] Prisma `Reading` — champs `modelId`, `unit`, `valueMin`, `valueMax`, `label`
 - [x] `mqtt-ingestion.ts` — parse et persiste les nouveaux champs
@@ -170,12 +170,12 @@ typedef struct {
     float M2;
     float threshold_sigma;
     uint32_t warmup_samples;
-} FovetZScore;
+} ArdentZScore;
 
-void  fovet_zscore_init    (FovetZScore* ctx, float threshold_sigma, uint32_t warmup);
-bool  fovet_zscore_update  (FovetZScore* ctx, float sample);   // true si anomalie
-float fovet_zscore_get_mean  (const FovetZScore* ctx);
-float fovet_zscore_get_stddev(const FovetZScore* ctx);
+void  ard_zscore_init    (ArdentZScore* ctx, float threshold_sigma, uint32_t warmup);
+bool  ard_zscore_update  (ArdentZScore* ctx, float sample);   // true si anomalie
+float ard_zscore_get_mean  (const ArdentZScore* ctx);
+float ard_zscore_get_stddev(const ArdentZScore* ctx);
 ```
 
 ---
@@ -199,15 +199,15 @@ Contient tout master + modules physiologiques H1–H3 :
 
 Dual License :
 - **LGPL v3** pour usage non commercial / open source
-- **Licence commerciale** pour toute entreprise (contact@fovet.eu)
+- **Licence commerciale** pour toute entreprise (contact@ardent.io)
 
 Header à inclure dans chaque fichier source :
 ```c
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 ```
 
@@ -217,7 +217,7 @@ Header à inclure dans chaque fichier source :
 
 - Langue du code et commentaires : **anglais**
 - Documentation utilisateur : **français**
-- Préfixe des fonctions publiques : `fovet_`
+- Préfixe des fonctions publiques : `ard_`
 - Préfixe HAL : `hal_`
 - Nommage fichiers : snake_case
 - Commits : conventional commits (`feat:`, `fix:`, `chore:`, `docs:`)
@@ -230,7 +230,7 @@ Règle rapide selon ce qui change :
 - Nouvelle fonction C publique → mettre à jour `edge-core/README.md`
 - Nouveau détecteur Forge → mettre à jour `automl-pipeline/README.md` + `docs/architecture.md`
 - Nouvelle route API → mettre à jour `platform-dashboard/README.md`
-- Nouvelle variable d'env → mettre à jour `.env.example` + README Vigie
+- Nouvelle variable d'env → mettre à jour `.env.example` + README Watch
 - Décision architecturale → mettre à jour `docs/architecture.md`
 - Nouveau produit ou sous-module → mettre à jour `README.md` racine
 

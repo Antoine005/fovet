@@ -1,13 +1,13 @@
 /**
- * Fovet Vigie — MQTT Ingestion Service
+ * Ardent Watch — MQTT Ingestion Service
  *
- * Subscribes to fovet/devices/+/readings and persists incoming
- * sensor data from Fovet Sentinelle nodes into PostgreSQL.
+ * Subscribes to ardent/devices/+/readings and persists incoming
+ * sensor data from Ardent Pulse nodes into PostgreSQL.
  *
  * Canonical MQTT message format v2 (JSON) — all ESP32 firmwares with manifest:
  * {
  *   "device_id":  "esp32cam_001",          // optional (also in topic)
- *   "model_id":   "demo-zscore-sine",      // canonical v2: Forge pipeline ID
+ *   "model_id":   "demo-zscore-sine",      // canonical v2: Cast pipeline ID
  *   "firmware":   "zscore_demo",           // canonical: identifies the firmware
  *   "sensor":     "synthetic",             // canonical: sensor type from manifest
  *   "value":      1.23,                    // required: primary numeric value
@@ -32,7 +32,7 @@
  *   "value2":     65.0             // secondary value (e.g. humidity % for TEMP)
  * }
  *
- * Topic pattern: fovet/devices/<mqttClientId>/readings
+ * Topic pattern: ardent/devices/<mqttClientId>/readings
  */
 
 import mqtt from "mqtt";
@@ -40,7 +40,7 @@ import { prisma } from "./prisma";
 import { emitReading } from "./event-bus";
 
 const BROKER_URL   = process.env.MQTT_BROKER_URL ?? "mqtt://localhost:1883";
-const TOPIC        = `${process.env.MQTT_TOPIC_PREFIX ?? "fovet/devices"}/+/readings`;
+const TOPIC        = `${process.env.MQTT_TOPIC_PREFIX ?? "ardent/devices"}/+/readings`;
 const WEBHOOK_URL  = process.env.ALERT_WEBHOOK_URL ?? "";
 const WEBHOOK_MIN  = (process.env.ALERT_WEBHOOK_MIN_LEVEL ?? "DANGER").toUpperCase();
 
@@ -69,7 +69,7 @@ const CAMERA_ALERT_THRESHOLD = 0.75;
 interface SensorPayload {
   value: number;
   // Canonical v2 fields (manifest-driven)
-  model_id?: string;     // Forge pipeline ID — "demo-zscore-sine" | "fire-detection" | ...
+  model_id?: string;     // Cast pipeline ID — "demo-zscore-sine" | "fire-detection" | ...
   firmware?: string;     // "person_detection" | "fire_detection" | "zscore_demo" | "smoke_test"
   sensor?: string;       // sensor type from manifest: "camera" | "synthetic" | "imu" | ...
   label?: string;        // human-readable label: "normal" | "anomaly" | "person" | "fire" | ...
@@ -93,7 +93,7 @@ interface SensorPayload {
  * Normalise any incoming MQTT payload into a SensorPayload.
  *
  * Handles three formats:
- *   1. Canonical (firmware field present) — all ESP32 Sentinelle firmwares
+ *   1. Canonical (firmware field present) — all ESP32 Pulse firmwares
  *   2. Legacy camera (score + label fields) — pre-canonical ESP32-CAM
  *   3. Standard legacy — monitoring/human branch (mean/stddev/zScore required)
  *
@@ -179,7 +179,7 @@ export function startMqttIngestion(): void {
   if (client) return; // already running
 
   client = mqtt.connect(BROKER_URL, {
-    clientId: `fovet-vigie-ingestion-${process.pid}`,
+    clientId: `ardent-watch-ingestion-${process.pid}`,
     clean: true,
     reconnectPeriod: 5000,
     ...(process.env.MQTT_USERNAME && {
@@ -198,7 +198,7 @@ export function startMqttIngestion(): void {
 
   client.on("message", async (topic, payload) => {
     try {
-      // Extract mqttClientId from topic: fovet/devices/<id>/readings
+      // Extract mqttClientId from topic: ardent/devices/<id>/readings
       const parts = topic.split("/");
       const mqttClientId = parts[2];
       if (!mqttClientId || parts.length !== 4) return;
@@ -322,7 +322,7 @@ export function startMqttIngestion(): void {
 
       // Determine whether to create an alert and at what severity:
       //   a) Canonical firmware payload: anomaly=true → WARN (or CRITICAL if value thresholds)
-      //   b) Sentinelle profile level (PTI/FATIGUE/THERMAL): WARN/DANGER/COLD/CRITICAL from payload
+      //   b) Pulse profile level (PTI/FATIGUE/THERMAL): WARN/DANGER/COLD/CRITICAL from payload
       //   c) Generic z-score anomaly: derive severity from |zScore|
       let shouldAlert = false;
       let alertLevel: string | null = null;
@@ -343,7 +343,7 @@ export function startMqttIngestion(): void {
       if (shouldAlert) {
         const alertModule = data.sensorType ? ALERT_MODULES[data.sensorType] ?? null : null;
 
-        // Always persist the alert to DB — Vigie FleetAlertTimeline shows all of them.
+        // Always persist the alert to DB — Watch FleetAlertTimeline shows all of them.
         await prisma.alert.create({
           data: {
             deviceId: device.id,

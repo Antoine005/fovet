@@ -1,12 +1,12 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 
-#ifndef FOVET_DRIFT_H
-#define FOVET_DRIFT_H
+#ifndef ARD_DRIFT_H
+#define ARD_DRIFT_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -27,7 +27,7 @@ extern "C" {
  *
  * No dynamic allocation — stack or static only.
  *
- * RAM usage: sizeof(FovetDrift) = 24 bytes.
+ * RAM usage: sizeof(ArdentDrift) = 24 bytes.
  *
  * Typical parameters:
  *   alpha_fast = 0.10f  → ~10 sample memory
@@ -42,7 +42,7 @@ typedef struct {
     float    alpha_slow;  /**< Slow smoothing factor (0 < alpha_slow < alpha_fast) */
     float    threshold;   /**< Drift alert threshold (signal units) */
     uint32_t count;       /**< Sample count — first sample seeds both EMAs */
-} FovetDrift;
+} ArdentDrift;
 
 /**
  * @brief Initialize a drift detector.
@@ -53,7 +53,7 @@ typedef struct {
  *
  * Constraint: alpha_slow < alpha_fast. If violated, values are swapped.
  */
-void fovet_drift_init(FovetDrift *ctx,
+void ard_drift_init(ArdentDrift *ctx,
                       float alpha_fast,
                       float alpha_slow,
                       float threshold);
@@ -68,37 +68,37 @@ void fovet_drift_init(FovetDrift *ctx,
  * @param sample New measurement
  * @return true  if drift is detected, false otherwise
  */
-bool fovet_drift_update(FovetDrift *ctx, float sample);
+bool ard_drift_update(ArdentDrift *ctx, float sample);
 
 /**
  * @brief Get current fast EWMA value.
  * @param ctx Pointer to detector context (const)
  * @return Fast EMA value
  */
-float fovet_drift_get_fast(const FovetDrift *ctx);
+float ard_drift_get_fast(const ArdentDrift *ctx);
 
 /**
  * @brief Get current slow EWMA value (baseline).
  * @param ctx Pointer to detector context (const)
  * @return Slow EMA value
  */
-float fovet_drift_get_slow(const FovetDrift *ctx);
+float ard_drift_get_slow(const ArdentDrift *ctx);
 
 /**
  * @brief Get current drift magnitude (|fast - slow|).
  * @param ctx Pointer to detector context (const)
  * @return Absolute difference between fast and slow EMAs
  */
-float fovet_drift_get_magnitude(const FovetDrift *ctx);
+float ard_drift_get_magnitude(const ArdentDrift *ctx);
 
 /**
  * @brief Reset detector to initial state (preserves parameters).
  * @param ctx Pointer to detector context
  */
-void fovet_drift_reset(FovetDrift *ctx);
+void ard_drift_reset(ArdentDrift *ctx);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* FOVET_DRIFT_H */
+#endif /* ARD_DRIFT_H */

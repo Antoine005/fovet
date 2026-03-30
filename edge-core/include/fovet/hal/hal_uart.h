@@ -1,12 +1,12 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 
-#ifndef FOVET_HAL_UART_H
-#define FOVET_HAL_UART_H
+#ifndef ARD_HAL_UART_H
+#define ARD_HAL_UART_H
 
 #include <stdint.h>
 
@@ -42,4 +42,4 @@ void hal_uart_flush(void);
 }
 #endif
 
-#endif /* FOVET_HAL_UART_H */
+#endif /* ARD_HAL_UART_H */

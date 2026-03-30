@@ -1,8 +1,8 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 
 /*
@@ -15,11 +15,11 @@
 
 #ifdef ARDUINO  /* Guard: only compile when targeting ESP32 via Arduino */
 
-#include "fovet/hal/hal_adc.h"
-#include "fovet/hal/hal_uart.h"
-#include "fovet/hal/hal_gpio.h"
-#include "fovet/hal/hal_time.h"
-#include "fovet/hal/hal_i2c.h"
+#include "ardent/hal/hal_adc.h"
+#include "ardent/hal/hal_uart.h"
+#include "ardent/hal/hal_gpio.h"
+#include "ardent/hal/hal_time.h"
+#include "ardent/hal/hal_i2c.h"
 
 #include <Arduino.h>
 #include <Wire.h>

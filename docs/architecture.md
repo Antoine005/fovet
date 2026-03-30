@@ -1,10 +1,10 @@
-# Fovet — Architecture technique
+# Ardent — Architecture technique
 
 ---
 
 ## Vue d'ensemble
 
-Fovet est un système distribué de détection d'anomalies souverain pour capteurs embarqués.
+Ardent est un système distribué de détection d'anomalies souverain pour capteurs embarqués.
 Il est composé de trois couches indépendantes qui s'interfacent via des contrats explicites (headers C, JSON, MQTT).
 
 ```
@@ -13,19 +13,19 @@ Il est composé de trois couches indépendantes qui s'interfacent via des contra
 │   EDGE                    CLOUD / LAN                     OFFLINE            │
 │   ────────────────        ────────────────────────        ────────────────── │
 │                                                                              │
-│   ESP32-CAM               Mosquitto                       Fovet Forge        │
+│   ESP32-CAM               Mosquitto                       Ardent Forge        │
 │   ┌──────────┐            ┌─────────────┐                 ┌──────────────┐   │
-│   │Sentinelle│  WiFi/    │ Broker MQTT │                 │ Python AutoML│   │
+│   │Pulse│  WiFi/    │ Broker MQTT │                 │ Python AutoML│   │
 │   │ (C99)   │──MQTT──→  │ port 1883   │                 │              │   │
 │   │         │            └──────┬──────┘                 │ ZScore       │   │
 │   │ zscore.h│                   │ subscribe              │ MAD          │   │
 │   │ 20 bytes│                   ▼                        │ EWMA Drift   │   │
 │   │ drift.h │            ┌─────────────┐                 │ IsoForest    │   │
-│   │ 24 bytes│            │ Fovet Vigie │                 │ AutoEncoder  │   │
+│   │ 24 bytes│            │ Ardent Watch │                 │ AutoEncoder  │   │
 │   │ mad.h   │            │ (Next.js)   │                 └──────┬───────┘   │
 │   │ ~1 KB   │            │ PostgreSQL  │                 export ↓           │
-│   └─────────┘            │ REST + SSE  │          fovet_zscore_config.h     │
-│         ▲                │             │          fovet_mad_config.h        │
+│   └─────────┘            │ REST + SSE  │          ard_zscore_config.h     │
+│         ▲                │             │          ard_mad_config.h        │
 │         │                │             │          autoencoder.tflite        │
 │         │                └─────────────┘                        │           │
 │         └──────────────────────────────────────────────────────-┘           │
@@ -37,24 +37,24 @@ Il est composé de trois couches indépendantes qui s'interfacent via des contra
 
 ## Flux de données
 
-### 1. Ingestion temps réel (ESP32 → Vigie)
+### 1. Ingestion temps réel (ESP32 → Watch)
 
 ```
 ESP32-CAM
   │  Lit capteur (ADC / I2C)
-  │  Appelle fovet_zscore_update(ctx, sample)
-  │  Appelle fovet_drift_update(ctx, sample)
+  │  Appelle ard_zscore_update(ctx, sample)
+  │  Appelle ard_drift_update(ctx, sample)
   │  Si anomalie → LED clignote
   │  Publie JSON sur MQTT:
-  │    topic : fovet/devices/esp32-cam-001/readings
+  │    topic : ardent/devices/esp32-cam-001/readings
   │    payload: { value, mean, stddev, zScore, anomaly }
   ▼
 Mosquitto broker (LAN ou Scaleway)
   │  Auth par login/mdp
-  │  ACL : fovet-device ne peut écrire que fovet/devices/+/readings
+  │  ACL : ardent-device ne peut écrire que ardent/devices/+/readings
   ▼
-Fovet Vigie (instrumentation.ts → startMqttIngestion())
-  │  Subscribe fovet/devices/+/readings
+Ardent Watch (instrumentation.ts → startMqttIngestion())
+  │  Subscribe ardent/devices/+/readings
   │  INSERT INTO readings (value, mean, stddev, zScore, isAnomaly)
   │  Si anomaly=true → INSERT INTO alerts
   │  emitReading() → EventEmitter → clients SSE connectés
@@ -73,9 +73,9 @@ Dashboard (page.tsx + ReadingChart.tsx)
 
 ```
 Données sources
-  │  CSV exporté depuis Vigie, ou synthétique, ou live MQTT
+  │  CSV exporté depuis Watch, ou synthétique, ou live MQTT
   ▼
-Fovet Forge
+Ardent Forge
   │  uv run forge run --config configs/mon_capteur.yaml
   │  1. Charge les données (load_data)
   │  2. Normalisation optionnelle (StandardScaler)
@@ -84,20 +84,20 @@ Fovet Forge
   │  5. Export vers models/
   ▼
 Artefacts exportés
-  ├── fovet_zscore_config.h            → firmware ESP32 (#include direct)
-  ├── fovet_mad_config.h               → firmware ESP32 (ring buffer pré-seedé)
-  ├── fovet_drift_config.h             → firmware ESP32 (état EWMA post-calibration)
+  ├── ard_zscore_config.h            → firmware ESP32 (#include direct)
+  ├── ard_mad_config.h               → firmware ESP32 (ring buffer pré-seedé)
+  ├── ard_drift_config.h             → firmware ESP32 (état EWMA post-calibration)
   ├── scaler_params.json               → paramètres normalisation (si normalize: true)
-  ├── fovet_scaler_params.h            → normalisation C header (si normalize: true)
+  ├── ard_scaler_params.h            → normalisation C header (si normalize: true)
   ├── isolation_forest_config.json     → cloud/gateway uniquement
   ├── autoencoder.tflite               → TFLite Micro sur ESP32 (Dense)
-  ├── fovet_autoencoder_model.h        → C byte-array pour TFLite Micro (Dense)
+  ├── ard_autoencoder_model.h        → C byte-array pour TFLite Micro (Dense)
   ├── lstm_autoencoder.tflite          → TFLite Micro sur ESP32 (LSTM, unroll=True)
-  └── fovet_lstm_autoencoder_model.h   → C byte-array pour TFLite Micro (LSTM)
+  └── ard_lstm_autoencoder_model.h   → C byte-array pour TFLite Micro (LSTM)
   ▼
 Firmware ESP32 mis à jour
-  #include "fovet_zscore_config.h"
-  // FovetZScore pré-initialisé avec count=10000, mean=23.8f, min_samples=0U
+  #include "ard_zscore_config.h"
+  // ArdentZScore pré-initialisé avec count=10000, mean=23.8f, min_samples=0U
   // Détection active dès le premier sample
 ```
 
@@ -105,12 +105,12 @@ Firmware ESP32 mis à jour
 
 ## Interfaces entre composants
 
-### Forge → Sentinelle (C header)
+### Forge → Pulse (C header)
 
 ```c
-// models/fovet_zscore_config.h
+// models/ard_zscore_config.h
 // Généré automatiquement — ne pas modifier manuellement
-static FovetZScore fovet_zscore_temperature = {
+static ArdentZScore ard_zscore_temperature = {
     .count            = 10000U,
     .mean             = 23.847f,
     .M2               = 1842.315f,
@@ -119,12 +119,12 @@ static FovetZScore fovet_zscore_temperature = {
 };
 ```
 
-Le firmware inclut ce fichier à la place d'appeler `fovet_zscore_init()`.
+Le firmware inclut ce fichier à la place d'appeler `ard_zscore_init()`.
 
-### Forge → Sentinelle (TFLite Micro)
+### Forge → Pulse (TFLite Micro)
 
 ```c
-// models/fovet_autoencoder_model.h
+// models/ard_autoencoder_model.h
 const uint8_t g_autoencoder_model_data[] = { 0x1c, 0x00, ... };
 const unsigned int g_autoencoder_model_data_len = 4096U;
 const float g_autoencoder_threshold = 0.042f;
@@ -134,7 +134,7 @@ const float g_autoencoder_threshold = 0.042f;
 //     tflite::GetModel(g_autoencoder_model_data), ...);
 ```
 
-### ESP32 → Vigie (MQTT JSON — payload canonique v2)
+### ESP32 → Watch (MQTT JSON — payload canonique v2)
 
 ```json
 {
@@ -157,23 +157,23 @@ const float g_autoencoder_threshold = 0.042f;
 | Champ | Type | Description |
 |---|---|---|
 | `device_id` | string | `mqttClientId` du firmware |
-| `model_id` | string | Identifiant du modèle Forge (depuis `fovet_model_manifest.h`) |
+| `model_id` | string | Identifiant du modèle Forge (depuis `ard_model_manifest.h`) |
 | `firmware` | string | Nom de l'exemple PlatformIO |
 | `sensor` | string | Type de capteur physique |
 | `value` | float | Valeur surveillée |
-| `value_min` | float | Borne basse pour le graphe Vigie |
-| `value_max` | float | Borne haute pour le graphe Vigie |
+| `value_min` | float | Borne basse pour le graphe Watch |
+| `value_max` | float | Borne haute pour le graphe Watch |
 | `unit` | string | Unité (ex: `g`, `°C`, `z_score`) |
 | `label` | string | Classification (`"normal"` ou `"anomaly"`) |
 | `anomaly` | bool | true si anomalie détectée |
 | `ts` | int | Timestamp Unix ms |
 
-Topic : `fovet/devices/<mqttClientId>/readings`
+Topic : `ardent/devices/<mqttClientId>/readings`
 
 **Payload legacy (v1) :** `mean`, `stddev`, `zScore`, `madScore`, `sensorType`, `level`,
-`value2`, `ptiType` — toujours acceptés par Vigie pour rétrocompatibilité.
+`value2`, `ptiType` — toujours acceptés par Watch pour rétrocompatibilité.
 
-### Vigie → Client (REST JSON — lectures paginées)
+### Watch → Client (REST JSON — lectures paginées)
 
 ```json
 // GET /api/devices/:id/readings?limit=100&cursor=1234
@@ -192,7 +192,7 @@ Topic : `fovet/devices/<mqttClientId>/readings`
 
 Les ids `Reading` sont des BigInt sérialisés en String pour la compatibilité JSON.
 
-### Vigie → Client (SSE temps réel)
+### Watch → Client (SSE temps réel)
 
 ```
 GET /api/devices/:id/stream
@@ -317,7 +317,7 @@ python scripts/demo_mqtt.py --device demo-001 --anomaly-period 20 --no-anomalies
 
 ### Pourquoi un monorepo ?
 
-- Les trois produits (Sentinelle, Forge, Vigie) partagent des conventions et s'interfacent
+- Les trois produits (Pulse, Forge, Watch) partagent des conventions et s'interfacent
 - Un seul dépôt git = cohérence des versions, CI unifiée, historique commun
 - Pas de complexité de workspaces npm/Python pour l'instant (les dossiers sont indépendants)
 
@@ -345,13 +345,13 @@ Ces contraintes sont vérifiées par les tests natifs et ne doivent jamais être
 | Forge-5 | Forge | ✅ | Rapport HTML/JSON + train/test split + métriques |
 | Forge-6 | Forge | ✅ | CI GitHub Actions + Scaleway GPU |
 | Forge-7 | Forge | ✅ | Benchmark CLI : `forge benchmark` |
-| Forge-8 | Forge | ✅ | MADDetector + export `fovet_mad_config.h` |
+| Forge-8 | Forge | ✅ | MADDetector + export `ard_mad_config.h` |
 | Forge-9 | Forge | ✅ | `forge convert` + `forge deploy` — Keras → TFLite → ESP32 |
 | Forge-10 | Forge | ✅ | `forge deploy-manifest` + ManifestConfig + auto-compute `value_min/max` |
-| U1–U5 | Vigie | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT |
-| S10 | Sentinelle | ✅ | Flash ESP32-CAM validé — person_detection + fire_detection (2026-03-22) |
-| S11 | Sentinelle | ✅ | HAL I2C + driver MPU-6050 + exemple `imu_zscore` |
-| UX-1 | Vigie | ✅ | Fenêtre graphe configurable [30s / 100s / 5min / 15min] |
-| UX-2 | Vigie | ✅ | Page onboarding + `/api/healthz` (MQTT + DB status) |
-| Phase 3 | Sentinelle | ⏳ | MPU-6050 sur hardware réel → live Vigie |
-| Prod-deploy | Vigie | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |
+| U1–U5 | Watch | ✅ | Alertes cross-module + worker view + webhook + export + démo MQTT |
+| S10 | Pulse | ✅ | Flash ESP32-CAM validé — person_detection + fire_detection (2026-03-22) |
+| S11 | Pulse | ✅ | HAL I2C + driver MPU-6050 + exemple `imu_zscore` |
+| UX-1 | Watch | ✅ | Fenêtre graphe configurable [30s / 100s / 5min / 15min] |
+| UX-2 | Watch | ✅ | Page onboarding + `/api/healthz` (MQTT + DB status) |
+| Phase 3 | Pulse | ⏳ | MPU-6050 sur hardware réel → live Watch |
+| Prod-deploy | Watch | ⏳ | Scaleway VPS, Nginx, HTTPS, Let's Encrypt |

@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """
-Fovet Vigie — Listener MQTT minimal pour test person_detection.
+Ardent Watch — Listener MQTT minimal pour test person_detection.
 
-S'abonne à fovet/devices/+/readings et affiche chaque message en clair.
+S'abonne à ardent/devices/+/readings et affiche chaque message en clair.
 Utile pour vérifier que l'ESP32-CAM publie correctement sans avoir besoin
-que le dashboard Vigie soit en cours d'exécution.
+que le dashboard Watch soit en cours d'exécution.
 
 Usage :
-    uv run --with paho-mqtt scripts/vigie_mqtt_listener.py
+    uv run --with paho-mqtt scripts/watch_mqtt_listener.py
     ou (si paho-mqtt installé globalement) :
-    python scripts/vigie_mqtt_listener.py
+    python scripts/watch_mqtt_listener.py
 
 Options d'environnement :
     MQTT_BROKER   IP du broker Mosquitto  (défaut : localhost)
     MQTT_PORT     Port                    (défaut : 1883)
-    MQTT_USER     Identifiant             (défaut : fovet-vigie)
+    MQTT_USER     Identifiant             (défaut : ardent-watch)
     MQTT_PASSWORD Mot de passe            (défaut : vide)
-    MQTT_TOPIC    Topic à écouter         (défaut : fovet/devices/+/readings)
+    MQTT_TOPIC    Topic à écouter         (défaut : ardent/devices/+/readings)
 """
 
 import json
@@ -28,14 +28,14 @@ try:
     import paho.mqtt.client as mqtt
 except ImportError:
     print("paho-mqtt non installé. Lancer avec :")
-    print("  uv run --with paho-mqtt scripts/vigie_mqtt_listener.py")
+    print("  uv run --with paho-mqtt scripts/watch_mqtt_listener.py")
     sys.exit(1)
 
 BROKER   = os.environ.get("MQTT_BROKER",   "localhost").strip()
 PORT     = int(os.environ.get("MQTT_PORT", "1883").strip())
-USER     = os.environ.get("MQTT_USER",     "fovet-vigie").strip()
+USER     = os.environ.get("MQTT_USER",     "ardent-watch").strip()
 PASSWORD = os.environ.get("MQTT_PASSWORD", "").strip()
-TOPIC    = os.environ.get("MQTT_TOPIC",    "fovet/devices/+/readings").strip()
+TOPIC    = os.environ.get("MQTT_TOPIC",    "ardent/devices/+/readings").strip()
 
 # Couleurs ANSI (désactivées si pas de terminal)
 _tty = sys.stdout.isatty()
@@ -96,7 +96,7 @@ def on_message(client, userdata, msg):
 
 
 def main() -> None:
-    print("=== Fovet Vigie — MQTT Listener ===")
+    print("=== Ardent Watch — MQTT Listener ===")
     print(f"Broker : {BROKER}:{PORT}  |  Topic : {TOPIC}")
     print("Ctrl+C pour quitter.\n")
 

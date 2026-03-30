@@ -1,4 +1,4 @@
-# Fovet Forge — AutoEncoder demo pipeline
+# Ardent Forge — AutoEncoder demo pipeline
 # Trains a Dense autoencoder on synthetic multivariate data and exports
 # the TFLite model for deployment on ESP32 (TFLite Micro).
 #

@@ -6,7 +6,7 @@ DEPLOYMENT MODEL (architectural decision — 2026-03-14):
 
   Reason: A 100-tree IsolationForest requires storing the full tree structure
   in C (hundreds of if/else branches per tree), which is incompatible with the
-  Fovet Sentinelle constraints (< 4 KB RAM, < 1 ms/sample).
+  Ardent Pulse constraints (< 4 KB RAM, < 1 ms/sample).
 
   Intended usage:
     1. Forge trains and scores on a gateway or Scaleway server.
@@ -104,7 +104,7 @@ class IsolationForestDetector(Detector):
             "deployment": "cloud_or_gateway_only",
             "note": (
                 "IsolationForest is cloud/gateway-only — too large for MCU RAM. "
-                "Use fovet_zscore or autoencoder (TFLite Micro) for edge deployment."
+                "Use ard_zscore or autoencoder (TFLite Micro) for edge deployment."
             ),
         }
 

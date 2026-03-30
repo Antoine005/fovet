@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Fovet — SDK Embarqué Souverain</title>
-  <meta name="description" content="Fovet est la suite embarquée française pour la détection d'anomalies temps réel sur microcontrôleurs. Zéro cloud étranger. Conçu pour la défense, l'industrie et l'aéronautique." />
-  <meta property="og:title" content="Fovet — SDK Embarqué Souverain" />
+  <title>Ardent — SDK Embarqué Souverain</title>
+  <meta name="description" content="Ardent est la suite embarquée française pour la détection d'anomalies temps réel sur microcontrôleurs. Zéro cloud étranger. Conçu pour la défense, l'industrie et l'aéronautique." />
+  <meta property="og:title" content="Ardent — SDK Embarqué Souverain" />
   <meta property="og:description" content="Détection d'anomalies temps réel sur microcontrôleur. Souverain. Auditable. Embarqué." />
   <meta property="og:type" content="website" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -337,8 +337,8 @@
       border: 1px solid rgba(251,191,36,0.2);
     }
 
-    /* Vigie mock dashboard */
-    .vigie-mock {
+    /* Watch mock dashboard */
+    .watch-mock {
       background: #0d1117;
       border: 1px solid #21262d;
       border-radius: 8px;
@@ -349,22 +349,22 @@
       line-height: 1.7;
       overflow: hidden;
     }
-    .vigie-mock .mock-bar {
+    .watch-mock .mock-bar {
       display: flex; gap: 5px; margin-bottom: 8px;
     }
-    .vigie-mock .dot { width: 8px; height: 8px; border-radius: 50%; }
-    .vigie-mock .dot-r { background: #ff5f57; }
-    .vigie-mock .dot-y { background: #febc2e; }
-    .vigie-mock .dot-g { background: #28c840; }
-    .vigie-mock .mock-title { color: #58a6ff; margin-bottom: 6px; font-size: 9px; }
-    .vigie-mock .mock-row { display: flex; justify-content: space-between; margin: 2px 0; }
-    .vigie-mock .ok { color: #3fb950; }
-    .vigie-mock .alert { color: #f85149; }
-    .vigie-mock .warn { color: #d29922; }
-    .vigie-mock .val { color: #e6edf3; }
-    .vigie-mock .bar-wrap { height: 3px; background: #21262d; border-radius: 2px; margin: 6px 0 4px; overflow: hidden; }
-    .vigie-mock .bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #1d4ed8, #3b82f6); width: 72%; }
-    .vigie-mock .placeholder-note {
+    .watch-mock .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .watch-mock .dot-r { background: #ff5f57; }
+    .watch-mock .dot-y { background: #febc2e; }
+    .watch-mock .dot-g { background: #28c840; }
+    .watch-mock .mock-title { color: #58a6ff; margin-bottom: 6px; font-size: 9px; }
+    .watch-mock .mock-row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .watch-mock .ok { color: #3fb950; }
+    .watch-mock .alert { color: #f85149; }
+    .watch-mock .warn { color: #d29922; }
+    .watch-mock .val { color: #e6edf3; }
+    .watch-mock .bar-wrap { height: 3px; background: #21262d; border-radius: 2px; margin: 6px 0 4px; overflow: hidden; }
+    .watch-mock .bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #1d4ed8, #3b82f6); width: 72%; }
+    .watch-mock .placeholder-note {
       text-align: center; margin-top: 8px; font-size: 9px;
       color: #3d4552; border-top: 1px solid #21262d; padding-top: 8px;
     }
@@ -706,12 +706,12 @@
     <a href="#" class="nav-logo">F<span>o</span>vet</a>
     <ul class="nav-links">
       <li><a href="#produits">Produits</a></li>
-      <li><a href="#pourquoi">Pourquoi Fovet</a></li>
+      <li><a href="#pourquoi">Pourquoi Ardent</a></li>
       <li><a href="#cas-usage">Cas d'usage</a></li>
       <li><a href="#a-propos">À propos</a></li>
     </ul>
     <div class="nav-right">
-      <a href="https://github.com/Antoine005/fovet" target="_blank" rel="noopener" class="nav-github">
+      <a href="https://github.com/Antoine005/ardent" target="_blank" rel="noopener" class="nav-github">
         <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor">
           <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
         </svg>
@@ -726,7 +726,7 @@
 </nav>
 <div class="mobile-menu" id="mobileMenu">
   <a href="#produits" onclick="toggleMenu()">Produits</a>
-  <a href="#pourquoi" onclick="toggleMenu()">Pourquoi Fovet</a>
+  <a href="#pourquoi" onclick="toggleMenu()">Pourquoi Ardent</a>
   <a href="#cas-usage" onclick="toggleMenu()">Cas d'usage</a>
   <a href="#a-propos" onclick="toggleMenu()">À propos</a>
   <a href="#contact" onclick="toggleMenu()" style="color:var(--blue);">Demander une démo →</a>
@@ -748,7 +748,7 @@
         Sans dépendre de personne.
       </h1>
       <p class="hero-sub">
-        Fovet est la suite embarquée française pour la détection d'anomalies sur microcontrôleurs.
+        Ardent est la suite embarquée française pour la détection d'anomalies sur microcontrôleurs.
         Conçue pour la défense, l'industrie et l'aéronautique.
         Zéro cloud étranger. Code C99 auditable.
       </p>
@@ -758,7 +758,7 @@
           Demander une démo
         </a>
         <a href="#produits" class="btn btn-secondary">Découvrir la suite →</a>
-        <a href="https://github.com/Antoine005/fovet" target="_blank" rel="noopener" class="btn btn-ghost">
+        <a href="https://github.com/Antoine005/ardent" target="_blank" rel="noopener" class="btn btn-ghost">
           <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           Voir sur GitHub
         </a>
@@ -804,7 +804,7 @@
 <section id="produits">
   <div class="container">
     <div class="section-header">
-      <p class="section-label">La suite Fovet</p>
+      <p class="section-label">La suite Ardent</p>
       <h2 class="section-title">De l'entraînement à la supervision,<br/>une chaîne souveraine de bout en bout</h2>
       <p class="section-sub">Trois modules conçus pour fonctionner ensemble — ou indépendamment selon vos besoins.</p>
     </div>
@@ -812,14 +812,14 @@
     <div class="flow-intro">
       <div class="flow-step"><span class="flow-num">1</span><span>Forge <span style="color:var(--text-dim)">— entraîner le modèle</span></span></div>
       <span class="flow-arrow">→</span>
-      <div class="flow-step"><span class="flow-num">2</span><span>Sentinelle <span style="color:var(--text-dim)">— déployer sur le MCU</span></span></div>
+      <div class="flow-step"><span class="flow-num">2</span><span>Pulse <span style="color:var(--text-dim)">— déployer sur le MCU</span></span></div>
       <span class="flow-arrow">→</span>
-      <div class="flow-step"><span class="flow-num">3</span><span>Vigie <span style="color:var(--text-dim)">— superviser la flotte</span></span></div>
+      <div class="flow-step"><span class="flow-num">3</span><span>Watch <span style="color:var(--text-dim)">— superviser la flotte</span></span></div>
     </div>
 
     <div class="products-grid">
 
-      <!-- Sentinelle -->
+      <!-- Pulse -->
       <div class="product-card">
         <div class="card-header">
           <div class="card-tags">
@@ -830,8 +830,8 @@
           <div class="card-icon">🛡️</div>
         </div>
         <div class="card-body">
-          <h3>Fovet Sentinelle</h3>
-          <p>La détection d'anomalies directement dans votre firmware. Intégrez Sentinelle à votre code C/C++ en quelques heures grâce à son HAL abstrait et à l'algorithme de Welford incrémental — aucune allocation dynamique, stack only.</p>
+          <h3>Ardent Pulse</h3>
+          <p>La détection d'anomalies directement dans votre firmware. Intégrez Pulse à votre code C/C++ en quelques heures grâce à son HAL abstrait et à l'algorithme de Welford incrémental — aucune allocation dynamique, stack only.</p>
         </div>
         <div class="card-specs">
           <span class="spec-chip">ESP32</span>
@@ -841,7 +841,7 @@
           <span class="spec-chip">PlatformIO/CMake</span>
         </div>
         <div class="card-actions">
-          <a href="https://github.com/Antoine005/fovet" target="_blank" class="card-link">Documentation →</a>
+          <a href="https://github.com/Antoine005/ardent" target="_blank" class="card-link">Documentation →</a>
           <a href="#contact" class="card-link" style="color:var(--text-muted)">Démo →</a>
         </div>
       </div>
@@ -857,7 +857,7 @@
           <div class="card-icon">⚒️</div>
         </div>
         <div class="card-body">
-          <h3>Fovet Forge</h3>
+          <h3>Ardent Forge</h3>
           <p>Entraînez sur vos données industrielles, exportez vers votre cible embarquée. Un pipeline AutoML Python qui génère automatiquement le modèle C optimisé pour votre microcontrôleur — hébergement Scaleway souverain.</p>
         </div>
         <div class="card-specs">
@@ -868,12 +868,12 @@
           <span class="spec-chip">Scaleway 🇫🇷</span>
         </div>
         <div class="card-actions">
-          <a href="https://github.com/Antoine005/fovet" target="_blank" class="card-link">Documentation →</a>
+          <a href="https://github.com/Antoine005/ardent" target="_blank" class="card-link">Documentation →</a>
           <a href="#contact" class="card-link" style="color:var(--text-muted)">Démo →</a>
         </div>
       </div>
 
-      <!-- Vigie -->
+      <!-- Watch -->
       <div class="product-card">
         <div class="card-header">
           <div class="card-tags">
@@ -883,14 +883,14 @@
           </div>
           <div class="card-icon">👁️</div>
         </div>
-        <!-- Vigie mock dashboard -->
-        <div class="vigie-mock">
+        <!-- Watch mock dashboard -->
+        <div class="watch-mock">
           <div class="mock-bar">
             <span class="dot dot-r"></span>
             <span class="dot dot-y"></span>
             <span class="dot dot-g"></span>
           </div>
-          <div class="mock-title">▶ fovet-vigie — dashboard</div>
+          <div class="mock-title">▶ ardent-watch — dashboard</div>
           <div class="mock-row"><span>Capteur ESP32-A1</span><span class="ok">● NORMAL</span></div>
           <div class="mock-row"><span>Capteur STM32-B4</span><span class="alert">● ALERTE</span></div>
           <div class="mock-row"><span>Capteur STM32-C7</span><span class="warn">● SEUIL ↑</span></div>
@@ -901,7 +901,7 @@
           <div class="placeholder-note">[ Remplacer par un GIF du vrai dashboard ]</div>
         </div>
         <div class="card-body">
-          <h3>Fovet Vigie</h3>
+          <h3>Ardent Watch</h3>
           <p>Supervisez votre flotte de capteurs depuis un dashboard souverain. Alertes instantanées, historique TimescaleDB, hébergement sur infrastructure française.</p>
         </div>
         <div class="card-specs">
@@ -912,7 +912,7 @@
           <span class="spec-chip">Docker</span>
         </div>
         <div class="card-actions">
-          <a href="https://github.com/Antoine005/fovet" target="_blank" class="card-link">Documentation →</a>
+          <a href="https://github.com/Antoine005/ardent" target="_blank" class="card-link">Documentation →</a>
           <a href="#contact" class="card-link" style="color:var(--text-muted)">Démo →</a>
         </div>
       </div>
@@ -928,8 +928,8 @@
   <div class="container">
     <div class="section-header">
       <p class="section-label">Souverain par conception</p>
-      <h2 class="section-title">Pourquoi Fovet ?</h2>
-      <p class="section-sub">Dans les systèmes critiques, chaque dépendance est un risque. Fovet est conçu pour en éliminer le maximum.</p>
+      <h2 class="section-title">Pourquoi Ardent ?</h2>
+      <p class="section-sub">Dans les systèmes critiques, chaque dépendance est un risque. Ardent est conçu pour en éliminer le maximum.</p>
     </div>
 
     <div class="pillars-grid">
@@ -942,13 +942,13 @@
       <div class="pillar">
         <div class="pillar-icon">⚡</div>
         <h3>Temps réel garanti</h3>
-        <p>Moins d'une milliseconde par échantillon à 80 MHz. Dans les systèmes embarqués critiques, une anomalie non détectée en temps réel peut compromettre une mission, une machine ou une vie. Fovet ne fait aucune concession sur la latence.</p>
+        <p>Moins d'une milliseconde par échantillon à 80 MHz. Dans les systèmes embarqués critiques, une anomalie non détectée en temps réel peut compromettre une mission, une machine ou une vie. Ardent ne fait aucune concession sur la latence.</p>
         <div class="technical-note">&lt; 1 ms · déterministe · pas de jitter RTOS</div>
       </div>
       <div class="pillar">
         <div class="pillar-icon">📦</div>
         <h3>Empreinte minimale</h3>
-        <p>Zéro allocation dynamique. Moins de 4 KB RAM par détecteur. Fovet fonctionne sur les microcontrôleurs les plus contraints — là où un RTOS lourd ou un modèle ML classique ne passerait pas. Optimisé pour les MCU d'entrée de gamme comme pour les cœurs haute performance.</p>
+        <p>Zéro allocation dynamique. Moins de 4 KB RAM par détecteur. Ardent fonctionne sur les microcontrôleurs les plus contraints — là où un RTOS lourd ou un modèle ML classique ne passerait pas. Optimisé pour les MCU d'entrée de gamme comme pour les cœurs haute performance.</p>
         <div class="technical-note">&lt; 4 KB RAM · stack only · 0 malloc</div>
       </div>
       <div class="pillar">
@@ -969,7 +969,7 @@
     <div class="section-header">
       <p class="section-label">Cas d'usage</p>
       <h2 class="section-title">Conçu pour les environnements<br/>les plus exigeants</h2>
-      <p class="section-sub">Validation terrain en cours dans plusieurs contextes critiques. Fovet est pensé pour les situations où la défaillance n'est pas une option.</p>
+      <p class="section-sub">Validation terrain en cours dans plusieurs contextes critiques. Ardent est pensé pour les situations où la défaillance n'est pas une option.</p>
     </div>
 
     <div class="usecases-grid">
@@ -990,7 +990,7 @@
         <p class="scenario">Surveillance vibratoire temps réel de moteurs, compresseurs et lignes de production. Détection précoce des dérives avant la panne — sans connexion réseau permanente.</p>
         <div class="usecase-meta">
           <div class="usecase-meta-row"><span>⚙️</span><strong>Cibles MCU :</strong> ESP32 · STM32F4</div>
-          <div class="usecase-meta-row"><span>📋</span><strong>Stack :</strong> PlatformIO · FreeRTOS · Vigie</div>
+          <div class="usecase-meta-row"><span>📋</span><strong>Stack :</strong> PlatformIO · FreeRTOS · Watch</div>
         </div>
         <span class="status-pill"><span class="status-dot"></span>Validation en cours</span>
       </div>
@@ -1017,9 +1017,9 @@
     <div class="about-inner">
       <div class="about-text">
         <p class="section-label">À propos</p>
-        <h2 class="section-title">Pourquoi Fovet existe</h2>
-        <p>Les systèmes embarqués critiques méritent des outils à la hauteur de leurs contraintes. Fovet est né du constat qu'aucune solution existante ne combinait à la fois la souveraineté, la légèreté et l'auditabilité nécessaires aux environnements industriels et de défense.</p>
-        <p>Conçu par un ingénieur issu du monde aéronautique et de l'embarqué, Fovet privilégie l'ingénierie de précision à la complexité superflue — chaque kilooctet compte, chaque milliseconde compte.</p>
+        <h2 class="section-title">Pourquoi Ardent existe</h2>
+        <p>Les systèmes embarqués critiques méritent des outils à la hauteur de leurs contraintes. Ardent est né du constat qu'aucune solution existante ne combinait à la fois la souveraineté, la légèreté et l'auditabilité nécessaires aux environnements industriels et de défense.</p>
+        <p>Conçu par un ingénieur issu du monde aéronautique et de l'embarqué, Ardent privilégie l'ingénierie de précision à la complexité superflue — chaque kilooctet compte, chaque milliseconde compte.</p>
 
         <div class="about-values">
           <div class="about-value">
@@ -1050,7 +1050,7 @@
         <div class="profile-avatar">AP</div>
         <div class="profile-name">Antoine Porte</div>
         <div class="profile-role">Fondateur · Ingénieur embarqué</div>
-        <p class="profile-bio">Ingénieur en cognitique (ENSC Bordeaux INP), spécialisé en systèmes embarqués et intelligence artificielle. Expérience en aéronautique et en implémentation de modèles ML sur microcontrôleurs. Fovet est la concrétisation d'une conviction : la souveraineté numérique commence au niveau du firmware.</p>
+        <p class="profile-bio">Ingénieur en cognitique (ENSC Bordeaux INP), spécialisé en systèmes embarqués et intelligence artificielle. Expérience en aéronautique et en implémentation de modèles ML sur microcontrôleurs. Ardent est la concrétisation d'une conviction : la souveraineté numérique commence au niveau du firmware.</p>
         <div class="profile-tags">
           <span class="chip">C / C++</span>
           <span class="chip">Python</span>
@@ -1059,11 +1059,11 @@
           <span class="chip">Embarqué</span>
         </div>
         <div class="profile-links">
-          <a href="https://github.com/Antoine005/fovet" target="_blank" class="profile-link">
+          <a href="https://github.com/Antoine005/ardent" target="_blank" class="profile-link">
             <svg viewBox="0 0 16 16" width="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
             GitHub
           </a>
-          <a href="mailto:contact@fovet.eu" class="profile-link">
+          <a href="mailto:contact@ardent.io" class="profile-link">
             <svg viewBox="0 0 20 20" fill="currentColor" width="14"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/></svg>
             Contact
           </a>
@@ -1082,16 +1082,16 @@
       <div class="contact-left">
         <p class="section-label">Contact</p>
         <h2 class="section-title">Discutons de votre projet</h2>
-        <p class="section-sub">Vous évaluez Fovet pour un projet industriel, de défense ou de recherche ? Décrivez votre contexte, nous vous répondons sous 48h.</p>
+        <p class="section-sub">Vous évaluez Ardent pour un projet industriel, de défense ou de recherche ? Décrivez votre contexte, nous vous répondons sous 48h.</p>
 
         <div class="contact-infos">
           <div class="contact-info-item">
             <span class="ci-icon">📧</span>
-            <span><a href="mailto:contact@fovet.eu">contact@fovet.eu</a></span>
+            <span><a href="mailto:contact@ardent.io">contact@ardent.io</a></span>
           </div>
           <div class="contact-info-item">
             <span class="ci-icon">💻</span>
-            <span><a href="https://github.com/Antoine005/fovet" target="_blank">github.com/Antoine005/fovet</a></span>
+            <span><a href="https://github.com/Antoine005/ardent" target="_blank">github.com/Antoine005/ardent</a></span>
           </div>
           <div class="contact-info-item">
             <span class="ci-icon">🇫🇷</span>
@@ -1100,7 +1100,7 @@
         </div>
 
         <div class="contact-note">
-          <strong>Projet open-source ?</strong> Fovet Sentinelle est disponible librement sur GitHub. La licence commerciale (Pro) est destinée aux usages industriels et de défense.
+          <strong>Projet open-source ?</strong> Ardent Pulse est disponible librement sur GitHub. La licence commerciale (Pro) est destinée aux usages industriels et de défense.
         </div>
       </div>
 
@@ -1178,16 +1178,16 @@
       <div class="footer-col">
         <h4>Produits</h4>
         <ul>
-          <li><a href="#produits">Fovet Sentinelle</a></li>
-          <li><a href="#produits">Fovet Forge</a></li>
-          <li><a href="#produits">Fovet Vigie</a></li>
+          <li><a href="#produits">Ardent Pulse</a></li>
+          <li><a href="#produits">Ardent Forge</a></li>
+          <li><a href="#produits">Ardent Watch</a></li>
         </ul>
       </div>
       <div class="footer-col">
         <h4>Ressources</h4>
         <ul>
-          <li><a href="https://github.com/Antoine005/fovet" target="_blank">Documentation</a></li>
-          <li><a href="https://github.com/Antoine005/fovet" target="_blank">GitHub</a></li>
+          <li><a href="https://github.com/Antoine005/ardent" target="_blank">Documentation</a></li>
+          <li><a href="https://github.com/Antoine005/ardent" target="_blank">GitHub</a></li>
           <li><a href="#contact">Demander une démo</a></li>
         </ul>
       </div>
@@ -1196,16 +1196,16 @@
         <ul>
           <li><a href="#a-propos">À propos</a></li>
           <li><a href="#cas-usage">Cas d'usage</a></li>
-          <li><a href="mailto:contact@fovet.eu">Contact</a></li>
+          <li><a href="mailto:contact@ardent.io">Contact</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-bottom">
-      <span>© 2026 Antoine Porte — Fovet. Tous droits réservés.</span>
+      <span>© 2026 Antoine Porte — Ardent. Tous droits réservés.</span>
       <div class="footer-bottom-links">
         <a href="/mentions-legales">Mentions légales</a>
         <a href="/mentions-legales">Politique de confidentialité</a>
-        <a href="https://github.com/Antoine005/fovet" target="_blank">GitHub</a>
+        <a href="https://github.com/Antoine005/ardent" target="_blank">GitHub</a>
       </div>
     </div>
   </div>
@@ -1263,7 +1263,7 @@
         throw new Error();
       }
     } catch {
-      status.textContent = '✗ Erreur lors de l\'envoi. Contactez-nous directement à contact@fovet.eu';
+      status.textContent = '✗ Erreur lors de l\'envoi. Contactez-nous directement à contact@ardent.io';
       status.className = 'form-status error';
     }
 

@@ -1,11 +1,11 @@
-# Fovet — Convention de contribution
+# Ardent — Convention de contribution
 
 ---
 
 ## Nouveau use case ?
 
 Voir [`docs/new-use-case.md`](new-use-case.md) pour le guide pas à pas complet :
-checklist, choix du détecteur, HAL/driver, config Forge, manifest, flash, Vigie, scale.
+checklist, choix du détecteur, HAL/driver, config Forge, manifest, flash, Watch, scale.
 
 ---
 
@@ -23,7 +23,7 @@ Ce n'est pas optionnel. Un commit qui change un comportement sans mettre à jour
 |---|---|
 | Nouvelle fonction publique C (`zscore.h`) | `edge-core/README.md` section "API publique" |
 | Nouveau détecteur Forge | `automl-pipeline/README.md` tableau détecteurs + `docs/architecture.md` interfaces |
-| Nouvelle route API Vigie | `platform-dashboard/README.md` tableau API REST |
+| Nouvelle route API Watch | `platform-dashboard/README.md` tableau API REST |
 | Nouvelle variable d'environnement | `platform-dashboard/.env.example` + README tableau variables |
 | Changement d'interface Forge → ESP32 | `docs/architecture.md` section "Interfaces entre composants" |
 | Nouvelle contrainte SDK | `edge-core/README.md` + `README.md` racine + `docs/architecture.md` |
@@ -55,17 +55,17 @@ Convention : [Conventional Commits](https://www.conventionalcommits.org/)
 **Scopes :**
 | Scope | Produit |
 |---|---|
-| `sentinelle` | edge-core SDK C |
+| `pulse` | edge-core SDK C |
 | `forge` | automl-pipeline |
-| `vigie` | platform-dashboard |
+| `watch` | platform-dashboard |
 | `docs` | Documentation transverse |
 | `ci` | GitHub Actions |
 
 **Exemples :**
 ```
 feat(forge): Forge-4 — AutoEncoder Dense + TFLite INT8 export
-fix(sentinelle): handle flat signal (stddev=0) without division by zero
-docs(vigie): update API table with POST /auth/logout route
+fix(pulse): handle flat signal (stddev=0) without division by zero
+docs(watch): update API table with POST /auth/logout route
 chore(forge): add tensorflow>=2.17 to optional ml extras
 ```
 
@@ -91,7 +91,7 @@ git commit --no-verify -m "..."
 | Commits | Anglais |
 | Documentation utilisateur (README, docs/) | Français |
 | Messages d'erreur côté serveur | Anglais |
-| UI Vigie | Français |
+| UI Watch | Français |
 
 ---
 
@@ -100,12 +100,12 @@ git commit --no-verify -m "..."
 - Tout nouveau code doit avoir des tests associés dans le même commit
 - edge-core : tests natifs gcc dans `edge-core/tests/test_*.c`
 - Forge : pytest dans `automl-pipeline/tests/test_*.py`
-- Vigie : Vitest dans `platform-dashboard/src/__tests__/`
+- Watch : Vitest dans `platform-dashboard/src/__tests__/`
 
 **Seuils :**
-- Sentinelle : 16/16 tests natifs
+- Pulse : 16/16 tests natifs
 - Forge : 113/113 tests pytest (dont tests TF skippés si `uv sync --extra ml` non fait)
-- Vigie : 19/19 tests Vitest
+- Watch : 19/19 tests Vitest
 
 ---
 

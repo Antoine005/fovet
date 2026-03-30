@@ -65,7 +65,7 @@ class MqttDataConfig(BaseModel):
     source: Literal[DataSource.mqtt]
     broker: str = "localhost"
     port: int = 1883
-    topic: str = "fovet/devices/+/readings"
+    topic: str = "ardent/devices/+/readings"
     username: str | None = None
     password: str | None = None
     duration_seconds: int = Field(default=60, ge=1)
@@ -150,7 +150,7 @@ class LSTMAutoEncoderDetectorConfig(BaseModel):
 class EWMADriftDetectorConfig(BaseModel):
     """EWMA drift detector — double EMA for gradual shift detection.
 
-    Mirrors FovetDrift in edge-core/include/fovet/drift.h.
+    Mirrors ArdentDrift in edge-core/include/ardent/drift.h.
     Threshold is auto-calibrated from training data (``threshold_percentile``),
     or can be set explicitly with ``threshold``.
 
@@ -179,7 +179,7 @@ class EWMADriftDetectorConfig(BaseModel):
 class MADDetectorConfig(BaseModel):
     """MAD (Median Absolute Deviation) detector — robust, outlier-resistant streaming detector.
 
-    Mirrors FovetMAD in edge-core/include/fovet/mad.h.
+    Mirrors ArdentMAD in edge-core/include/ardent/mad.h.
     Uses a fixed-size ring buffer; score = |x - median| / (1.4826 * MAD).
     Threshold is auto-calibrated from training data (``threshold_percentile``),
     or can be set explicitly with ``threshold_mad``.
@@ -290,11 +290,11 @@ class PreprocessingConfig(BaseModel):
 
 
 class ManifestConfig(BaseModel):
-    """Metadata exported to fovet_model_manifest.h for Sentinelle firmware.
+    """Metadata exported to ard_model_manifest.h for Pulse firmware.
 
     These values are embedded in the C header and used by the firmware to:
       - identify the Forge model in the MQTT payload (model_id)
-      - tell Vigie the unit and expected range for chart auto-scaling
+      - tell Watch the unit and expected range for chart auto-scaling
       - provide human-readable labels for anomaly/normal states
 
     Typical sensor values:
@@ -314,7 +314,7 @@ class ManifestConfig(BaseModel):
 
 
 class PipelineConfig(BaseModel):
-    """Root configuration for a Fovet Forge pipeline.
+    """Root configuration for a Ardent Cast pipeline.
 
     Validated from a YAML file with ``PipelineConfig.from_yaml(path)``.
     Cross-field validation enforces that ``tflite_micro`` export requires an ML detector.

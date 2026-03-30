@@ -1,8 +1,8 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  *
  * smoke_test/main.cpp — SDK smoke test : Z-Score sur sinus synthétique.
  *
@@ -10,7 +10,7 @@
  * Compilé avec board=esp32dev — voir CLAUDE.md "Hardware gotchas".
  *
  * Comportement :
- *   - 100 Hz : lit un sinus 1 Hz synthétique, passe dans fovet_zscore_update()
+ *   - 100 Hz : lit un sinus 1 Hz synthétique, passe dans ard_zscore_update()
  *   - Toutes les 200 samples : injection alternée ±5σ → détection + LED
  *   - Warm-up 30 samples : pas de détection pendant la calibration
  *   - CSV sur UART : idx,value,mean,stddev,zscore,anomaly,event
@@ -28,10 +28,10 @@
 #include "config.h"     /* WiFi/MQTT credentials — DO NOT COMMIT */
 
 extern "C" {
-#include "fovet/zscore.h"
-#include "fovet/hal/hal_uart.h"
-#include "fovet/hal/hal_time.h"
-#include "fovet/hal/hal_gpio.h"
+#include "ardent/zscore.h"
+#include "ardent/hal/hal_uart.h"
+#include "ardent/hal/hal_time.h"
+#include "ardent/hal/hal_gpio.h"
 }
 
 #include <Arduino.h>
@@ -60,7 +60,7 @@ extern "C" {
  * Globals
  * ------------------------------------------------------------------------- */
 
-static FovetZScore  g_zscore;
+static ArdentZScore  g_zscore;
 static uint32_t     g_idx = 0;
 static char         g_buf[192];
 
@@ -116,7 +116,7 @@ static void mqtt_publish(float z_score)
              (unsigned long)hal_time_ms());
 
     char topic[64];
-    snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+    snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
     g_mqtt.publish(topic, g_buf);
 }
 
@@ -136,14 +136,14 @@ void setup(void)
     hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
     hal_gpio_write(LED_PIN, HAL_GPIO_HIGH); /* LED off (active LOW) */
 
-    fovet_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMP);
+    ard_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMP);
 
     wifi_connect();
     g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     g_mqtt.setKeepAlive(30);
     mqtt_ensure_connected();
 
-    hal_uart_print("\r\n=== Fovet Sentinelle — Smoke Test ===\r\n");
+    hal_uart_print("\r\n=== Ardent Pulse — Smoke Test ===\r\n");
     hal_uart_print("board  : esp32dev (CH340 COM4 115200)\r\n");
     hal_uart_print("signal : sinus 1 Hz @ 100 Hz\r\n");
     hal_uart_print("spikes : +-5sigma toutes les 200 samples\r\n");
@@ -170,8 +170,8 @@ void loop(void)
 
     /* Injection ±5σ alternée après warm-up */
     if (g_idx >= ZSCORE_MIN_SAMP && (g_idx % SPIKE_EVERY) == 0U) {
-        float mean   = fovet_zscore_get_mean(&g_zscore);
-        float stddev = fovet_zscore_get_stddev(&g_zscore);
+        float mean   = ard_zscore_get_mean(&g_zscore);
+        float stddev = ard_zscore_get_stddev(&g_zscore);
         float amp    = 5.0f * stddev + 0.1f;
         bool  pos    = (g_idx / SPIKE_EVERY % 2U) == 0U;
         sample += pos ? amp : -amp;
@@ -180,9 +180,9 @@ void loop(void)
 
     /* --- Détecteur -------------------------------------------------------- */
 
-    bool anomaly = fovet_zscore_update(&g_zscore, sample);
-    float mean   = fovet_zscore_get_mean(&g_zscore);
-    float stddev = fovet_zscore_get_stddev(&g_zscore);
+    bool anomaly = ard_zscore_update(&g_zscore, sample);
+    float mean   = ard_zscore_get_mean(&g_zscore);
+    float stddev = ard_zscore_get_stddev(&g_zscore);
     float z      = (stddev > 1e-6f) ? ((sample - mean) / stddev) : 0.0f;
 
     /* --- LED -------------------------------------------------------------- */

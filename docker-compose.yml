@@ -1,4 +1,4 @@
-# Fovet Vigie — Production stack
+# Ardent Watch — Production stack
 # Usage: docker compose up -d
 #
 # Prerequisites:
@@ -13,15 +13,15 @@ services:
     image: timescale/timescaledb:latest-pg16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-fovet}
+      POSTGRES_USER: ${POSTGRES_USER:-ardent}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
-      POSTGRES_DB: fovet_vigie
+      POSTGRES_DB: ard_watch
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5432:5432"   # localhost only — not exposed to internet
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fovet}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ardent}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,7 +52,7 @@ services:
       timeout: 3s
       retries: 3
 
-  # ── Fovet Vigie dashboard ─────────────────────────────────────────────────
+  # ── Ardent Watch dashboard ─────────────────────────────────────────────────
   dashboard:
     build:
       context: ./platform-dashboard

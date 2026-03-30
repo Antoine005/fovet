@@ -28,7 +28,7 @@ def make_config(**kwargs) -> MqttDataConfig:
         source="mqtt",
         broker="localhost",
         port=1883,
-        topic="fovet/devices/+/readings",
+        topic="ardent/devices/+/readings",
         columns=["value", "mean"],
         duration_seconds=1,
     )

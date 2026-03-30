@@ -1,8 +1,8 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent.io
  */
 "use client";
 
@@ -138,7 +138,7 @@ function buildSteps(activeJob: ApiJob | null, hasModels: boolean): StepDef[] {
     { num: running ? "◌" : (done ? "✓" : "3"), label: "Entraînement", sub: running ? `${progress}% — ~${eta}` : (done ? `Epoch ${epoch}` : "En attente"), state: running ? "active" : (done ? "done" : "pending") },
     { num: done ? "✓" : "4",      label: "Comparaison",  sub: done ? "Disponible" : "En attente",               state: done ? "done"    : "pending" },
     { num: done ? "!" : "5",      label: "Validation",   sub: done ? "Opérateur requis" : "En attente",         state: done ? "alert"   : "pending" },
-    { num: "6",                   label: "Déploiement",  sub: "OTA Sentinelle",                                  state: "pending" },
+    { num: "6",                   label: "Déploiement",  sub: "OTA Pulse",                                  state: "pending" },
   ];
 }
 
@@ -158,7 +158,7 @@ function stepLabelCls(state: StepState) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ForgeTab() {
+export default function CastTab() {
   const [selectedModel,   setSelectedModel]   = useState<string | null>(null);
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [showTrainModal,  setShowTrainModal]  = useState(false);
@@ -342,7 +342,7 @@ export default function ForgeTab() {
               Gestion des modèles IA — Pipeline d&apos;entraînement &amp; déploiement OTA
             </div>
             <div className="text-[10px] text-gray-500 mt-0.5">
-              Sentinelle <span className="text-gray-700 mx-1">◈</span>
+              Pulse <span className="text-gray-700 mx-1">◈</span>
               {devices.length} dispositifs terrain <span className="text-gray-700 mx-1">◈</span>
               {selectedModelObj
                 ? `Modèle actif : ${selectedModelObj.name} ${selectedModelObj.version}`
@@ -668,8 +668,8 @@ export default function ForgeTab() {
         {/* RIGHT — Devices + Last deploy + Audit */}
         <div className="w-[272px] flex-shrink-0 border-l border-gray-800 overflow-y-auto p-3.5 flex flex-col gap-3">
 
-          {/* Sentinelle devices */}
-          <Panel title="Dispositifs Sentinelle" action={
+          {/* Pulse devices */}
+          <Panel title="Dispositifs Pulse" action={
             <span className="font-mono text-[9px] text-green-400">{onlineCount} / {devices.length} en ligne</span>
           }>
             <div className="font-mono text-[9px] uppercase tracking-[.14em] text-gray-700 mb-1.5 pb-1 border-b border-gray-800">
@@ -779,7 +779,7 @@ export default function ForgeTab() {
         <Modal title="+ Nouveau cycle d'entraînement" onClose={() => setShowTrainModal(false)}>
           <p className="text-[11px] text-gray-400 mb-3 leading-relaxed">
             Configurez les paramètres du cycle. Les données terrain seront extraites depuis les dispositifs
-            Sentinelle pour la plage sélectionnée.
+            Pulse pour la plage sélectionnée.
           </p>
           <div className="mb-2.5">
             <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Modèle de base</label>
@@ -815,7 +815,7 @@ export default function ForgeTab() {
           </div>
           <div className="bg-amber-900/10 border border-amber-700/40 rounded px-3 py-2 text-[10px] text-amber-400 mb-3 leading-relaxed">
             Point de décision humaine : vous devrez valider manuellement le modèle résultant avant tout déploiement
-            sur les dispositifs Sentinelle. Cette action sera journalisée.
+            sur les dispositifs Pulse. Cette action sera journalisée.
           </div>
           <div className="flex gap-2 justify-end pt-3 border-t border-gray-800">
             <button onClick={() => setShowTrainModal(false)} className="px-3 py-1.5 rounded text-[11px] font-semibold uppercase tracking-wide border border-gray-700 text-gray-400 hover:border-gray-600 hover:bg-gray-800 transition-colors">
@@ -837,7 +837,7 @@ export default function ForgeTab() {
         <Modal title="↑ Confirmer le déploiement OTA" onClose={() => setShowDeployModal(false)}>
           <p className="text-[11px] text-gray-400 mb-3 leading-relaxed">
             Déploiement de <b className="text-gray-100">{selectedModelObj.name} {selectedModelObj.version}</b> sur{" "}
-            <b className="text-gray-100">{selectedDevices.size} dispositif{selectedDevices.size > 1 ? "s" : ""} Sentinelle</b> sélectionné{selectedDevices.size > 1 ? "s" : ""}.
+            <b className="text-gray-100">{selectedDevices.size} dispositif{selectedDevices.size > 1 ? "s" : ""} Pulse</b> sélectionné{selectedDevices.size > 1 ? "s" : ""}.
           </p>
           <div className="bg-amber-900/10 border border-amber-700/40 rounded px-3 py-2 text-[10px] text-amber-400 mb-3 leading-relaxed">
             Action irréversible. En cas d&apos;échec, rollback automatique vers la version précédente.
