@@ -116,10 +116,10 @@ app.get("/healthz", async (c) => {
     // db remains "error"
   }
 
-  const healthy = mqtt.connected && db === "ok";
+  const healthy = db === "ok";
   return c.json(
     {
-      status: healthy ? "ok" : "degraded",
+      status: healthy ? (mqtt.connected ? "ok" : "warning") : "degraded",
       mqtt: { connected: mqtt.connected, broker: mqtt.broker },
       db,
     },
@@ -274,8 +274,15 @@ app.post("/devices", cookieAuth, async (c) => {
     return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
   }
 
-  const device = await prisma.device.create({ data: parsed.data });
-  return c.json(device, 201);
+  try {
+    const device = await prisma.device.create({ data: parsed.data });
+    return c.json(device, 201);
+  } catch (e: unknown) {
+    if ((e as { code?: string }).code === "P2002") {
+      return c.json({ error: "mqttClientId already exists" }, 409);
+    }
+    throw e;
+  }
 });
 
 // -------------------------------------------------------------------------
@@ -783,7 +790,7 @@ app.patch("/alerts/:id/ack", cookieAuth, async (c) => {
 // =========================================================================
 
 // Zod schemas for Forge
-const CastModelSchema = z.object({
+const ForgeModelSchema = z.object({
   name:      z.string().min(1).max(100),
   type:      z.string().min(1).max(20),
   version:   z.string().min(1).max(50),
@@ -793,7 +800,7 @@ const CastModelSchema = z.object({
   accuracy:  z.number().min(0).max(100).optional(),
 });
 
-const CastJobSchema = z.object({
+const ForgeJobSchema = z.object({
   baseModelId:     z.string().optional(),
   totalEpochs:     z.number().int().min(1).max(1000).default(50),
   datasetSessions: z.number().int().positive().optional(),
@@ -802,7 +809,7 @@ const CastJobSchema = z.object({
   profile:         z.string().optional(),
 });
 
-const CastDeploySchema = z.object({
+const ForgeDeploySchema = z.object({
   modelId:   z.string().min(1),
   deviceIds: z.array(z.string().min(1)).min(1),
 });
@@ -872,7 +879,7 @@ app.get("/forge/jobs/:id/logs", async (c) => {
 // -------------------------------------------------------------------------
 app.post("/forge/jobs", async (c) => {
   const body = await c.req.json().catch(() => null);
-  const parsed = CastJobSchema.safeParse(body);
+  const parsed = ForgeJobSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
   }
@@ -978,7 +985,7 @@ app.get("/forge/drift", async (c) => {
 // -------------------------------------------------------------------------
 app.post("/forge/deploy", async (c) => {
   const body   = await c.req.json().catch(() => null);
-  const parsed = CastDeploySchema.safeParse(body);
+  const parsed = ForgeDeploySchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
   }
