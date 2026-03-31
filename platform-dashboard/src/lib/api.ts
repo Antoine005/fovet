@@ -286,13 +286,37 @@ app.post("/devices", cookieAuth, async (c) => {
 });
 
 // -------------------------------------------------------------------------
+// PATCH /api/devices/:id — update device fields (name, description, location, active)
+// -------------------------------------------------------------------------
+app.patch("/devices/:id", cookieAuth, async (c) => {
+  const { id } = c.req.param();
+  const body = await c.req.json().catch(() => null);
+  const PatchSchema = DeviceSchema.partial().refine(
+    (d) => Object.keys(d).length > 0,
+    { message: "At least one field required" }
+  );
+  const parsed = PatchSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
+  }
+  const existing = await prisma.device.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) return c.json({ error: "Device not found" }, 404);
+  const device = await prisma.device.update({ where: { id }, data: parsed.data });
+  return c.json(device);
+});
+
+// -------------------------------------------------------------------------
 // GET /api/devices/:id/readings — last N readings with cursor pagination
 // ?limit=100&cursor=<bigint-id>  (cursor = last id from previous page, desc order)
 // -------------------------------------------------------------------------
 app.get("/devices/:id/readings", cookieAuth, async (c) => {
   const { id } = c.req.param();
-  const rawLimit = parseInt(c.req.query("limit") ?? "100", 10);
-  const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 100, 1000);
+  const limitParam = c.req.query("limit");
+  const rawLimit = limitParam !== undefined ? parseInt(limitParam, 10) : 100;
+  if (limitParam !== undefined && (isNaN(rawLimit) || rawLimit <= 0)) {
+    return c.json({ error: "Invalid limit — must be a positive integer" }, 400);
+  }
+  const limit = Math.min(rawLimit, 1000);
   const cursorParam = c.req.query("cursor");
 
   const device = await prisma.device.findUnique({ where: { id }, select: { id: true } });
@@ -410,6 +434,9 @@ app.get("/fleet/alerts/recent", cookieAuth, async (c) => {
   const limit    = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 200);
   const cursorId = c.req.query("cursor");
   const levelFilter = c.req.query("level");  // "DANGER" | "WARN" | undefined
+  if (levelFilter !== undefined && levelFilter !== "DANGER" && levelFilter !== "WARN") {
+    return c.json({ error: "Invalid level — use 'DANGER' or 'WARN'" }, 400);
+  }
 
   const levelWhere =
     levelFilter === "DANGER" ? { alertLevel: { in: ["DANGER", "CRITICAL"] } } :
@@ -577,6 +604,9 @@ app.get("/pti/alerts/recent", cookieAuth, async (c) => {
 app.get("/devices/:id/report", cookieAuth, async (c) => {
   const { id }   = c.req.param();
   const format   = (c.req.query("format") ?? "json").toLowerCase();
+  if (format !== "json" && format !== "csv") {
+    return c.json({ error: "Invalid format — use 'json' or 'csv'" }, 400);
+  }
   const fromStr  = c.req.query("from");
   const toStr    = c.req.query("to");
 
@@ -851,6 +881,10 @@ app.get("/forge/models/:id", async (c) => {
 // -------------------------------------------------------------------------
 app.get("/forge/jobs", async (c) => {
   const statusFilter = c.req.query("status");
+  const VALID_JOB_STATUSES = new Set(["RUNNING", "DONE", "FAILED", "CANCELLED"]);
+  if (statusFilter !== undefined && !VALID_JOB_STATUSES.has(statusFilter)) {
+    return c.json({ error: "Invalid status — use RUNNING, DONE, FAILED or CANCELLED" }, 400);
+  }
 
   const jobs = await prisma.forgeJob.findMany({
     where: statusFilter ? { status: statusFilter } : undefined,
