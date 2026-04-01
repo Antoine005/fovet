@@ -486,3 +486,151 @@ describe("PATCH /api/alerts/:id/ack", () => {
     expect(body.acknowledged).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// GET /api/pti/fleet
+// ---------------------------------------------------------------------------
+describe("GET /api/pti/fleet", () => {
+  it("returns 401 without token", async () => {
+    const res = await app.request("/api/pti/fleet");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns worker list with alertsByType", async () => {
+    const mockDevices = [
+      {
+        id: "d1",
+        name: "Pierre Dupont",
+        location: "Zone A",
+        mqttClientId: "pti-001",
+        alerts: [
+          { ptiType: "FALL", timestamp: new Date("2026-03-15T10:00:00Z") },
+          { ptiType: "MOTIONLESS", timestamp: new Date("2026-03-15T09:50:00Z") },
+        ],
+      },
+      {
+        id: "d2",
+        name: "Marie Martin",
+        location: "Zone B",
+        mqttClientId: "pti-002",
+        alerts: [],
+      },
+    ];
+    vi.mocked(prisma.device.findMany).mockResolvedValue(mockDevices as never);
+
+    const res = await app.request("/api/pti/fleet", {
+      headers: { Cookie: await cookieToken() },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      id: string;
+      alertsByType: { FALL: number; MOTIONLESS: number; SOS: number };
+      lastAlertAt: string | null;
+    }[];
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveLength(2);
+
+    const pierre = body.find((w) => w.id === "d1")!;
+    expect(pierre.alertsByType.FALL).toBe(1);
+    expect(pierre.alertsByType.MOTIONLESS).toBe(1);
+    expect(pierre.alertsByType.SOS).toBe(0);
+    expect(pierre.lastAlertAt).toBe("2026-03-15T10:00:00.000Z");
+
+    const marie = body.find((w) => w.id === "d2")!;
+    expect(marie.alertsByType.FALL).toBe(0);
+    expect(marie.lastAlertAt).toBeNull();
+  });
+
+  it("returns empty array when no devices", async () => {
+    vi.mocked(prisma.device.findMany).mockResolvedValue([]);
+
+    const res = await app.request("/api/pti/fleet", {
+      headers: { Cookie: await cookieToken() },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/pti/alerts/recent
+// ---------------------------------------------------------------------------
+describe("GET /api/pti/alerts/recent", () => {
+  it("returns 401 without token", async () => {
+    const res = await app.request("/api/pti/alerts/recent");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns recent PTI alerts with deviceName", async () => {
+    const mockAlerts = [
+      {
+        id: "a1",
+        deviceId: "d1",
+        ptiType: "FALL",
+        timestamp: new Date("2026-03-15T10:00:00Z"),
+        acknowledged: false,
+        device: { name: "Pierre Dupont" },
+      },
+      {
+        id: "a2",
+        deviceId: "d2",
+        ptiType: "SOS",
+        timestamp: new Date("2026-03-15T09:00:00Z"),
+        acknowledged: true,
+        device: { name: "Marie Martin" },
+      },
+    ];
+    vi.mocked(prisma.alert.findMany).mockResolvedValue(mockAlerts as never);
+
+    const res = await app.request("/api/pti/alerts/recent", {
+      headers: { Cookie: await cookieToken() },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      id: string;
+      ptiType: string;
+      deviceName: string;
+      acknowledged: boolean;
+    }[];
+    expect(body).toHaveLength(2);
+    expect(body[0].ptiType).toBe("FALL");
+    expect(body[0].deviceName).toBe("Pierre Dupont");
+    expect(body[0].acknowledged).toBe(false);
+    expect(body[1].ptiType).toBe("SOS");
+    expect(body[1].deviceName).toBe("Marie Martin");
+  });
+
+  it("respects limit query param", async () => {
+    vi.mocked(prisma.alert.findMany).mockResolvedValue([]);
+
+    await app.request("/api/pti/alerts/recent?limit=10", {
+      headers: { Cookie: await cookieToken() },
+    });
+
+    expect(vi.mocked(prisma.alert.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 10 })
+    );
+  });
+
+  it("caps limit at 200", async () => {
+    vi.mocked(prisma.alert.findMany).mockResolvedValue([]);
+
+    await app.request("/api/pti/alerts/recent?limit=9999", {
+      headers: { Cookie: await cookieToken() },
+    });
+
+    expect(vi.mocked(prisma.alert.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 200 })
+    );
+  });
+
+  it("returns empty array when no PTI alerts", async () => {
+    vi.mocked(prisma.alert.findMany).mockResolvedValue([]);
+
+    const res = await app.request("/api/pti/alerts/recent", {
+      headers: { Cookie: await cookieToken() },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+});

@@ -9,6 +9,13 @@ checklist, choix du détecteur, HAL/driver, config Forge, manifest, flash, Watch
 
 ---
 
+## Nouveau use case ?
+
+Voir [`docs/new-use-case.md`](new-use-case.md) pour le guide pas à pas complet :
+checklist, choix du détecteur, HAL/driver, config Forge, manifest, flash, Vigie, scale.
+
+---
+
 ## Règle fondamentale : la doc suit le code
 
 **Toute modification de code doit s'accompagner de la mise à jour de la documentation correspondante dans le même commit.**

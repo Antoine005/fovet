@@ -1,8 +1,8 @@
 /*
- * Ardent SDK — Pulse
+ * Fovet SDK — Sentinelle
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@fovet.eu
  *
  * fire_detection/main.cpp
  * Détection visuelle de feu/fumée via OV2640 + Z-Score temporel.
@@ -19,7 +19,7 @@
  *   variance — variance de luminance intra-frame (algorithme de Welford)
  *              La fumée augmente le flou et modifie la texture pixel-à-pixel.
  *
- *   Chaque scalaire est passé dans un ArdentZScore indépendant qui modélise
+ *   Chaque scalaire est passé dans un FovetZScore indépendant qui modélise
  *   le comportement "normal" de la scène sur les WARMUP_FRAMES premières frames.
  *   Anomalie si au moins un des 3 détecteurs dépasse son seuil.
  *
@@ -39,13 +39,13 @@
  */
 
 #include "config.h"              /* WiFi/MQTT credentials — DO NOT COMMIT */
-#include "ard_model_manifest.h" /* Forge-generated model metadata       */
+#include "fovet_model_manifest.h" /* Forge-generated model metadata       */
 
 extern "C" {
-#include "ardent/zscore.h"
-#include "ardent/hal/hal_uart.h"
-#include "ardent/hal/hal_time.h"
-#include "ardent/hal/hal_gpio.h"
+#include "fovet/zscore.h"
+#include "fovet/hal/hal_uart.h"
+#include "fovet/hal/hal_time.h"
+#include "fovet/hal/hal_gpio.h"
 }
 
 #include "esp_camera.h"
@@ -91,9 +91,9 @@ extern "C" {
  * Globals
  * ------------------------------------------------------------------------- */
 
-static ArdentZScore g_zs_r;       /* suivi R_mean   inter-frames */
-static ArdentZScore g_zs_ratio;   /* suivi ratio_rb inter-frames */
-static ArdentZScore g_zs_var;     /* suivi variance inter-frames */
+static FovetZScore g_zs_r;       /* suivi R_mean   inter-frames */
+static FovetZScore g_zs_ratio;   /* suivi ratio_rb inter-frames */
+static FovetZScore g_zs_var;     /* suivi variance inter-frames */
 
 static uint32_t    g_frame_id = 0;
 static char        g_buf[384];
@@ -153,27 +153,27 @@ static void mqtt_publish(float r_mean, bool anomaly)
     snprintf(g_buf, sizeof(g_buf),
              "{"
              "\"device_id\":\"%s\","
-             "\"model_id\":\"" ARD_MODEL_ID "\","
+             "\"model_id\":\"" FOVET_MODEL_ID "\","
              "\"firmware\":\"fire_detection\","
-             "\"sensor\":\"" ARD_MODEL_SENSOR "\","
+             "\"sensor\":\"" FOVET_MODEL_SENSOR "\","
              "\"value\":%.2f,"
              "\"value_min\":%.2f,"
              "\"value_max\":%.2f,"
              "\"label\":\"%s\","
-             "\"unit\":\"" ARD_MODEL_UNIT "\","
+             "\"unit\":\"" FOVET_MODEL_UNIT "\","
              "\"anomaly\":%s,"
              "\"ts\":%lu"
              "}",
              DEVICE_ID,
              r_mean,
-             (double)ARD_MODEL_VALUE_MIN,
-             (double)ARD_MODEL_VALUE_MAX,
+             (double)FOVET_MODEL_VALUE_MIN,
+             (double)FOVET_MODEL_VALUE_MAX,
              label,
              anomaly ? "true" : "false",
              (unsigned long)hal_time_ms());
 
     char topic[64];
-    snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
+    snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
     g_mqtt.publish(topic, g_buf);
 }
 
@@ -311,11 +311,11 @@ void setup(void)
     }
 
     /* 3 détecteurs indépendants, warm-up WARMUP_FRAMES frames chacun */
-    ard_zscore_init(&g_zs_r,     ZSCORE_THRESHOLD, WARMUP_FRAMES);
-    ard_zscore_init(&g_zs_ratio, ZSCORE_THRESHOLD, WARMUP_FRAMES);
-    ard_zscore_init(&g_zs_var,   ZSCORE_THRESHOLD, WARMUP_FRAMES);
+    fovet_zscore_init(&g_zs_r,     ZSCORE_THRESHOLD, WARMUP_FRAMES);
+    fovet_zscore_init(&g_zs_ratio, ZSCORE_THRESHOLD, WARMUP_FRAMES);
+    fovet_zscore_init(&g_zs_var,   ZSCORE_THRESHOLD, WARMUP_FRAMES);
 
-    hal_uart_print("\r\n=== Ardent Pulse — Fire/Smoke Detection ===\r\n");
+    hal_uart_print("\r\n=== Fovet Sentinelle — Fire/Smoke Detection ===\r\n");
     hal_uart_print("Camera  : OV2640 QQVGA RGB565 @ 5 fps\r\n");
     hal_uart_print("Metrics : R_mean, ratio_R/(G+B), luminance variance\r\n");
     snprintf(g_buf, sizeof(g_buf),
@@ -374,19 +374,19 @@ void loop(void)
 
     /* --- Détection Z-Score ------------------------------------------------ */
 
-    bool anom_r     = ard_zscore_update(&g_zs_r,     r_mean);
-    bool anom_ratio = ard_zscore_update(&g_zs_ratio, ratio_rb);
-    bool anom_var   = ard_zscore_update(&g_zs_var,   variance);
+    bool anom_r     = fovet_zscore_update(&g_zs_r,     r_mean);
+    bool anom_ratio = fovet_zscore_update(&g_zs_ratio, ratio_rb);
+    bool anom_var   = fovet_zscore_update(&g_zs_var,   variance);
     bool anomaly    = anom_r || anom_ratio || anom_var;
 
     /* Z-scores pour affichage (post-update — valeurs cohérentes avec le détecteur) */
-    float sd_r     = ard_zscore_get_stddev(&g_zs_r);
-    float sd_ratio = ard_zscore_get_stddev(&g_zs_ratio);
-    float sd_var   = ard_zscore_get_stddev(&g_zs_var);
+    float sd_r     = fovet_zscore_get_stddev(&g_zs_r);
+    float sd_ratio = fovet_zscore_get_stddev(&g_zs_ratio);
+    float sd_var   = fovet_zscore_get_stddev(&g_zs_var);
 
-    float z_r     = (sd_r     > 1e-6f) ? (r_mean   - ard_zscore_get_mean(&g_zs_r))     / sd_r     : 0.0f;
-    float z_ratio = (sd_ratio > 1e-6f) ? (ratio_rb - ard_zscore_get_mean(&g_zs_ratio)) / sd_ratio : 0.0f;
-    float z_var   = (sd_var   > 1e-6f) ? (variance - ard_zscore_get_mean(&g_zs_var))   / sd_var   : 0.0f;
+    float z_r     = (sd_r     > 1e-6f) ? (r_mean   - fovet_zscore_get_mean(&g_zs_r))     / sd_r     : 0.0f;
+    float z_ratio = (sd_ratio > 1e-6f) ? (ratio_rb - fovet_zscore_get_mean(&g_zs_ratio)) / sd_ratio : 0.0f;
+    float z_var   = (sd_var   > 1e-6f) ? (variance - fovet_zscore_get_mean(&g_zs_var))   / sd_var   : 0.0f;
 
     /* --- LED -------------------------------------------------------------- */
 

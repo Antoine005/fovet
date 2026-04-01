@@ -7,6 +7,12 @@ import { ReadingChart } from "@/components/ReadingChart";
 import { AlertList } from "@/components/AlertList";
 import { DeviceCard } from "@/components/DeviceCard";
 import { FleetPanel } from "@/components/FleetPanel";
+import { WorkerMap } from "@/components/WorkerMap";
+import { AlertTimeline } from "@/components/AlertTimeline";
+import { FatigueCard } from "@/components/FatigueCard";
+import { HRVChart } from "@/components/HRVChart";
+import { TempCard } from "@/components/TempCard";
+import { TemperatureChart } from "@/components/TemperatureChart";
 import FleetHealth from "@/components/FleetHealth";
 import WorkerDetail from "@/components/WorkerDetail";
 import { FleetAlertTimeline } from "@/components/FleetAlertTimeline";
@@ -31,7 +37,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail" | "sante" | "worker" | "forge">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue" | "thermique" | "sante" | "worker" | "forge">("fleet");
   const [clock, setClock] = useState<string>("");
 
   useEffect(() => {
@@ -64,7 +70,6 @@ export default function DashboardPage() {
     }
 
     fetchDevices();
-    // Poll every 5 s to keep connection status fresh
     const interval = setInterval(fetchDevices, 5_000);
     return () => clearInterval(interval);
   }, [router]);
@@ -97,9 +102,7 @@ export default function DashboardPage() {
                 <button
                   onClick={() => setView("fleet")}
                   className={`px-3 py-1.5 transition-colors ${
-                    view === "fleet"
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-500 hover:text-gray-300"
+                    view === "fleet" ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-300"
                   }`}
                 >
                   Flotte
@@ -107,19 +110,39 @@ export default function DashboardPage() {
                 <button
                   onClick={() => setView("detail")}
                   className={`px-3 py-1.5 transition-colors ${
-                    view === "detail"
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-500 hover:text-gray-300"
+                    view === "detail" ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-300"
                   }`}
                 >
                   Détail
                 </button>
                 <button
+                  onClick={() => setView("pti")}
+                  className={`px-3 py-1.5 transition-colors ${
+                    view === "pti" ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  PTI
+                </button>
+                <button
+                  onClick={() => setView("fatigue")}
+                  className={`px-3 py-1.5 transition-colors ${
+                    view === "fatigue" ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  Fatigue
+                </button>
+                <button
+                  onClick={() => setView("thermique")}
+                  className={`px-3 py-1.5 transition-colors ${
+                    view === "thermique" ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  Thermique
+                </button>
+                <button
                   onClick={() => setView("sante")}
                   className={`px-3 py-1.5 transition-colors ${
-                    view === "sante"
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-500 hover:text-gray-300"
+                    view === "sante" ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-300"
                   }`}
                 >
                   Santé
@@ -129,17 +152,13 @@ export default function DashboardPage() {
             <button
               onClick={() => setView("forge")}
               className={`px-3 py-1.5 transition-colors ${
-                view === "forge"
-                  ? "bg-gray-800 text-white"
-                  : "text-gray-500 hover:text-gray-300"
+                view === "forge" ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-300"
               }`}
             >
               Forge
             </button>
           </div>
-          <span className="text-xs text-gray-500 font-mono">
-            {clock}
-          </span>
+          <span className="text-xs text-gray-500 font-mono">{clock}</span>
           <button
             onClick={() => {
               apiFetch("/api/auth/logout", { method: "POST" }).finally(() => {
@@ -166,9 +185,7 @@ export default function DashboardPage() {
           <p className="text-gray-400 text-sm mb-6">
             Enregistrez votre premier capteur via l&apos;API, puis démarrez la transmission MQTT.
           </p>
-
           <div className="text-left space-y-4">
-            {/* Step 1 */}
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
                 1 — Créer le capteur
@@ -179,8 +196,6 @@ export default function DashboardPage() {
   -d '{"name":"ESP32-CAM 001","mqttClientId":"esp32-cam-001","location":"Bureau"}' | jq .`}
               </pre>
             </div>
-
-            {/* Step 2 */}
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
                 2 — Simuler des données (sans hardware)
@@ -189,8 +204,6 @@ export default function DashboardPage() {
 {`uv run --with paho-mqtt scripts/demo_mqtt.py`}
               </pre>
             </div>
-
-            {/* Step 3 */}
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
                 3 — Flasher sur ESP32 (hardware réel)
@@ -201,7 +214,6 @@ pio run --target upload --environment zscore_demo`}
               </pre>
             </div>
           </div>
-
           <p className="text-xs text-gray-600 mt-6">
             La page se rafraîchit automatiquement dès qu&apos;un capteur est enregistré.
           </p>
@@ -233,6 +245,73 @@ pio run --target upload --environment zscore_demo`}
         </div>
       )}
 
+      {/* PTI view — worker map + alert timeline */}
+      {view === "pti" && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2">
+            <section className="mb-2">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+                Carte travailleurs isolés
+              </h2>
+              <WorkerMap onSelectWorker={selectWorker} />
+            </section>
+          </div>
+          <div>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+              Chronologie alertes
+            </h2>
+            <AlertTimeline />
+          </div>
+        </div>
+      )}
+
+      {/* Fatigue view — HR monitoring fleet + HRV detail chart */}
+      {view === "fatigue" && devices.length > 0 && (
+        <>
+          <section className="mb-6">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+              Surveillance fatigue — Ardent Pulse H2
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {devices.map((d) => (
+                <FatigueCard
+                  key={d.id}
+                  deviceId={d.id}
+                  deviceName={d.name}
+                  location={d.location}
+                  selected={d.id === selectedId}
+                  onSelect={() => setSelectedId(d.id)}
+                />
+              ))}
+            </div>
+          </section>
+          {selectedId && <HRVChart deviceId={selectedId} />}
+        </>
+      )}
+
+      {/* Thermique view — WBGT thermal stress fleet + temperature chart */}
+      {view === "thermique" && devices.length > 0 && (
+        <>
+          <section className="mb-6">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+              Surveillance thermique — Ardent Pulse H3
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {devices.map((d) => (
+                <TempCard
+                  key={d.id}
+                  deviceId={d.id}
+                  deviceName={d.name}
+                  location={d.location}
+                  selected={d.id === selectedId}
+                  onSelect={() => setSelectedId(d.id)}
+                />
+              ))}
+            </div>
+          </section>
+          {selectedId && <TemperatureChart deviceId={selectedId} />}
+        </>
+      )}
 
       {/* Santé view — cross-module fleet health */}
       {view === "sante" && (
@@ -241,12 +320,8 @@ pio run --target upload --environment zscore_demo`}
 
       {/* Worker view — individual multi-sensor detail */}
       {view === "worker" && selectedId && (
-        <WorkerDetail
-          deviceId={selectedId}
-          onBack={() => setView("sante")}
-        />
+        <WorkerDetail deviceId={selectedId} onBack={() => setView("sante")} />
       )}
-
 
       {/* Detail view — single device */}
       {view === "detail" && devices.length > 0 && (
@@ -266,7 +341,6 @@ pio run --target upload --environment zscore_demo`}
               ))}
             </div>
           </section>
-
           {selectedId && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">

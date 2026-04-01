@@ -1,24 +1,24 @@
-# Ardent — Créer un nouveau use case
+# Fovet — Créer un nouveau use case
 
 Ce guide explique pas à pas comment ajouter un nouveau use case (nouveau capteur, nouveau
-type d'anomalie, nouveau site) à la suite Ardent.
+type d'anomalie, nouveau site) à la suite Fovet.
 Il est conçu pour être reproductible : suivre les mêmes étapes pour chaque nouveau projet.
 
 ---
 
 ## Vue d'ensemble
 
-Un use case Ardent complet couvre quatre couches :
+Un use case Fovet complet couvre quatre couches :
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  1. DÉFINIR    Quel capteur ? Quel type d'anomalie ? Quelle freq ?   │
 ├──────────────────────────────────────────────────────────────────────┤
-│  2. PULSE Firmware ESP32 — driver + détecteur + manifest        │
+│  2. SENTINELLE Firmware ESP32 — driver + détecteur + manifest        │
 ├──────────────────────────────────────────────────────────────────────┤
 │  3. FORGE      Calibration offline — config YAML → export C header   │
 ├──────────────────────────────────────────────────────────────────────┤
-│  4. WATCH      Enregistrer le device → visualiser → alerter          │
+│  4. VIGIE      Enregistrer le device → visualiser → alerter          │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -33,7 +33,7 @@ Cocher dans l'ordre. Chaque case correspond à une section détaillée ci-dessou
 ```
 □ 1. Définir : capteur, signal, type d'anomalie, fréquence de sampling
 □ 2a. Choisir le ou les détecteurs (tableau de décision)
-□ 2b. Créer le manifest par défaut  (ard_model_manifest.h)
+□ 2b. Créer le manifest par défaut  (fovet_model_manifest.h)
 □ 2c. HAL nouveau capteur (si I2C / SPI / OneWire non encore implémenté)
 □ 2d. Driver capteur (si non encore disponible)
 □ 2e. Créer l'exemple PlatformIO  (edge-core/examples/esp32/<use_case>/)
@@ -41,10 +41,10 @@ Cocher dans l'ordre. Chaque case correspond à une section détaillée ci-dessou
 □ 3a. Config YAML Forge  (automl-pipeline/configs/<use_case>.yaml)
 □ 3b. Collecter (ou générer) des données d'entraînement
 □ 3c. uv run forge run --config configs/<use_case>.yaml
-□ 3d. forge deploy-manifest → copier ard_model_manifest.h dans le firmware
-□ 4a. Enregistrer le device dans Watch (POST /api/devices)
+□ 3d. forge deploy-manifest → copier fovet_model_manifest.h dans le firmware
+□ 4a. Enregistrer le device dans Vigie (POST /api/devices)
 □ 4b. Flasher — pio run --target upload
-□ 4c. Vérifier les données en temps réel dans Watch
+□ 4c. Vérifier les données en temps réel dans Vigie
 □ 4d. Valider qu'une anomalie manuelle déclenche une alerte
 ```
 
@@ -66,15 +66,15 @@ Ces réponses définissent le reste : le détecteur, la config YAML, le manifest
 
 ---
 
-## Étape 2 — Pulse (firmware ESP32)
+## Étape 2 — Sentinelle (firmware ESP32)
 
 ### 2a. Choisir le ou les détecteurs
 
 | Situation | Détecteur recommandé | Fichier C |
 |---|---|---|
-| Signal propre, Gaussien — détecter les pics | **Z-Score** (`zscore`) | `ardent/zscore.h` |
-| Signal bruité ou outliers fréquents | **MAD** (`mad`) | `ardent/mad.h` |
-| Dérive lente (vieillissement, changement régime) | **EWMA Drift** (`ewma_drift`) | `ardent/drift.h` |
+| Signal propre, Gaussien — détecter les pics | **Z-Score** (`zscore`) | `fovet/zscore.h` |
+| Signal bruité ou outliers fréquents | **MAD** (`mad`) | `fovet/mad.h` |
+| Dérive lente (vieillissement, changement régime) | **EWMA Drift** (`ewma_drift`) | `fovet/drift.h` |
 | Signal complex multidimensionnel | **AutoEncoder** (`autoencoder`) | TFLite Micro |
 | Signal périodique (vibration, ECG, rythme) | **LSTM AutoEncoder** (`lstm_autoencoder`) | TFLite Micro |
 | Post-traitement cloud / gateway Raspi | **Isolation Forest** (`isolation_forest`) | JSON → serveur |
@@ -87,32 +87,32 @@ Z-Score sur les pics, EWMA Drift sur les glissements. Coût : 48 bytes RAM.
 Le manifest encode les métadonnées du modèle. Il est embarqué dans le firmware et
 publié dans chaque payload MQTT.
 
-Créer `edge-core/examples/esp32/<use_case>/src/ard_model_manifest.h` :
+Créer `edge-core/examples/esp32/<use_case>/src/fovet_model_manifest.h` :
 
 ```c
 /*
- * Ardent Model Manifest — <use_case>
+ * Fovet Model Manifest — <use_case>
  * Généré par : forge deploy-manifest (ou manuellement pour le développement)
  * Après calibration Forge, ce fichier sera remplacé par le manifest généré.
  */
 #pragma once
 
 /* Identifiant unique du modèle (remplacé par Forge après calibration) */
-#define ARD_MODEL_ID            "<use_case>-zscore-v1"
+#define FOVET_MODEL_ID            "<use_case>-zscore-v1"
 
 /* Capteur physique */
-#define ARD_MODEL_SENSOR        "<sensor>"   // ex: "imu", "temperature", "pressure"
+#define FOVET_MODEL_SENSOR        "<sensor>"   // ex: "imu", "temperature", "pressure"
 
 /* Unité de la valeur publiée */
-#define ARD_MODEL_UNIT          "<unit>"     // ex: "g", "°C", "Pa", "rpm"
+#define FOVET_MODEL_UNIT          "<unit>"     // ex: "g", "°C", "Pa", "rpm"
 
-/* Plage de valeurs attendues (pour auto-scale du graphe Watch) */
-#define ARD_MODEL_VALUE_MIN     (0.0f)       // à ajuster selon le capteur
-#define ARD_MODEL_VALUE_MAX     (4.0f)       // à ajuster selon le capteur
+/* Plage de valeurs attendues (pour auto-scale du graphe Vigie) */
+#define FOVET_MODEL_VALUE_MIN     (0.0f)       // à ajuster selon le capteur
+#define FOVET_MODEL_VALUE_MAX     (4.0f)       // à ajuster selon le capteur
 
 /* Labels de classification */
-#define ARD_MODEL_LABEL_NORMAL  "normal"
-#define ARD_MODEL_LABEL_ANOMALY "anomaly"
+#define FOVET_MODEL_LABEL_NORMAL  "normal"
+#define FOVET_MODEL_LABEL_ANOMALY "anomaly"
 ```
 
 > Après calibration Forge (étape 3), ce fichier sera remplacé par le manifest généré
@@ -124,7 +124,7 @@ Si le protocole physique du capteur n'est pas encore implémenté, créer l'inte
 
 **Exemple — nouveau bus SPI :**
 
-Créer `edge-core/include/ardent/hal/hal_spi.h` :
+Créer `edge-core/include/fovet/hal/hal_spi.h` :
 
 ```c
 #pragma once
@@ -157,13 +157,13 @@ Puis implémenter dans `edge-core/src/platform/platform_esp32.cpp` (bloc `#ifdef
 
 ### 2d. Driver capteur (si nécessaire)
 
-Créer le driver dans `edge-core/include/ardent/drivers/<capteur>.h` et
+Créer le driver dans `edge-core/include/fovet/drivers/<capteur>.h` et
 `edge-core/src/drivers/<capteur>.c`.
 
 **Conventions :**
 
 ```c
-/* edge-core/include/ardent/drivers/mon_capteur.h */
+/* edge-core/include/fovet/drivers/mon_capteur.h */
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
@@ -202,9 +202,9 @@ edge-core/examples/esp32/<use_case>/
 ├── src/
 │   ├── main.cpp
 │   ├── config.h.example    ← WiFi/MQTT credentials (ne pas commiter)
-│   └── ard_model_manifest.h
+│   └── fovet_model_manifest.h
 └── lib/
-    └── ardent-pulse/   ← ou référence à la lib locale
+    └── fovet-sentinelle/   ← ou référence à la lib locale
 ```
 
 `platformio.ini` :
@@ -222,7 +222,7 @@ lib_deps =
 
 build_flags =
     -I${PROJECT_DIR}/../../include
-    -DARD_ESP32
+    -DFOVET_ESP32
 
 build_src_filter =
     +<*.cpp>
@@ -242,15 +242,15 @@ build_src_filter =
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-#include "ardent/zscore.h"
-#include "ard_model_manifest.h"
+#include "fovet/zscore.h"
+#include "fovet_model_manifest.h"
 #include "config.h"
 
 // ── Config ────────────────────────────────────────────────────────────────────
-static const char* MQTT_TOPIC = "ardent/devices/" DEVICE_ID "/readings";
+static const char* MQTT_TOPIC = "fovet/devices/" DEVICE_ID "/readings";
 
 // ── Détecteur ─────────────────────────────────────────────────────────────────
-static ArdentZScore g_detector;
+static FovetZScore g_detector;
 
 // ── MQTT ──────────────────────────────────────────────────────────────────────
 static WiFiClient   wifiClient;
@@ -259,14 +259,14 @@ static PubSubClient mqtt(wifiClient);
 static void publish(float value, bool anomaly) {
     StaticJsonDocument<256> doc;
     doc["device_id"] = DEVICE_ID;
-    doc["firmware"]  = ARD_MODEL_ID;
-    doc["model_id"]  = ARD_MODEL_ID;
-    doc["sensor"]    = ARD_MODEL_SENSOR;
-    doc["unit"]      = ARD_MODEL_UNIT;
+    doc["firmware"]  = FOVET_MODEL_ID;
+    doc["model_id"]  = FOVET_MODEL_ID;
+    doc["sensor"]    = FOVET_MODEL_SENSOR;
+    doc["unit"]      = FOVET_MODEL_UNIT;
     doc["value"]     = value;
-    doc["value_min"] = ARD_MODEL_VALUE_MIN;
-    doc["value_max"] = ARD_MODEL_VALUE_MAX;
-    doc["label"]     = anomaly ? ARD_MODEL_LABEL_ANOMALY : ARD_MODEL_LABEL_NORMAL;
+    doc["value_min"] = FOVET_MODEL_VALUE_MIN;
+    doc["value_max"] = FOVET_MODEL_VALUE_MAX;
+    doc["label"]     = anomaly ? FOVET_MODEL_LABEL_ANOMALY : FOVET_MODEL_LABEL_NORMAL;
     doc["anomaly"]   = anomaly;
     doc["ts"]        = millis();   // remplacer par NTP en prod
 
@@ -277,7 +277,7 @@ static void publish(float value, bool anomaly) {
 
 void setup() {
     Serial.begin(115200);
-    ard_zscore_init(&g_detector, 3.0f, 30);
+    fovet_zscore_init(&g_detector, 3.0f, 30);
 
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) { delay(500); }
@@ -289,7 +289,7 @@ void setup() {
 void loop() {
     mqtt.loop();
     float value   = read_sensor();   // ← implémenter selon le capteur
-    bool  anomaly = ard_zscore_update(&g_detector, value);
+    bool  anomaly = fovet_zscore_update(&g_detector, value);
     publish(value, anomaly);
     delay(100);   // 10 Hz
 }
@@ -381,7 +381,7 @@ Déjà configuré dans le YAML ci-dessus. Aucune action nécessaire.
 
 **Option B — données CSV réelles**
 
-Exporter depuis Watch :
+Exporter depuis Vigie :
 ```bash
 curl -b /tmp/c.txt \
   "http://localhost:3000/api/devices/<device_id>/report?format=csv&from=2026-01-01T00:00:00Z" \
@@ -402,9 +402,9 @@ data:
 data:
   source: mqtt
   broker: mqtt://localhost:1883
-  topic: ardent/devices/<mqttClientId>/readings
+  topic: fovet/devices/<mqttClientId>/readings
   n_samples: 5000
-  username: ardent-watch
+  username: fovet-vigie
   password: <mot_de_passe>
 ```
 
@@ -424,8 +424,8 @@ Artefacts générés dans `models/<use_case>/` :
 
 ```
 models/<use_case>/
-├── ard_zscore_config.h      ← à inclure dans le firmware
-├── ard_model_manifest.h     ← manifest enrichi avec vraies valeurs
+├── fovet_zscore_config.h      ← à inclure dans le firmware
+├── fovet_model_manifest.h     ← manifest enrichi avec vraies valeurs
 ├── report.json                ← métriques de calibration
 └── report.html                ← rapport lisible
 ```
@@ -438,31 +438,31 @@ uv run forge deploy-manifest \
     --project-dir ../edge-core/examples/esp32/<use_case>
 ```
 
-Cette commande copie `models/<use_case>/ard_model_manifest.h` dans
-`edge-core/examples/esp32/<use_case>/src/ard_model_manifest.h`.
+Cette commande copie `models/<use_case>/fovet_model_manifest.h` dans
+`edge-core/examples/esp32/<use_case>/src/fovet_model_manifest.h`.
 
 Copier aussi le header de calibration manuellement :
 
 ```bash
-cp models/<use_case>/ard_zscore_config.h \
+cp models/<use_case>/fovet_zscore_config.h \
    ../edge-core/examples/esp32/<use_case>/src/
 ```
 
-Et dans `main.cpp`, remplacer `ard_zscore_init()` par l'include précalibré :
+Et dans `main.cpp`, remplacer `fovet_zscore_init()` par l'include précalibré :
 
 ```c
 // Avant calibration :
-ard_zscore_init(&g_detector, 3.0f, 30);
+fovet_zscore_init(&g_detector, 3.0f, 30);
 
 // Après calibration Forge :
-#include "ard_zscore_config.h"
-// ard_zscore_<use_case> est initialisé avec count=10000, min_samples=0
+#include "fovet_zscore_config.h"
+// fovet_zscore_<use_case> est initialisé avec count=10000, min_samples=0
 // → détection active dès le premier sample, sans warm-up
 ```
 
 ---
 
-## Étape 4 — Watch (supervision)
+## Étape 4 — Vigie (supervision)
 
 ### 4a. Enregistrer le device
 
@@ -476,7 +476,7 @@ curl -c /tmp/cookies.txt -X POST http://localhost:3000/api/auth/token \
 curl -b /tmp/cookies.txt -X POST http://localhost:3000/api/devices \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "<Nom affiché dans Watch>",
+    "name": "<Nom affiché dans Vigie>",
     "mqttClientId": "<device_id>",
     "location": "<Localisation optionnelle>"
   }'
@@ -500,7 +500,7 @@ pio run --target upload
 pio device monitor --baud 115200
 ```
 
-### 4c. Vérifier dans Watch
+### 4c. Vérifier dans Vigie
 
 1. Ouvrir http://localhost:3000
 2. Le device apparaît avec un point vert (connecté)
@@ -530,7 +530,7 @@ Chaque appareil a son propre `mqttClientId` mais le même firmware.
 Seul `DEVICE_ID` change dans `config.h`.
 
 ```bash
-# Enregistrer chaque device dans Watch
+# Enregistrer chaque device dans Vigie
 for id in esp32-site-a esp32-site-b esp32-site-c; do
     curl -b /tmp/cookies.txt -X POST http://localhost:3000/api/devices \
       -H "Content-Type: application/json" \
@@ -540,12 +540,12 @@ done
 
 Les données arrivent sur des topics MQTT distincts :
 ```
-ardent/devices/esp32-site-a/readings
-ardent/devices/esp32-site-b/readings
-ardent/devices/esp32-site-c/readings
+fovet/devices/esp32-site-a/readings
+fovet/devices/esp32-site-b/readings
+fovet/devices/esp32-site-c/readings
 ```
 
-Watch ingère automatiquement tous les topics qui correspondent à `ardent/devices/+/readings`.
+Vigie ingère automatiquement tous les topics qui correspondent à `fovet/devices/+/readings`.
 
 ### Plusieurs types de capteurs sur le même appareil
 
@@ -646,7 +646,7 @@ uv run forge deploy \
 | Dossier exemple | `edge-core/examples/esp32/<use_case>/` | `vibration_zscore/` |
 | `DEVICE_ID` dans firmware | `<type>-<site>-<numéro>` | `vib-usine-001` |
 | `mqttClientId` | idem `DEVICE_ID` | `vib-usine-001` |
-| `ARD_MODEL_ID` dans manifest | `<capteur>-<détecteur>-v<N>` | `vibration-zscore-v1` |
+| `FOVET_MODEL_ID` dans manifest | `<capteur>-<détecteur>-v<N>` | `vibration-zscore-v1` |
 | Dossier modèles | `models/<use_case>/` | `models/vibration_zscore/` |
 
 ---

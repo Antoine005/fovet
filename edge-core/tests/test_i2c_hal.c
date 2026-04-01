@@ -1,8 +1,8 @@
 /*
- * Ardent SDK — Pulse
+ * Fovet SDK — Sentinelle
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@fovet.eu
  */
 
 /*
@@ -15,7 +15,7 @@
  * read/write operations; absent devices return HAL_I2C_ERR_NACK.
  *
  * Build (standalone):
- *   gcc -std=c99 -Wall -I../include -DARD_NATIVE_TEST -o test_i2c_hal test_i2c_hal.c
+ *   gcc -std=c99 -Wall -I../include -DFOVET_NATIVE_TEST -o test_i2c_hal test_i2c_hal.c
  */
 
 #include <stdio.h>
@@ -24,7 +24,7 @@
 #include <string.h>
 #include <assert.h>
 
-#include "ardent/hal/hal_i2c.h"
+#include "fovet/hal/hal_i2c.h"
 
 /* =========================================================================
  * Mock I2C backend

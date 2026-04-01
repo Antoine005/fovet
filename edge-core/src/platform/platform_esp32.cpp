@@ -1,8 +1,8 @@
 /*
- * Ardent SDK — Pulse
+ * Fovet SDK — Sentinelle
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@fovet.eu
  */
 
 /*
@@ -15,11 +15,11 @@
 
 #ifdef ARDUINO  /* Guard: only compile when targeting ESP32 via Arduino */
 
-#include "ardent/hal/hal_adc.h"
-#include "ardent/hal/hal_uart.h"
-#include "ardent/hal/hal_gpio.h"
-#include "ardent/hal/hal_time.h"
-#include "ardent/hal/hal_i2c.h"
+#include "fovet/hal/hal_adc.h"
+#include "fovet/hal/hal_uart.h"
+#include "fovet/hal/hal_gpio.h"
+#include "fovet/hal/hal_time.h"
+#include "fovet/hal/hal_i2c.h"
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -56,10 +56,7 @@ uint16_t hal_adc_to_mv(uint16_t raw, uint16_t vref_mv)
 void hal_uart_init(uint32_t baud_rate)
 {
     Serial.begin((unsigned long)baud_rate);
-    /* NOTE: do NOT use while (!Serial) here — on ESP32 with CH340 (UART bridge),
-     * Serial is always truthy and this guard is only meaningful for boards with
-     * native USB (e.g. Arduino Leonardo). Caller must add a startup delay if
-     * the monitor needs time to connect before the first print. */
+    while (!Serial) { /* wait for USB-UART */ }
 }
 
 void hal_uart_write(const char *data, uint32_t len)

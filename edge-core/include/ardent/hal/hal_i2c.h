@@ -1,12 +1,12 @@
 /*
- * Ardent SDK — Pulse
+ * Fovet SDK — Sentinelle
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@fovet.eu
  */
 
-#ifndef ARD_HAL_I2C_H
-#define ARD_HAL_I2C_H
+#ifndef FOVET_HAL_I2C_H
+#define FOVET_HAL_I2C_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -103,4 +103,4 @@ bool hal_i2c_probe(uint8_t addr);
 }
 #endif
 
-#endif /* ARD_HAL_I2C_H */
+#endif /* FOVET_HAL_I2C_H */

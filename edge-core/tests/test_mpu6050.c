@@ -1,8 +1,8 @@
 /*
- * Ardent SDK — Pulse
+ * Fovet SDK — Sentinelle
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@fovet.eu
  */
 
 /*
@@ -12,7 +12,7 @@
  * driver can be tested entirely on host without hardware.
  *
  * Build (standalone):
- *   gcc -std=c99 -Wall -I../include -DARD_NATIVE_TEST \
+ *   gcc -std=c99 -Wall -I../include -DFOVET_NATIVE_TEST \
  *       -o test_mpu6050 test_mpu6050.c ../src/drivers/mpu6050.c -lm
  */
 
@@ -22,8 +22,8 @@
 #include <string.h>
 #include <math.h>
 
-#include "ardent/hal/hal_i2c.h"
-#include "ardent/drivers/mpu6050.h"
+#include "fovet/hal/hal_i2c.h"
+#include "fovet/drivers/mpu6050.h"
 
 /* =========================================================================
  * Mock I2C backend (identical to test_i2c_hal.c)

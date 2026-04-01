@@ -1,10 +1,10 @@
 /*
- * Ardent SDK — Pulse
+ * Fovet SDK — Sentinelle
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@fovet.eu
  *
- * IMU Z-Score Demo — MPU-6050 → ESP32-CAM → MQTT → Watch
+ * IMU Z-Score Demo — MPU-6050 → ESP32-CAM → MQTT → Vigie
  *
  * Reads accelerometer magnitude (|a| = sqrt(x²+y²+z²)) from an MPU-6050
  * via I2C and runs a Z-Score anomaly detector on the signal.
@@ -24,20 +24,20 @@
  *   2. Register the device: POST /api/devices { mqttClientId: "esp32-cam-001" }
  *   3. Mosquitto listener must bind 0.0.0.0 for LAN access.
  *
- * MQTT topic : ardent/devices/<DEVICE_ID>/readings
+ * MQTT topic : fovet/devices/<DEVICE_ID>/readings
  * Serial     : 115200 baud — CSV: index,x,y,z,magnitude,zscore,anomaly
  */
 
 #include "config.h"               /* WiFi/MQTT credentials — DO NOT COMMIT */
-#include "ard_model_manifest.h" /* Forge-generated model metadata         */
+#include "fovet_model_manifest.h" /* Forge-generated model metadata         */
 
 extern "C" {
-#include "ardent/zscore.h"
-#include "ardent/hal/hal_uart.h"
-#include "ardent/hal/hal_time.h"
-#include "ardent/hal/hal_gpio.h"
-#include "ardent/hal/hal_i2c.h"
-#include "ardent/drivers/mpu6050.h"
+#include "fovet/zscore.h"
+#include "fovet/hal/hal_uart.h"
+#include "fovet/hal/hal_time.h"
+#include "fovet/hal/hal_gpio.h"
+#include "fovet/hal/hal_i2c.h"
+#include "fovet/drivers/mpu6050.h"
 }
 
 #include <Arduino.h>
@@ -74,7 +74,7 @@ extern "C" {
  * Globals
  * ------------------------------------------------------------------------- */
 
-static ArdentZScore  g_zscore;
+static FovetZScore  g_zscore;
 static uint32_t     g_sample_index = 0;
 static char         g_log_buf[384];
 
@@ -134,33 +134,33 @@ static void mqtt_publish_reading(float magnitude, float zscore_val, bool anomaly
     if (!g_mqtt.connected()) return;
 
     const char *label = anomaly
-        ? ARD_MODEL_LABEL_ANOMALY
-        : ARD_MODEL_LABEL_NORMAL;
+        ? FOVET_MODEL_LABEL_ANOMALY
+        : FOVET_MODEL_LABEL_NORMAL;
 
     int len = snprintf(g_log_buf, sizeof(g_log_buf),
         "{"
         "\"device_id\":\"%s\","
-        "\"model_id\":\"" ARD_MODEL_ID "\","
+        "\"model_id\":\"" FOVET_MODEL_ID "\","
         "\"firmware\":\"imu_zscore\","
-        "\"sensor\":\"" ARD_MODEL_SENSOR "\","
+        "\"sensor\":\"" FOVET_MODEL_SENSOR "\","
         "\"value\":%.4f,"
         "\"value_min\":%.4f,"
         "\"value_max\":%.4f,"
         "\"label\":\"%s\","
-        "\"unit\":\"" ARD_MODEL_UNIT "\","
+        "\"unit\":\"" FOVET_MODEL_UNIT "\","
         "\"anomaly\":%s,"
         "\"ts\":%lu"
         "}",
         DEVICE_ID,
         magnitude,
-        (double)ARD_MODEL_VALUE_MIN,
-        (double)ARD_MODEL_VALUE_MAX,
+        (double)FOVET_MODEL_VALUE_MIN,
+        (double)FOVET_MODEL_VALUE_MAX,
         label,
         anomaly ? "true" : "false",
         (unsigned long)hal_time_ms());
 
     char topic[64];
-    snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
+    snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
 
     if (!g_mqtt.publish(topic, g_log_buf, (unsigned int)len)) {
         hal_uart_print("[MQTT] Publish failed\r\n");
@@ -192,9 +192,9 @@ void setup(void)
     }
 
     /* Z-Score detector on acceleration magnitude */
-    ard_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMPLES);
+    fovet_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMPLES);
 
-    hal_uart_print("\r\n=== Ardent Pulse — IMU Z-Score Demo ===\r\n");
+    hal_uart_print("\r\n=== Fovet Sentinelle — IMU Z-Score Demo ===\r\n");
     hal_uart_print("Device : " DEVICE_ID "\r\n");
     hal_uart_print("Sensor : MPU-6050 ±4g @ 50 Hz — SDA=GPIO13 SCL=GPIO14\r\n");
     hal_uart_print("Signal : acceleration magnitude |a| in g\r\n");
@@ -235,9 +235,9 @@ void loop(void)
 
     /* --- Run Z-Score detector --------------------------------------------- */
 
-    bool  anomaly    = ard_zscore_update(&g_zscore, magnitude);
-    float mean       = ard_zscore_get_mean(&g_zscore);
-    float stddev     = ard_zscore_get_stddev(&g_zscore);
+    bool  anomaly    = fovet_zscore_update(&g_zscore, magnitude);
+    float mean       = fovet_zscore_get_mean(&g_zscore);
+    float stddev     = fovet_zscore_get_stddev(&g_zscore);
     float zscore_val = (stddev > 0.0f) ? ((magnitude - mean) / stddev) : 0.0f;
 
     /* --- LED feedback ----------------------------------------------------- */

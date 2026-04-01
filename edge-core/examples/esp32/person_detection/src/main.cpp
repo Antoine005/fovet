@@ -1,8 +1,8 @@
 /*
- * Ardent SDK — Pulse
+ * Fovet SDK — Sentinelle
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@fovet.eu
  *
  * person_detection/src/main.cpp
  * Visual Wake Words — détection de personne via TFLite Micro + OV2640 + Z-Score.
@@ -15,13 +15,13 @@
  * Pipeline :
  *   OV2640 GRAYSCALE 96×96 ──► TFLite Micro ──► person_score
  *                                                     │
- *                                               ArdentZScore ──► MQTT → Watch
+ *                                               FovetZScore ──► MQTT → Vigie
  *
- * Le ArdentZScore modélise le score "personne" sur les WARMUP_FRAMES premières
+ * Le FovetZScore modélise le score "personne" sur les WARMUP_FRAMES premières
  * inférences (scène vide) et signale une anomalie lorsque le score dépasse
  * ZSCORE_THRESHOLD sigmas — i.e., une personne entre dans le champ.
  *
- * MQTT topic : ardent/devices/<DEVICE_ID>/readings
+ * MQTT topic : fovet/devices/<DEVICE_ID>/readings
  * Payload (format canonique multi-modèle) :
  *   { "device_id": "esp32cam_001", "firmware": "person_detection",
  *     "sensor": "camera", "value": 0.87, "label": "person",
@@ -39,7 +39,7 @@
  */
 
 #include "config.h"
-#include "ard_model_manifest.h" /* Forge-generated model metadata */
+#include "fovet_model_manifest.h" /* Forge-generated model metadata */
 
 /* --- TFLite Micro (ESP32 port) ------------------------------------------- */
 #include <TensorFlowLite_ESP32.h>
@@ -51,12 +51,12 @@
 /* --- ESP32 heap (pour heap_caps_malloc) ----------------------------------- */
 #include "esp_heap_caps.h"
 
-/* --- Ardent SDK ----------------------------------------------------------- */
+/* --- Fovet SDK ----------------------------------------------------------- */
 extern "C" {
-#include "ardent/zscore.h"
-#include "ardent/hal/hal_uart.h"
-#include "ardent/hal/hal_gpio.h"
-#include "ardent/hal/hal_time.h"
+#include "fovet/zscore.h"
+#include "fovet/hal/hal_uart.h"
+#include "fovet/hal/hal_gpio.h"
+#include "fovet/hal/hal_time.h"
 }
 
 /* --- Modèle bundlé (copié depuis TensorFlowLite_ESP32 lib) ---------------- */
@@ -131,7 +131,7 @@ static tflite::MicroInterpreter    *interpreter   = nullptr;
 static TfLiteTensor                *input_tensor  = nullptr;
 static TfLiteTensor                *output_tensor = nullptr;
 
-static ArdentZScore  g_zs_person;   /* suivi temporel du score "personne" */
+static FovetZScore  g_zs_person;   /* suivi temporel du score "personne" */
 
 static WiFiClient   wifi_client;
 static PubSubClient mqtt_client(wifi_client);
@@ -323,7 +323,7 @@ static void mqtt_ensure_connected(void)
 }
 
 /* =========================================================================
- * Publication MQTT → Watch
+ * Publication MQTT → Vigie
  * ========================================================================= */
 
 static void mqtt_publish(float person_score)
@@ -336,27 +336,27 @@ static void mqtt_publish(float person_score)
     snprintf(g_buf, sizeof(g_buf),
              "{"
              "\"device_id\":\"%s\","
-             "\"model_id\":\"" ARD_MODEL_ID "\","
+             "\"model_id\":\"" FOVET_MODEL_ID "\","
              "\"firmware\":\"person_detection\","
-             "\"sensor\":\"" ARD_MODEL_SENSOR "\","
+             "\"sensor\":\"" FOVET_MODEL_SENSOR "\","
              "\"value\":%.3f,"
              "\"value_min\":%.3f,"
              "\"value_max\":%.3f,"
              "\"label\":\"%s\","
-             "\"unit\":\"" ARD_MODEL_UNIT "\","
+             "\"unit\":\"" FOVET_MODEL_UNIT "\","
              "\"anomaly\":%s,"
              "\"ts\":%lu"
              "}",
              DEVICE_ID,
              person_score,
-             (double)ARD_MODEL_VALUE_MIN,
-             (double)ARD_MODEL_VALUE_MAX,
+             (double)FOVET_MODEL_VALUE_MIN,
+             (double)FOVET_MODEL_VALUE_MAX,
              label,
              anomaly ? "true" : "false",
              (unsigned long)hal_time_ms());
 
     char topic[64];
-    snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
+    snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
     mqtt_client.publish(topic, g_buf);
 }
 
@@ -411,7 +411,7 @@ void setup(void)
     hal_gpio_write(LED_PIN, HAL_GPIO_HIGH);
 
     hal_uart_print("\r\n");
-    hal_uart_print("[Ardent] Person Detection — TFLite Micro + Z-Score\r\n\r\n");
+    hal_uart_print("[Fovet] Person Detection — TFLite Micro + Z-Score\r\n\r\n");
 
     /* WiFi must connect before TFLite allocates its 100 KB arena from DRAM.
      * The WiFi stack needs ~60-100 KB of DRAM; starting it first guarantees
@@ -430,7 +430,7 @@ void setup(void)
         while (true) { hal_delay_ms(1000); }
     }
 
-    ard_zscore_init(&g_zs_person, ZSCORE_THRESHOLD, WARMUP_FRAMES);
+    fovet_zscore_init(&g_zs_person, ZSCORE_THRESHOLD, WARMUP_FRAMES);
 
     hal_uart_print("[CAM] Stabilisation AEC/AWB (5 frames)...\r\n");
     for (int i = 0; i < 5; i++) {
@@ -444,7 +444,7 @@ void setup(void)
              "MQTT    : %s\r\n"
              "CSV     : frame_id,person_score,no_person_score,z_score,anomaly,mean,stddev\r\n\r\n",
              WARMUP_FRAMES, ZSCORE_THRESHOLD,
-             mqtt_client.connected() ? "connecte -> Watch" : "desactive (UART only)");
+             mqtt_client.connected() ? "connecte -> Vigie" : "desactive (UART only)");
     hal_uart_print(g_buf);
     hal_uart_print("[PRET] Calibration en cours sur scene vide...\r\n\r\n");
 }
@@ -475,10 +475,10 @@ void loop(void)
 
     if (!ok) return;
 
-    bool anomaly = ard_zscore_update(&g_zs_person, person_score);
+    bool anomaly = fovet_zscore_update(&g_zs_person, person_score);
 
-    float mean   = ard_zscore_get_mean  (&g_zs_person);
-    float stddev = ard_zscore_get_stddev(&g_zs_person);
+    float mean   = fovet_zscore_get_mean  (&g_zs_person);
+    float stddev = fovet_zscore_get_stddev(&g_zs_person);
     float z_score = (stddev > 1e-6f)
                     ? (person_score - mean) / stddev
                     : 0.0f;
