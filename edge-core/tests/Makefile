@@ -9,7 +9,7 @@
 CC      = gcc
 CFLAGS  = -std=c99 -Wall -Wextra -Wpedantic -O2 \
           -I../include \
-          -DFOVET_NATIVE_TEST
+          -DARD_NATIVE_TEST
 LDFLAGS = -lm
 
 SRC_DIR         = ..
