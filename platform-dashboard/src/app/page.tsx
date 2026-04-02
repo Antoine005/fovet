@@ -86,7 +86,8 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Poll for USB serial ports every 3s — trigger toast on new port
+  // Poll for USB serial ports every 3s — trigger toast only on new port after baseline
+  const portBaselineSet = useRef(false);
   useEffect(() => {
     let active = true;
     const poll = () => {
@@ -95,19 +96,25 @@ export default function DashboardPage() {
         .then(async (r) => {
           if (!r.ok || !active) return;
           const ports: SerialPort[] = await r.json();
+          const next = new Set(ports.map((p) => p.name));
+          if (!portBaselineSet.current) {
+            // First call: just record current ports as baseline, no toast
+            prevPortNames.current = next;
+            portBaselineSet.current = true;
+            return;
+          }
           const prev = prevPortNames.current;
           const added = ports.filter((p) => !prev.has(p.name) && !detectionIgnored.current.has(p.name));
-          // Auto-pick ESP32-looking port; fallback to first added
           if (added.length > 0) {
             const best = added.find(looksLikeEsp) ?? added[0];
             setDetectedPort(best);
           }
           // If currently shown port disconnected → hide toast
           setDetectedPort((cur) => {
-            if (cur && !ports.some((p) => p.name === cur.name)) return null;
+            if (cur && !next.has(cur.name)) return null;
             return cur;
           });
-          prevPortNames.current = new Set(ports.map((p) => p.name));
+          prevPortNames.current = next;
         })
         .catch(() => {});
     };
