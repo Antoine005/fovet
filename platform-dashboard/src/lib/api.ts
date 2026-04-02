@@ -15,6 +15,9 @@ import { prisma } from "@/lib/prisma";
 import { emitReading, subscribeToReadings } from "@/lib/event-bus";
 import { checkRateLimit, loginBucket } from "@/lib/rate-limiter";
 import { getMqttStatus } from "@/lib/mqtt-ingestion";
+import { spawn } from "child_process";
+import fs from "fs";
+import path from "path";
 
 // Re-export loginBucket so api.test.ts can clear it between tests
 export { loginBucket };
@@ -848,7 +851,13 @@ const ForgeJobSchema = z.object({
   dataFrom:        z.string().optional(),
   dataTo:          z.string().optional(),
   profile:         z.string().optional(),
+  config:          z.string().regex(/^[\w\-]+\.yaml$/).optional(),
 });
+
+// Monorepo root — platform-dashboard is one level below root
+const REPO_ROOT     = path.resolve(process.cwd(), "..");
+const CONFIGS_DIR   = path.join(REPO_ROOT, "automl-pipeline", "configs");
+const UV_EXE        = process.env.UV_PATH ?? "uv";
 
 const ForgeDeploySchema = z.object({
   modelId:   z.string().min(1),
@@ -858,6 +867,20 @@ const ForgeDeploySchema = z.object({
 const ForgeValidateSchema = z.object({
   decision: z.enum(["PROMOTE", "REJECT"]),
   actor:    z.string().min(1).max(100),
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/configs — list available YAML pipeline configs
+// -------------------------------------------------------------------------
+app.get("/forge/configs", (c) => {
+  try {
+    const files = fs.readdirSync(CONFIGS_DIR)
+      .filter((f) => f.endsWith(".yaml"))
+      .sort();
+    return c.json(files.map((f) => ({ filename: f, label: f.replace(".yaml", "") })));
+  } catch {
+    return c.json([]);
+  }
 });
 
 // -------------------------------------------------------------------------
@@ -957,7 +980,84 @@ app.post("/forge/jobs", async (c) => {
     },
   });
 
-  // NOTE: in production, trigger automl-pipeline CLI here via child_process or queue
+  // Spawn automl-pipeline CLI in background (fire and forget)
+  if (parsed.data.config) {
+    const configPath = path.join(CONFIGS_DIR, parsed.data.config);
+    const cliDir     = path.join(REPO_ROOT, "automl-pipeline");
+    const jobId      = job.id;
+
+    const proc = spawn(UV_EXE, ["run", "forge", "run", "--config", configPath], {
+      cwd: cliDir,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+    });
+
+    let logBuffer = "";
+    let stage = 0; // 0=data 1=training 2=exporting 3=done
+
+    async function appendLog(chunk: string) {
+      logBuffer += chunk;
+      // Truncate to last 8000 chars to avoid huge DB writes
+      if (logBuffer.length > 8000) logBuffer = logBuffer.slice(-8000);
+
+      // Parse progress from output
+      if (/training detectors/i.test(chunk)) stage = 1;
+      if (/exporting/i.test(chunk))          stage = 2;
+
+      // Extract metrics
+      const metricMatch = logBuffer.match(/precision=([\d.]+)\s+recall=([\d.]+)\s+f1=([\d.]+)/i);
+      const valAccuracy = metricMatch ? parseFloat(metricMatch[3]) : null;
+
+      const progressMap = [10, 50, 80, 100];
+      const progress    = progressMap[stage] ?? 0;
+
+      try {
+        await prisma.forgeJob.update({
+          where: { id: jobId },
+          data:  { logs: logBuffer, progress, ...(valAccuracy !== null ? { valAccuracy } : {}) },
+        });
+      } catch { /* job may have been deleted */ }
+    }
+
+    proc.stdout.on("data", (d: Buffer) => { void appendLog(d.toString("utf8")); });
+    proc.stderr.on("data", (d: Buffer) => { void appendLog(d.toString("utf8")); });
+
+    proc.on("close", async (code: number | null) => {
+      const success = code === 0;
+      const metricMatch = logBuffer.match(/precision=([\d.]+)\s+recall=([\d.]+)\s+f1=([\d.]+)/i);
+      const valAccuracy = metricMatch ? parseFloat(metricMatch[3]) : null;
+
+      try {
+        await prisma.forgeJob.update({
+          where: { id: jobId },
+          data: {
+            status:      success ? "DONE" : "FAILED",
+            progress:    success ? 100 : undefined,
+            finishedAt:  new Date(),
+            logs:        logBuffer,
+            ...(valAccuracy !== null ? { valAccuracy } : {}),
+          },
+        });
+        await prisma.forgeAudit.create({
+          data: {
+            actor:  "system",
+            action: success ? "JOB_DONE" : "JOB_FAILED",
+            label:  `Job ${jobRef} ${success ? "terminé" : "échoué"} (config: ${parsed.data.config})`,
+            jobRef,
+          },
+        });
+      } catch { /* ignore */ }
+    });
+
+    proc.on("error", async (err: Error) => {
+      try {
+        await prisma.forgeJob.update({
+          where: { id: jobId },
+          data: { status: "FAILED", finishedAt: new Date(), logs: `Erreur lancement : ${err.message}` },
+        });
+      } catch { /* ignore */ }
+    });
+  }
+
   return c.json(job, 201);
 });
 

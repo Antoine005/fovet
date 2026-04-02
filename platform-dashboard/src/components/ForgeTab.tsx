@@ -185,6 +185,8 @@ export default function ForgeTab() {
   const [trainFrom,      setTrainFrom]      = useState("2026-01-01");
   const [trainTo,        setTrainTo]        = useState("2026-02-28");
   const [trainProfile,   setTrainProfile]   = useState("standard");
+  const [trainConfig,    setTrainConfig]    = useState("demo_zscore.yaml");
+  const [configs,        setConfigs]        = useState<{ filename: string; label: string }[]>([]);
   const [submittingJob,  setSubmittingJob]  = useState(false);
   const [submittingDeploy, setSubmittingDeploy] = useState(false);
   const [validating,     setValidating]     = useState(false);
@@ -261,12 +263,16 @@ export default function ForgeTab() {
 
   useEffect(() => {
     fetchAll();
+    // Load available forge configs
+    apiFetch("/api/forge/configs").then(async (r) => {
+      if (r.ok) setConfigs(await r.json());
+    });
   }, [fetchAll]);
 
-  // Auto-refresh every 30s when a job is running
+  // Auto-refresh: 2s while a job is running, 30s otherwise
   useEffect(() => {
-    if (!activeJob) return;
-    const id = setInterval(fetchAll, 30_000);
+    const interval = activeJob ? 2_000 : 30_000;
+    const id = setInterval(fetchAll, interval);
     return () => clearInterval(id);
   }, [activeJob, fetchAll]);
 
@@ -292,6 +298,7 @@ export default function ForgeTab() {
           dataFrom:        trainFrom,
           dataTo:          trainTo,
           profile:         trainProfile,
+          config:          trainConfig || undefined,
         }),
       });
       if (res.ok) {
@@ -842,6 +849,20 @@ export default function ForgeTab() {
               <input type="date" value={trainFrom} onChange={(e) => setTrainFrom(e.target.value)} className="bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
               <input type="date" value={trainTo}   onChange={(e) => setTrainTo(e.target.value)}   className="bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
             </div>
+          </div>
+          <div className="mb-2.5">
+            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Config pipeline (YAML)</label>
+            <select
+              value={trainConfig}
+              onChange={(e) => setTrainConfig(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500"
+            >
+              {configs.length === 0 && <option value="">Chargement…</option>}
+              {configs.map((c) => (
+                <option key={c.filename} value={c.filename}>{c.label}</option>
+              ))}
+            </select>
+            <p className="font-mono text-[9px] text-gray-600 mt-0.5">automl-pipeline/configs/{trainConfig}</p>
           </div>
           <div className="mb-3">
             <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Profil d&apos;entraînement</label>

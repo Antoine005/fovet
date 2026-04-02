@@ -16,7 +16,8 @@ import { TemperatureChart } from "@/components/TemperatureChart";
 import FleetHealth from "@/components/FleetHealth";
 import WorkerDetail from "@/components/WorkerDetail";
 import { FleetAlertTimeline } from "@/components/FleetAlertTimeline";
-import ForgeTab from "@/components/ForgeTab";
+import ForgeTab    from "@/components/ForgeTab";
+import FlashPanel  from "@/components/FlashPanel";
 
 interface Device {
   id: string;
@@ -43,7 +44,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue" | "thermique" | "sante" | "worker" | "forge">("fleet");
+  const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue" | "thermique" | "sante" | "worker" | "forge" | "flash">("fleet");
   const [clock, setClock] = useState<string>("");
 
   // Device CRUD modal
@@ -223,6 +224,14 @@ export default function DashboardPage() {
             >
               Forge
             </button>
+            <button
+              onClick={() => setView("flash")}
+              className={`px-3 py-1.5 transition-colors ${
+                view === "flash" ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Flash
+            </button>
           </div>
           <span className="text-xs text-gray-500 font-mono">{clock}</span>
           <button
@@ -300,6 +309,9 @@ pio run --target upload --environment zscore_demo`}
 
       {/* Forge view — model management pipeline */}
       {view === "forge" && <ForgeTab />}
+
+      {/* Flash view — ESP32 firmware upload */}
+      {view === "flash" && <FlashPanel />}
 
       {/* Fleet view — devices + alert timeline */}
       {view === "fleet" && devices.length > 0 && (
