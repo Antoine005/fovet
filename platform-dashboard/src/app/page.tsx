@@ -22,6 +22,16 @@ import { Sidebar, type ViewType } from "@/components/Sidebar";
 import { Topbar }    from "@/components/Topbar";
 import { Breadcrumb } from "@/components/Breadcrumb";
 
+interface SerialPort { name: string; description: string }
+
+/** Returns true if the port looks like an ESP32 / CH340 adapter. */
+function looksLikeEsp(p: SerialPort) {
+  const d = p.description.toLowerCase();
+  return d.includes("ch340") || d.includes("ch341") || d.includes("cp210") ||
+         d.includes("ftdi") || d.includes("usb-serial") || d.includes("usb serial") ||
+         d.includes("espressif") || d.includes("uart");
+}
+
 interface Device {
   id: string;
   name: string;
@@ -64,10 +74,46 @@ export default function DashboardPage() {
   const [janitorResult, setJanitorResult] = useState<{ deactivated: number; purged: number } | null>(null);
   const janitorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // USB device detection
+  const [detectedPort, setDetectedPort] = useState<SerialPort | null>(null);
+  const [flashPreport, setFlashPreport] = useState<string>("");
+  const prevPortNames = useRef<Set<string>>(new Set());
+  const detectionIgnored = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     setClock(new Date().toLocaleString("fr-FR"));
     const id = setInterval(() => setClock(new Date().toLocaleString("fr-FR")), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // Poll for USB serial ports every 3s — trigger toast on new port
+  useEffect(() => {
+    let active = true;
+    const poll = () => {
+      if (!active) return;
+      apiFetch("/api/flash/ports")
+        .then(async (r) => {
+          if (!r.ok || !active) return;
+          const ports: SerialPort[] = await r.json();
+          const prev = prevPortNames.current;
+          const added = ports.filter((p) => !prev.has(p.name) && !detectionIgnored.current.has(p.name));
+          // Auto-pick ESP32-looking port; fallback to first added
+          if (added.length > 0) {
+            const best = added.find(looksLikeEsp) ?? added[0];
+            setDetectedPort(best);
+          }
+          // If currently shown port disconnected → hide toast
+          setDetectedPort((cur) => {
+            if (cur && !ports.some((p) => p.name === cur.name)) return null;
+            return cur;
+          });
+          prevPortNames.current = new Set(ports.map((p) => p.name));
+        })
+        .catch(() => {});
+    };
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { active = false; clearInterval(id); };
   }, []);
 
   const fetchDevices = useCallback(() => {
@@ -248,7 +294,7 @@ export default function DashboardPage() {
           {view === "forge" && <ForgeTab />}
 
           {/* Flash */}
-          {view === "flash" && <FlashPanel />}
+          {view === "flash" && <FlashPanel preselectedPort={flashPreport} />}
 
           {/* Fleet */}
           {view === "fleet" && devices.length > 0 && (
@@ -442,6 +488,70 @@ export default function DashboardPage() {
                 className="px-3 py-2 rounded border border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors"
               >
                 Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── USB device detection toast ────────────────────────────── */}
+      {detectedPort && (
+        <div className="fixed bottom-5 right-5 z-50 w-80 rounded-xl border border-gray-700 bg-gray-900 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-3">
+          {/* top accent bar */}
+          <div className="h-0.5 bg-gradient-to-r from-green-500 to-blue-500" />
+          <div className="p-4">
+            <div className="flex items-start gap-3">
+              {/* icon */}
+              <div className="w-8 h-8 rounded-lg bg-green-900/40 border border-green-700/50 flex items-center justify-center shrink-0 mt-0.5">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4 text-green-400">
+                  <rect x="7" y="1" width="6" height="8" rx="1" />
+                  <path d="M10 9v5M7 17h6M10 14l-2 3h4l-2-3z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white">
+                  Appareil détecté
+                </p>
+                <p className="text-xs text-green-400 font-mono mt-0.5 truncate">
+                  {detectedPort.name}
+                </p>
+                <p className="text-[10px] text-gray-500 truncate mt-0.5">
+                  {detectedPort.description}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  detectionIgnored.current.add(detectedPort.name);
+                  setDetectedPort(null);
+                }}
+                className="text-gray-600 hover:text-gray-300 transition-colors shrink-0"
+              >
+                <svg viewBox="0 0 12 12" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M2 2l8 8M10 2l-8 8" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => {
+                  setFlashPreport(detectedPort.name);
+                  setView("flash");
+                  detectionIgnored.current.add(detectedPort.name);
+                  setDetectedPort(null);
+                }}
+                className="flex-1 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+              >
+                ⚡ Flash
+              </button>
+              <button
+                onClick={() => {
+                  openAddDevice();
+                  detectionIgnored.current.add(detectedPort.name);
+                  setDetectedPort(null);
+                }}
+                className="flex-1 py-1.5 rounded border border-gray-700 hover:border-gray-500 text-gray-300 text-xs font-semibold transition-colors"
+              >
+                + Monitorer
               </button>
             </div>
           </div>

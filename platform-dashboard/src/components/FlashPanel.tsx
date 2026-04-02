@@ -47,10 +47,14 @@ function StatusDot({ state }: { state: "idle" | "running" | "ok" | "error" }) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function FlashPanel() {
+interface FlashPanelProps {
+  preselectedPort?: string;
+}
+
+export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
   const [ports,       setPorts]       = useState<Port[]>([]);
-  const [port,        setPort]        = useState("");          // selected port name
-  const [portStatus,  setPortStatus]  = useState<PortStatus>("scanning");
+  const [port,        setPort]        = useState(preselectedPort ?? ""); // selected port name
+  const [portStatus,  setPortStatus]  = useState<PortStatus>(preselectedPort ? "manual" : "scanning");
   const [manualPort,  setManualPort]  = useState("");          // manual override text
   const [example,     setExample]     = useState<Example>(EXAMPLES[0]);
   const [flashStatus, setFlashStatus] = useState<"idle" | "running" | "ok" | "error">("idle");
@@ -64,6 +68,14 @@ export default function FlashPanel() {
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [log]);
+
+  // Sync preselectedPort when parent changes it (e.g. coming from detection toast)
+  useEffect(() => {
+    if (preselectedPort) {
+      setPort(preselectedPort);
+      setPortStatus("detected");
+    }
+  }, [preselectedPort]);
 
   // Poll COM ports every POLL_MS
   const pollPorts = useCallback(() => {
