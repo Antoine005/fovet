@@ -1,12 +1,12 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@fovet.eu
  */
 
-#include "fovet/drivers/mpu6050.h"
-#include "fovet/hal/hal_i2c.h"
+#include "ardent/drivers/mpu6050.h"
+#include "ardent/hal/hal_i2c.h"
 
 #include <math.h>
 

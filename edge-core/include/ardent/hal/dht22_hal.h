@@ -1,5 +1,5 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@fovet.eu
@@ -8,7 +8,7 @@
  * dht22_hal.h — Driver HAL DHT22 (H3.1)
  *
  * Measures ambient temperature (°C) and relative humidity (%) using the
- * DHT22 single-wire protocol.  Registers as FOVET_SOURCE_TEMP in the
+ * DHT22 single-wire protocol.  Registers as ARD_SOURCE_TEMP in the
  * biosignal HAL, filling both celsius and humidity_pct fields.
  *
  * Hardware interface:
@@ -30,51 +30,51 @@
  * Maximum sample rate: 0.5 Hz (1 reading every 2 s minimum).
  *
  * Typical integration:
- *   1. fovet_dht22_set_io(&io) — inject pin/timing callbacks
- *   2. fovet_dht22_init()      — registers FOVET_SOURCE_TEMP in biosignal HAL
- *   3. fovet_hal_biosignal_read(FOVET_SOURCE_TEMP, &s) — read sample
+ *   1. ard_dht22_set_io(&io) — inject pin/timing callbacks
+ *   2. ard_dht22_init()      — registers ARD_SOURCE_TEMP in biosignal HAL
+ *   3. ard_hal_biosignal_read(ARD_SOURCE_TEMP, &s) — read sample
  *      s.value.temp.celsius / s.value.temp.humidity_pct
  * -------------------------------------------------------------------------
  */
 
-#ifndef FOVET_DHT22_HAL_H
-#define FOVET_DHT22_HAL_H
+#ifndef ARD_DHT22_HAL_H
+#define ARD_DHT22_HAL_H
 
 #include <stdint.h>
-#include "fovet/hal/fovet_biosignal_hal.h"
+#include "ardent/hal/ard_biosignal_hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* -------------------------------------------------------------------------
- * Error codes (in addition to FOVET_HAL_OK = 0)
+ * Error codes (in addition to ARD_HAL_OK = 0)
  * ------------------------------------------------------------------------- */
 
 /** Pulse timeout — sensor did not respond or line stuck. */
-#define FOVET_DHT22_ERR_TIMEOUT  -1
+#define ARD_DHT22_ERR_TIMEOUT  -1
 
 /** Checksum mismatch — frame corrupted. */
-#define FOVET_DHT22_ERR_CHECKSUM -2
+#define ARD_DHT22_ERR_CHECKSUM -2
 
 /** Reading outside physical range (T: -40..80 °C, H: 0..100 %). */
-#define FOVET_DHT22_ERR_RANGE    -3
+#define ARD_DHT22_ERR_RANGE    -3
 
-/** IO callbacks not set — call fovet_dht22_set_io() first. */
-#define FOVET_DHT22_ERR_IO       -4
+/** IO callbacks not set — call ard_dht22_set_io() first. */
+#define ARD_DHT22_ERR_IO       -4
 
 /* -------------------------------------------------------------------------
  * Physical validity ranges
  * ------------------------------------------------------------------------- */
 
 /** Minimum valid temperature (°C). */
-#define FOVET_DHT22_TEMP_MIN    -40.0f
+#define ARD_DHT22_TEMP_MIN    -40.0f
 
 /** Maximum valid temperature (°C). */
-#define FOVET_DHT22_TEMP_MAX     80.0f
+#define ARD_DHT22_TEMP_MAX     80.0f
 
 /** Maximum valid relative humidity (%). */
-#define FOVET_DHT22_HUMIDITY_MAX 100.0f
+#define ARD_DHT22_HUMIDITY_MAX 100.0f
 
 /* -------------------------------------------------------------------------
  * IO callbacks
@@ -88,7 +88,7 @@ extern "C" {
  *
  * @param level  0 = LOW, 1 = HIGH.
  */
-typedef void (*fovet_dht22_pin_write_fn_t)(uint8_t level);
+typedef void (*ard_dht22_pin_write_fn_t)(uint8_t level);
 
 /**
  * @brief Wait for the data line to reach @p expected_level, then measure
@@ -101,9 +101,9 @@ typedef void (*fovet_dht22_pin_write_fn_t)(uint8_t level);
  * @param timeout_us      Maximum wait time in microseconds.
  *
  * @return Duration in µs that the line held @p expected_level.
- *         Returns 0 on timeout (caller must treat 0 as FOVET_DHT22_ERR_TIMEOUT).
+ *         Returns 0 on timeout (caller must treat 0 as ARD_DHT22_ERR_TIMEOUT).
  */
-typedef uint32_t (*fovet_dht22_pulse_us_fn_t)(uint8_t expected_level,
+typedef uint32_t (*ard_dht22_pulse_us_fn_t)(uint8_t expected_level,
                                               uint32_t timeout_us);
 
 /**
@@ -114,7 +114,7 @@ typedef uint32_t (*fovet_dht22_pulse_us_fn_t)(uint8_t expected_level,
  *
  * @param us  Duration in microseconds.
  */
-typedef void (*fovet_dht22_delay_us_fn_t)(uint32_t us);
+typedef void (*ard_dht22_delay_us_fn_t)(uint32_t us);
 
 /* -------------------------------------------------------------------------
  * IO bundle
@@ -123,13 +123,13 @@ typedef void (*fovet_dht22_delay_us_fn_t)(uint32_t us);
 /**
  * @brief Bundle of the three IO callbacks required by the DHT22 driver.
  *
- * All three fields must be non-NULL before calling fovet_dht22_init().
+ * All three fields must be non-NULL before calling ard_dht22_init().
  */
 typedef struct {
-    fovet_dht22_pin_write_fn_t pin_write; /**< Drive data line HIGH or LOW   */
-    fovet_dht22_pulse_us_fn_t  pulse_us;  /**< Measure pulse duration (µs)   */
-    fovet_dht22_delay_us_fn_t  delay_us;  /**< Busy-wait (µs)                */
-} fovet_dht22_io_t;
+    ard_dht22_pin_write_fn_t pin_write; /**< Drive data line HIGH or LOW   */
+    ard_dht22_pulse_us_fn_t  pulse_us;  /**< Measure pulse duration (µs)   */
+    ard_dht22_delay_us_fn_t  delay_us;  /**< Busy-wait (µs)                */
+} ard_dht22_io_t;
 
 /* -------------------------------------------------------------------------
  * Raw reading
@@ -141,7 +141,7 @@ typedef struct {
 typedef struct {
     float celsius;      /**< Ambient temperature (°C, range: -40..80)   */
     float humidity_pct; /**< Relative humidity (%, range: 0..100)        */
-} fovet_dht22_reading_t;
+} ard_dht22_reading_t;
 
 /* -------------------------------------------------------------------------
  * Public API
@@ -150,24 +150,24 @@ typedef struct {
 /**
  * @brief Inject the IO callbacks used by the DHT22 driver.
  *
- * Must be called before fovet_dht22_init().
+ * Must be called before ard_dht22_init().
  *
  * @param io  Non-NULL pointer to the IO bundle.  The struct is copied
  *            internally — the caller's struct need not persist.
  */
-void fovet_dht22_set_io(const fovet_dht22_io_t *io);
+void ard_dht22_set_io(const ard_dht22_io_t *io);
 
 /**
- * @brief Initialise the DHT22 driver and register FOVET_SOURCE_TEMP in the
+ * @brief Initialise the DHT22 driver and register ARD_SOURCE_TEMP in the
  *        biosignal HAL.
  *
- * Requires fovet_dht22_set_io() to have been called first.
+ * Requires ard_dht22_set_io() to have been called first.
  * Safe to call multiple times (re-registers the same handler).
  *
- * @return FOVET_HAL_OK   on success.
- * @return FOVET_DHT22_ERR_IO  if IO callbacks are not set.
+ * @return ARD_HAL_OK   on success.
+ * @return ARD_DHT22_ERR_IO  if IO callbacks are not set.
  */
-int fovet_dht22_init(void);
+int ard_dht22_init(void);
 
 /**
  * @brief Read one sample from the DHT22 sensor.
@@ -177,35 +177,35 @@ int fovet_dht22_init(void);
  *
  * @param[out] out  Destination for the reading.  Must not be NULL.
  *
- * @return FOVET_HAL_OK             on success.
- * @return FOVET_DHT22_ERR_IO       if IO callbacks not set.
- * @return FOVET_DHT22_ERR_TIMEOUT  if any pulse timed out.
- * @return FOVET_DHT22_ERR_CHECKSUM if frame checksum mismatch.
- * @return FOVET_DHT22_ERR_RANGE    if decoded values are out of range.
+ * @return ARD_HAL_OK             on success.
+ * @return ARD_DHT22_ERR_IO       if IO callbacks not set.
+ * @return ARD_DHT22_ERR_TIMEOUT  if any pulse timed out.
+ * @return ARD_DHT22_ERR_CHECKSUM if frame checksum mismatch.
+ * @return ARD_DHT22_ERR_RANGE    if decoded values are out of range.
  */
-int fovet_dht22_read(fovet_dht22_reading_t *out);
+int ard_dht22_read(ard_dht22_reading_t *out);
 
 /**
- * @brief HAL read function — registered as the FOVET_SOURCE_TEMP handler.
+ * @brief HAL read function — registered as the ARD_SOURCE_TEMP handler.
  *
- * Called by fovet_hal_biosignal_read(FOVET_SOURCE_TEMP, &s).
+ * Called by ard_hal_biosignal_read(ARD_SOURCE_TEMP, &s).
  * Fills s.value.temp.celsius and s.value.temp.humidity_pct.
  *
  * @param[out] out  Biosignal sample to populate.
  *
- * @return FOVET_HAL_OK or a negative DHT22 error code.
+ * @return ARD_HAL_OK or a negative DHT22 error code.
  */
-int fovet_hal_temp_read(fovet_biosignal_sample_t *out);
+int ard_hal_temp_read(ard_biosignal_sample_t *out);
 
 /**
  * @brief Reset driver state — for unit tests only.
  *
- * Clears IO callbacks so subsequent init/read calls return FOVET_DHT22_ERR_IO.
+ * Clears IO callbacks so subsequent init/read calls return ARD_DHT22_ERR_IO.
  */
-void fovet_dht22_reset(void);
+void ard_dht22_reset(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* FOVET_DHT22_HAL_H */
+#endif /* ARD_DHT22_HAL_H */

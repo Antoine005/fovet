@@ -1,5 +1,5 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@fovet.eu
@@ -25,9 +25,9 @@
 #include <string.h>
 #include <math.h>
 
-#define FOVET_NATIVE_TEST
-#include "../include/fovet/hal/dht22_hal.h"
-#include "../include/fovet/hal/fovet_biosignal_hal.h"
+#define ARD_NATIVE_TEST
+#include "../include/ardent/hal/dht22_hal.h"
+#include "../include/ardent/hal/ard_biosignal_hal.h"
 
 /* =========================================================================
  * Test harness
@@ -84,7 +84,7 @@ static void mock_delay_us(uint32_t us)
     (void)us;
 }
 
-static const fovet_dht22_io_t k_mock_io = {
+static const ard_dht22_io_t k_mock_io = {
     mock_pin_write,
     mock_pulse_us,
     mock_delay_us
@@ -154,8 +154,8 @@ static void reset_mock(void)
     g_pulse_idx       = 0;
     g_pin_level       = 1U;
     g_pin_write_calls = 0;
-    fovet_dht22_reset();
-    fovet_hal_biosignal_reset();
+    ard_dht22_reset();
+    ard_hal_biosignal_reset();
 }
 
 /* =========================================================================
@@ -164,13 +164,13 @@ static void reset_mock(void)
 
 static void test_constants(void)
 {
-    ASSERT_FLOAT_EQ(FOVET_DHT22_TEMP_MIN,    -40.0f, 1e-4f, "TEMP_MIN == -40.0");
-    ASSERT_FLOAT_EQ(FOVET_DHT22_TEMP_MAX,     80.0f, 1e-4f, "TEMP_MAX == 80.0");
-    ASSERT_FLOAT_EQ(FOVET_DHT22_HUMIDITY_MAX, 100.0f, 1e-4f, "HUMIDITY_MAX == 100.0");
-    ASSERT_INT_EQ(FOVET_DHT22_ERR_TIMEOUT,  -1, "ERR_TIMEOUT == -1");
-    ASSERT_INT_EQ(FOVET_DHT22_ERR_CHECKSUM, -2, "ERR_CHECKSUM == -2");
-    ASSERT_INT_EQ(FOVET_DHT22_ERR_RANGE,    -3, "ERR_RANGE == -3");
-    ASSERT_INT_EQ(FOVET_DHT22_ERR_IO,       -4, "ERR_IO == -4");
+    ASSERT_FLOAT_EQ(ARD_DHT22_TEMP_MIN,    -40.0f, 1e-4f, "TEMP_MIN == -40.0");
+    ASSERT_FLOAT_EQ(ARD_DHT22_TEMP_MAX,     80.0f, 1e-4f, "TEMP_MAX == 80.0");
+    ASSERT_FLOAT_EQ(ARD_DHT22_HUMIDITY_MAX, 100.0f, 1e-4f, "HUMIDITY_MAX == 100.0");
+    ASSERT_INT_EQ(ARD_DHT22_ERR_TIMEOUT,  -1, "ERR_TIMEOUT == -1");
+    ASSERT_INT_EQ(ARD_DHT22_ERR_CHECKSUM, -2, "ERR_CHECKSUM == -2");
+    ASSERT_INT_EQ(ARD_DHT22_ERR_RANGE,    -3, "ERR_RANGE == -3");
+    ASSERT_INT_EQ(ARD_DHT22_ERR_IO,       -4, "ERR_IO == -4");
 }
 
 /* =========================================================================
@@ -179,17 +179,17 @@ static void test_constants(void)
 
 static void test_read_without_set_io_returns_err_io(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
     /* do NOT call set_io */
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_DHT22_ERR_IO,
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_DHT22_ERR_IO,
                   "read without set_io → ERR_IO");
 }
 
 static void test_init_without_set_io_returns_err_io(void)
 {
     reset_mock();
-    ASSERT_INT_EQ(fovet_dht22_init(), FOVET_DHT22_ERR_IO,
+    ASSERT_INT_EQ(ard_dht22_init(), ARD_DHT22_ERR_IO,
                   "init without set_io → ERR_IO");
 }
 
@@ -199,22 +199,22 @@ static void test_init_without_set_io_returns_err_io(void)
 
 static void test_read_positive_temperature(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
     setup_pulse_seq(25.3f, 60.5f);
-    fovet_dht22_set_io(&k_mock_io);
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_HAL_OK, "read OK");
+    ard_dht22_set_io(&k_mock_io);
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_HAL_OK, "read OK");
     ASSERT_FLOAT_EQ(r.celsius,      25.3f, 0.1f, "celsius == 25.3");
     ASSERT_FLOAT_EQ(r.humidity_pct, 60.5f, 0.1f, "humidity == 60.5");
 }
 
 static void test_read_zero_temperature(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
     setup_pulse_seq(0.0f, 50.0f);
-    fovet_dht22_set_io(&k_mock_io);
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_HAL_OK, "read OK");
+    ard_dht22_set_io(&k_mock_io);
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_HAL_OK, "read OK");
     ASSERT_FLOAT_EQ(r.celsius, 0.0f, 0.1f, "celsius == 0.0");
 }
 
@@ -224,11 +224,11 @@ static void test_read_zero_temperature(void)
 
 static void test_read_negative_temperature(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
     setup_pulse_seq(-12.5f, 45.0f);
-    fovet_dht22_set_io(&k_mock_io);
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_HAL_OK, "read OK");
+    ard_dht22_set_io(&k_mock_io);
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_HAL_OK, "read OK");
     ASSERT_FLOAT_EQ(r.celsius,      -12.5f, 0.1f, "celsius == -12.5");
     ASSERT_FLOAT_EQ(r.humidity_pct,  45.0f, 0.1f, "humidity == 45.0");
 }
@@ -239,21 +239,21 @@ static void test_read_negative_temperature(void)
 
 static void test_read_humidity_zero(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
     setup_pulse_seq(20.0f, 0.0f);
-    fovet_dht22_set_io(&k_mock_io);
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_HAL_OK, "read OK");
+    ard_dht22_set_io(&k_mock_io);
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_HAL_OK, "read OK");
     ASSERT_FLOAT_EQ(r.humidity_pct, 0.0f, 0.1f, "humidity == 0.0");
 }
 
 static void test_read_humidity_max(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
     setup_pulse_seq(25.0f, 99.9f);
-    fovet_dht22_set_io(&k_mock_io);
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_HAL_OK, "read OK");
+    ard_dht22_set_io(&k_mock_io);
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_HAL_OK, "read OK");
     ASSERT_FLOAT_EQ(r.humidity_pct, 99.9f, 0.2f, "humidity == 99.9");
 }
 
@@ -263,21 +263,21 @@ static void test_read_humidity_max(void)
 
 static void test_read_temp_min(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
     setup_pulse_seq(-40.0f, 20.0f);
-    fovet_dht22_set_io(&k_mock_io);
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_HAL_OK, "read OK");
+    ard_dht22_set_io(&k_mock_io);
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_HAL_OK, "read OK");
     ASSERT_FLOAT_EQ(r.celsius, -40.0f, 0.1f, "celsius == -40.0");
 }
 
 static void test_read_temp_max(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
     setup_pulse_seq(80.0f, 20.0f);
-    fovet_dht22_set_io(&k_mock_io);
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_HAL_OK, "read OK");
+    ard_dht22_set_io(&k_mock_io);
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_HAL_OK, "read OK");
     ASSERT_FLOAT_EQ(r.celsius, 80.0f, 0.1f, "celsius == 80.0");
 }
 
@@ -287,34 +287,34 @@ static void test_read_temp_max(void)
 
 static void test_timeout_at_handshake_low(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
+    ard_dht22_set_io(&k_mock_io);
     /* provide no pulses — mock returns 0 (timeout) immediately */
     g_pulse_count = 0;
     g_pulse_idx   = 0;
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_DHT22_ERR_TIMEOUT,
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_DHT22_ERR_TIMEOUT,
                   "timeout at handshake LOW");
 }
 
 static void test_timeout_at_handshake_high(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
+    ard_dht22_set_io(&k_mock_io);
     /* only 1 pulse — handshake LOW OK, HIGH times out */
     g_pulse_seq[0] = 80U; /* handshake LOW OK */
     g_pulse_count  = 1;
     g_pulse_idx    = 0;
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_DHT22_ERR_TIMEOUT,
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_DHT22_ERR_TIMEOUT,
                   "timeout at handshake HIGH");
 }
 
 static void test_timeout_during_bit_read(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
+    ard_dht22_set_io(&k_mock_io);
     /* 2 preamble + only 1 bit-start pulse, then timeout */
     g_pulse_seq[0] = 80U;
     g_pulse_seq[1] = 80U;
@@ -322,19 +322,19 @@ static void test_timeout_during_bit_read(void)
     /* no HIGH pulse → timeout */
     g_pulse_count  = 3;
     g_pulse_idx    = 0;
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_DHT22_ERR_TIMEOUT,
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_DHT22_ERR_TIMEOUT,
                   "timeout during bit HIGH");
 }
 
 static void test_checksum_mismatch(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     uint8_t bytes[5];
     int     n = 0;
     int     i;
 
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
+    ard_dht22_set_io(&k_mock_io);
 
     /* Build bytes for 25.0 °C / 60.0 % then corrupt checksum */
     make_bytes(25.0f, 60.0f, bytes);
@@ -350,22 +350,22 @@ static void test_checksum_mismatch(void)
     g_pulse_count = n;
     g_pulse_idx   = 0;
 
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_DHT22_ERR_CHECKSUM,
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_DHT22_ERR_CHECKSUM,
                   "corrupted checksum → ERR_CHECKSUM");
 }
 
 static void test_humidity_out_of_range(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     uint8_t bytes[5];
     int     n = 0;
     int     i;
 
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
+    ard_dht22_set_io(&k_mock_io);
 
     /*
-     * Humidity = 105 % (raw = 1050 = 0x041A) — above FOVET_DHT22_HUMIDITY_MAX.
+     * Humidity = 105 % (raw = 1050 = 0x041A) — above ARD_DHT22_HUMIDITY_MAX.
      * Build bytes manually to bypass make_bytes clamping.
      */
     bytes[0] = 0x04U;
@@ -384,21 +384,21 @@ static void test_humidity_out_of_range(void)
     g_pulse_count = n;
     g_pulse_idx   = 0;
 
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_DHT22_ERR_RANGE,
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_DHT22_ERR_RANGE,
                   "humidity > 100% → ERR_RANGE");
 }
 
 static void test_temperature_out_of_range_high(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     uint8_t bytes[5];
     int     n = 0;
     int     i;
 
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
+    ard_dht22_set_io(&k_mock_io);
 
-    /* Temperature = 81.0 °C (raw = 810 = 0x032A) — above FOVET_DHT22_TEMP_MAX */
+    /* Temperature = 81.0 °C (raw = 810 = 0x032A) — above ARD_DHT22_TEMP_MAX */
     bytes[0] = 0x01U; /* humidity 5.0 % */
     bytes[1] = 0x32U;
     bytes[2] = 0x03U; /* temp = +81.0 °C (0x032A, positive) */
@@ -415,7 +415,7 @@ static void test_temperature_out_of_range_high(void)
     g_pulse_count = n;
     g_pulse_idx   = 0;
 
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_DHT22_ERR_RANGE,
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_DHT22_ERR_RANGE,
                   "temp > 80 °C → ERR_RANGE");
 }
 
@@ -425,57 +425,57 @@ static void test_temperature_out_of_range_high(void)
 
 static void test_init_registers_temp_source(void)
 {
-    fovet_biosignal_sample_t s;
+    ard_biosignal_sample_t s;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
-    ASSERT_INT_EQ(fovet_dht22_init(), FOVET_HAL_OK, "init → HAL_OK");
+    ard_dht22_set_io(&k_mock_io);
+    ASSERT_INT_EQ(ard_dht22_init(), ARD_HAL_OK, "init → HAL_OK");
 
     /* A subsequent read via biosignal HAL must succeed */
     setup_pulse_seq(22.0f, 55.0f);
-    ASSERT_INT_EQ(fovet_hal_biosignal_read(FOVET_SOURCE_TEMP, &s),
-                  FOVET_HAL_OK, "biosignal_read TEMP → HAL_OK");
+    ASSERT_INT_EQ(ard_hal_biosignal_read(ARD_SOURCE_TEMP, &s),
+                  ARD_HAL_OK, "biosignal_read TEMP → HAL_OK");
 }
 
 static void test_biosignal_hal_fills_source_field(void)
 {
-    fovet_biosignal_sample_t s;
+    ard_biosignal_sample_t s;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
-    fovet_dht22_init();
+    ard_dht22_set_io(&k_mock_io);
+    ard_dht22_init();
     setup_pulse_seq(22.0f, 55.0f);
-    fovet_hal_biosignal_read(FOVET_SOURCE_TEMP, &s);
-    ASSERT(s.source == FOVET_SOURCE_TEMP, "sample.source == FOVET_SOURCE_TEMP");
+    ard_hal_biosignal_read(ARD_SOURCE_TEMP, &s);
+    ASSERT(s.source == ARD_SOURCE_TEMP, "sample.source == ARD_SOURCE_TEMP");
 }
 
 static void test_biosignal_hal_fills_celsius(void)
 {
-    fovet_biosignal_sample_t s;
+    ard_biosignal_sample_t s;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
-    fovet_dht22_init();
+    ard_dht22_set_io(&k_mock_io);
+    ard_dht22_init();
     setup_pulse_seq(22.0f, 55.0f);
-    fovet_hal_biosignal_read(FOVET_SOURCE_TEMP, &s);
+    ard_hal_biosignal_read(ARD_SOURCE_TEMP, &s);
     ASSERT_FLOAT_EQ(s.value.temp.celsius, 22.0f, 0.1f, "sample.temp.celsius == 22.0");
 }
 
 static void test_biosignal_hal_fills_humidity(void)
 {
-    fovet_biosignal_sample_t s;
+    ard_biosignal_sample_t s;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
-    fovet_dht22_init();
+    ard_dht22_set_io(&k_mock_io);
+    ard_dht22_init();
     setup_pulse_seq(22.0f, 55.0f);
-    fovet_hal_biosignal_read(FOVET_SOURCE_TEMP, &s);
+    ard_hal_biosignal_read(ARD_SOURCE_TEMP, &s);
     ASSERT_FLOAT_EQ(s.value.temp.humidity_pct, 55.0f, 0.1f, "sample.temp.humidity_pct == 55.0");
 }
 
 static void test_biosignal_hal_not_registered_without_init(void)
 {
-    fovet_biosignal_sample_t s;
+    ard_biosignal_sample_t s;
     reset_mock();
     /* no init → no handler registered */
-    ASSERT_INT_EQ(fovet_hal_biosignal_read(FOVET_SOURCE_TEMP, &s),
-                  FOVET_HAL_ERR_NOREG,
+    ASSERT_INT_EQ(ard_hal_biosignal_read(ARD_SOURCE_TEMP, &s),
+                  ARD_HAL_ERR_NOREG,
                   "no init → HAL_ERR_NOREG");
 }
 
@@ -485,23 +485,23 @@ static void test_biosignal_hal_not_registered_without_init(void)
 
 static void test_pin_write_called_for_start_signal(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
+    ard_dht22_set_io(&k_mock_io);
     setup_pulse_seq(20.0f, 50.0f);
-    fovet_dht22_read(&r);
+    ard_dht22_read(&r);
     /* pin_write(0) + pin_write(1) = at least 2 calls for start signal */
     ASSERT(g_pin_write_calls >= 2, "pin_write called at least twice (start signal)");
 }
 
 static void test_reset_clears_io_state(void)
 {
-    fovet_dht22_reading_t r;
+    ard_dht22_reading_t r;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
-    fovet_dht22_reset();
+    ard_dht22_set_io(&k_mock_io);
+    ard_dht22_reset();
     /* After reset, IO must be cleared */
-    ASSERT_INT_EQ(fovet_dht22_read(&r), FOVET_DHT22_ERR_IO,
+    ASSERT_INT_EQ(ard_dht22_read(&r), ARD_DHT22_ERR_IO,
                   "after reset → ERR_IO");
 }
 
@@ -511,15 +511,15 @@ static void test_reset_clears_io_state(void)
 
 static void test_two_successive_reads(void)
 {
-    fovet_dht22_reading_t r1, r2;
+    ard_dht22_reading_t r1, r2;
     reset_mock();
-    fovet_dht22_set_io(&k_mock_io);
+    ard_dht22_set_io(&k_mock_io);
 
     setup_pulse_seq(25.0f, 60.0f);
-    ASSERT_INT_EQ(fovet_dht22_read(&r1), FOVET_HAL_OK, "read 1 OK");
+    ASSERT_INT_EQ(ard_dht22_read(&r1), ARD_HAL_OK, "read 1 OK");
 
     setup_pulse_seq(30.0f, 70.0f);
-    ASSERT_INT_EQ(fovet_dht22_read(&r2), FOVET_HAL_OK, "read 2 OK");
+    ASSERT_INT_EQ(ard_dht22_read(&r2), ARD_HAL_OK, "read 2 OK");
 
     ASSERT_FLOAT_EQ(r1.celsius, 25.0f, 0.1f, "read 1 celsius == 25.0");
     ASSERT_FLOAT_EQ(r2.celsius, 30.0f, 0.1f, "read 2 celsius == 30.0");

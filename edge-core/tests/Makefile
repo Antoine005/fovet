@@ -1,4 +1,4 @@
-# Fovet SDK — Native unit tests (PC / gcc)
+# Ardent SDK — Pulse — Native unit tests (PC / gcc)
 # Usage:
 #   make           → build all + run all
 #   make build     → build only

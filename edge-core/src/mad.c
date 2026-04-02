@@ -7,7 +7,7 @@
  * fovet_mad.c — Streaming MAD anomaly detector implementation
  */
 
-#include "fovet/mad.h"
+#include "ardent/mad.h"
 
 #include <math.h>   /* fabsf */
 #include <string.h> /* memcpy */
@@ -37,7 +37,7 @@ static void _isort(float *arr, uint16_t n)
  * Copy the logical window contents into dst[] and sort them.
  * Returns the number of valid elements copied (ctx->count).
  */
-static uint16_t _sorted_window(const FovetMAD *ctx, float *dst)
+static uint16_t _sorted_window(const ArdentMAD *ctx, float *dst)
 {
     uint16_t n = ctx->count;
     if (n == 0) return 0;
@@ -74,10 +74,10 @@ static float _median_sorted(const float *sorted, uint16_t n)
  * Public API
  * ---------------------------------------------------------------------- */
 
-void fovet_mad_init(FovetMAD *ctx, uint16_t win_size, float threshold_mad)
+void ard_mad_init(ArdentMAD *ctx, uint16_t win_size, float threshold_mad)
 {
-    if (win_size == 0 || win_size > FOVET_MAD_MAX_WINDOW) {
-        win_size = FOVET_MAD_MAX_WINDOW;
+    if (win_size == 0 || win_size > ARD_MAD_MAX_WINDOW) {
+        win_size = ARD_MAD_MAX_WINDOW;
     }
     ctx->win_size       = win_size;
     ctx->threshold_mad  = threshold_mad;
@@ -88,14 +88,14 @@ void fovet_mad_init(FovetMAD *ctx, uint16_t win_size, float threshold_mad)
     memset(ctx->scratch, 0, sizeof(ctx->scratch));
 }
 
-bool fovet_mad_update(FovetMAD *ctx, float sample)
+bool ard_mad_update(ArdentMAD *ctx, float sample)
 {
     /* Score against the CURRENT window (before adding the new sample).
      * This avoids the trivial case where a single-element window always
      * contains the value being tested. */
     bool is_anomaly = false;
     if (ctx->count >= ctx->win_size) {
-        float score = fovet_mad_score(ctx, sample);
+        float score = ard_mad_score(ctx, sample);
         is_anomaly = score > ctx->threshold_mad;
     }
 
@@ -109,24 +109,24 @@ bool fovet_mad_update(FovetMAD *ctx, float sample)
     return is_anomaly;
 }
 
-float fovet_mad_get_median(const FovetMAD *ctx)
+float ard_mad_get_median(const ArdentMAD *ctx)
 {
     /* _sorted_window writes into ctx->scratch — cast away const for scratch only */
-    FovetMAD *mctx = (FovetMAD *)(uintptr_t)ctx;
+    ArdentMAD *mctx = (ArdentMAD *)(uintptr_t)ctx;
     uint16_t n = _sorted_window(mctx, mctx->scratch);
     return _median_sorted(mctx->scratch, n);
 }
 
-float fovet_mad_get_mad(const FovetMAD *ctx)
+float ard_mad_get_mad(const ArdentMAD *ctx)
 {
-    FovetMAD *mctx = (FovetMAD *)(uintptr_t)ctx;
+    ArdentMAD *mctx = (ArdentMAD *)(uintptr_t)ctx;
     uint16_t n = _sorted_window(mctx, mctx->scratch);
     if (n == 0) return 0.0f;
 
     float med = _median_sorted(mctx->scratch, n);
 
     /* Compute absolute deviations and sort them */
-    float abs_dev[FOVET_MAD_MAX_WINDOW];
+    float abs_dev[ARD_MAD_MAX_WINDOW];
     for (uint16_t i = 0; i < n; i++) {
         abs_dev[i] = fabsf(mctx->scratch[i] - med);
     }
@@ -134,10 +134,10 @@ float fovet_mad_get_mad(const FovetMAD *ctx)
     return _median_sorted(abs_dev, n);
 }
 
-float fovet_mad_score(const FovetMAD *ctx, float value)
+float ard_mad_score(const ArdentMAD *ctx, float value)
 {
-    float med = fovet_mad_get_median(ctx);
-    float mad = fovet_mad_get_mad(ctx);
+    float med = ard_mad_get_median(ctx);
+    float mad = ard_mad_get_mad(ctx);
 
     float deviation = fabsf(value - med);
 

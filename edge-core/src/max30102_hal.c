@@ -1,5 +1,5 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@fovet.eu
@@ -9,8 +9,8 @@
  * -------------------------------------------------------------------------
  */
 
-#include "fovet/hal/max30102_hal.h"
-#include "fovet/hal/hal_time.h"
+#include "ardent/hal/max30102_hal.h"
+#include "ardent/hal/hal_time.h"
 
 #include <math.h>
 #include <string.h>
@@ -58,19 +58,19 @@
 #define MAX_PEAKS           20U
 
 typedef struct {
-    float    ir_window[FOVET_MAX30102_WINDOW_SIZE];
-    float    red_window[FOVET_MAX30102_WINDOW_SIZE];
+    float    ir_window[ARD_MAX30102_WINDOW_SIZE];
+    float    red_window[ARD_MAX30102_WINDOW_SIZE];
     uint32_t window_head;
     uint32_t window_count;
 
     float    last_bpm;
     float    last_rr_ms;   /* stored in hr.rmssd */
     float    last_spo2;    /* stored in hr.spo2  */
-} fovet_max30102_ctx_t;
+} ard_max30102_ctx_t;
 
-static fovet_max30102_ctx_t s_ctx;
-static fovet_i2c_write_fn_t s_write;
-static fovet_i2c_read_fn_t  s_read;
+static ard_max30102_ctx_t s_ctx;
+static ard_i2c_write_fn_t s_write;
+static ard_i2c_read_fn_t  s_read;
 static uint8_t              s_initialised;
 
 /* -------------------------------------------------------------------------
@@ -82,34 +82,34 @@ static void compute_bpm_spo2(void)
     uint32_t i;
 
     /* Build oldest-first view of the window */
-    float ir[FOVET_MAX30102_WINDOW_SIZE];
-    float red[FOVET_MAX30102_WINDOW_SIZE];
+    float ir[ARD_MAX30102_WINDOW_SIZE];
+    float red[ARD_MAX30102_WINDOW_SIZE];
 
-    for (i = 0; i < FOVET_MAX30102_WINDOW_SIZE; i++)
+    for (i = 0; i < ARD_MAX30102_WINDOW_SIZE; i++)
     {
-        uint32_t idx = (s_ctx.window_head + i) % FOVET_MAX30102_WINDOW_SIZE;
+        uint32_t idx = (s_ctx.window_head + i) % ARD_MAX30102_WINDOW_SIZE;
         ir[i]  = s_ctx.ir_window[idx];
         red[i] = s_ctx.red_window[idx];
     }
 
     /* DC levels (mean) */
     float dc_ir = 0.0f, dc_red = 0.0f;
-    for (i = 0; i < FOVET_MAX30102_WINDOW_SIZE; i++)
+    for (i = 0; i < ARD_MAX30102_WINDOW_SIZE; i++)
     {
         dc_ir  += ir[i];
         dc_red += red[i];
     }
-    dc_ir  /= (float)FOVET_MAX30102_WINDOW_SIZE;
-    dc_red /= (float)FOVET_MAX30102_WINDOW_SIZE;
+    dc_ir  /= (float)ARD_MAX30102_WINDOW_SIZE;
+    dc_red /= (float)ARD_MAX30102_WINDOW_SIZE;
 
     if (dc_ir <= 0.0f || dc_red <= 0.0f)
         return;
 
     /* AC signals (zero-mean) + RMS for SpO2 */
-    float ac_ir[FOVET_MAX30102_WINDOW_SIZE];
+    float ac_ir[ARD_MAX30102_WINDOW_SIZE];
     float rms_ir = 0.0f, rms_red = 0.0f;
 
-    for (i = 0; i < FOVET_MAX30102_WINDOW_SIZE; i++)
+    for (i = 0; i < ARD_MAX30102_WINDOW_SIZE; i++)
     {
         float air  = ir[i]  - dc_ir;
         float ared = red[i] - dc_red;
@@ -118,8 +118,8 @@ static void compute_bpm_spo2(void)
         rms_red += ared * ared;
     }
 
-    rms_ir  = sqrtf(rms_ir  / (float)FOVET_MAX30102_WINDOW_SIZE);
-    rms_red = sqrtf(rms_red / (float)FOVET_MAX30102_WINDOW_SIZE);
+    rms_ir  = sqrtf(rms_ir  / (float)ARD_MAX30102_WINDOW_SIZE);
+    rms_red = sqrtf(rms_red / (float)ARD_MAX30102_WINDOW_SIZE);
 
     /* SpO2 — ratio of ratios */
     if (rms_ir > 0.0f)
@@ -135,7 +135,7 @@ static void compute_bpm_spo2(void)
 
     /* Adaptive threshold: 40% of peak-to-peak amplitude */
     float min_ac = ac_ir[0], max_ac = ac_ir[0];
-    for (i = 1; i < FOVET_MAX30102_WINDOW_SIZE; i++)
+    for (i = 1; i < ARD_MAX30102_WINDOW_SIZE; i++)
     {
         if (ac_ir[i] < min_ac) min_ac = ac_ir[i];
         if (ac_ir[i] > max_ac) max_ac = ac_ir[i];
@@ -148,7 +148,7 @@ static void compute_bpm_spo2(void)
     uint32_t n_peaks  = 0;
     uint32_t last_peak = 0;
 
-    for (i = 1; i + 1 < FOVET_MAX30102_WINDOW_SIZE && n_peaks < MAX_PEAKS; i++)
+    for (i = 1; i + 1 < ARD_MAX30102_WINDOW_SIZE && n_peaks < MAX_PEAKS; i++)
     {
         int above     = ac_ir[i] > threshold;
         int local_max = ac_ir[i] > ac_ir[i - 1] && ac_ir[i] > ac_ir[i + 1];
@@ -171,8 +171,8 @@ static void compute_bpm_spo2(void)
 
     float avg_rr_samples = rr_sum / (float)(n_peaks - 1U);
 
-    /* Convert to ms: 1 sample = 1000 ms / FOVET_MAX30102_SAMPLE_RATE */
-    float rr_ms = avg_rr_samples * (1000.0f / (float)FOVET_MAX30102_SAMPLE_RATE);
+    /* Convert to ms: 1 sample = 1000 ms / ARD_MAX30102_SAMPLE_RATE */
+    float rr_ms = avg_rr_samples * (1000.0f / (float)ARD_MAX30102_SAMPLE_RATE);
     float bpm   = 60000.0f / rr_ms;
 
     /* Clamp to physiological range [30, 220] BPM */
@@ -184,82 +184,82 @@ static void compute_bpm_spo2(void)
 }
 
 /* -------------------------------------------------------------------------
- * fovet_max30102_set_i2c
+ * ard_max30102_set_i2c
  * ------------------------------------------------------------------------- */
 
-void fovet_max30102_set_i2c(fovet_i2c_write_fn_t write_fn,
-                             fovet_i2c_read_fn_t  read_fn)
+void ard_max30102_set_i2c(ard_i2c_write_fn_t write_fn,
+                             ard_i2c_read_fn_t  read_fn)
 {
     s_write = write_fn;
     s_read  = read_fn;
 }
 
 /* -------------------------------------------------------------------------
- * fovet_max30102_init
+ * ard_max30102_init
  * ------------------------------------------------------------------------- */
 
-int fovet_max30102_init(void)
+int ard_max30102_init(void)
 {
     uint8_t part_id;
 
     /* 1. Verify PART_ID */
-    if (s_read(FOVET_MAX30102_I2C_ADDR, REG_PART_ID, &part_id, 1) != 0)
-        return FOVET_HR_ERR_I2C;
+    if (s_read(ARD_MAX30102_I2C_ADDR, REG_PART_ID, &part_id, 1) != 0)
+        return ARD_HR_ERR_I2C;
 
-    if (part_id != FOVET_MAX30102_PART_ID)
-        return FOVET_HR_ERR_ID;
+    if (part_id != ARD_MAX30102_PART_ID)
+        return ARD_HR_ERR_ID;
 
     /* 2. Software reset */
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_MODE_CONFIG, MODE_RESET) != 0)
-        return FOVET_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_MODE_CONFIG, MODE_RESET) != 0)
+        return ARD_HR_ERR_I2C;
 
     /* 3. Configure SpO2 mode */
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_FIFO_CONFIG, FIFO_CFG_25HZ)  != 0) return FOVET_HR_ERR_I2C;
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_MODE_CONFIG, MODE_SPO2)      != 0) return FOVET_HR_ERR_I2C;
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_SPO2_CONFIG, SPO2_CFG)       != 0) return FOVET_HR_ERR_I2C;
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_LED1_PA,     LED_AMPLITUDE)  != 0) return FOVET_HR_ERR_I2C;
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_LED2_PA,     LED_AMPLITUDE)  != 0) return FOVET_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_FIFO_CONFIG, FIFO_CFG_25HZ)  != 0) return ARD_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_MODE_CONFIG, MODE_SPO2)      != 0) return ARD_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_SPO2_CONFIG, SPO2_CFG)       != 0) return ARD_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_LED1_PA,     LED_AMPLITUDE)  != 0) return ARD_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_LED2_PA,     LED_AMPLITUDE)  != 0) return ARD_HR_ERR_I2C;
 
     /* 4. Reset FIFO pointers */
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_FIFO_WR_PTR, 0x00U) != 0) return FOVET_HR_ERR_I2C;
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_OVF_COUNTER,  0x00U) != 0) return FOVET_HR_ERR_I2C;
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_FIFO_RD_PTR,  0x00U) != 0) return FOVET_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_FIFO_WR_PTR, 0x00U) != 0) return ARD_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_OVF_COUNTER,  0x00U) != 0) return ARD_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_FIFO_RD_PTR,  0x00U) != 0) return ARD_HR_ERR_I2C;
 
     /* 5. Register in biosignal HAL */
-    int rc = fovet_hal_biosignal_register(FOVET_SOURCE_HR, fovet_hal_hr_read);
-    if (rc != FOVET_HAL_OK)
+    int rc = ard_hal_biosignal_register(ARD_SOURCE_HR, ard_hal_hr_read);
+    if (rc != ARD_HAL_OK)
         return rc;
 
     s_initialised = 1U;
-    return FOVET_HAL_OK;
+    return ARD_HAL_OK;
 }
 
 /* -------------------------------------------------------------------------
- * fovet_hal_hr_read
+ * ard_hal_hr_read
  * ------------------------------------------------------------------------- */
 
-int fovet_hal_hr_read(fovet_biosignal_sample_t *out)
+int ard_hal_hr_read(ard_biosignal_sample_t *out)
 {
     uint8_t wr_ptr, rd_ptr;
     uint8_t raw[6];
 
     /* Check FIFO has at least one sample */
-    if (s_read(FOVET_MAX30102_I2C_ADDR, REG_FIFO_WR_PTR, &wr_ptr, 1) != 0)
-        return FOVET_HR_ERR_I2C;
-    if (s_read(FOVET_MAX30102_I2C_ADDR, REG_FIFO_RD_PTR, &rd_ptr, 1) != 0)
-        return FOVET_HR_ERR_I2C;
+    if (s_read(ARD_MAX30102_I2C_ADDR, REG_FIFO_WR_PTR, &wr_ptr, 1) != 0)
+        return ARD_HR_ERR_I2C;
+    if (s_read(ARD_MAX30102_I2C_ADDR, REG_FIFO_RD_PTR, &rd_ptr, 1) != 0)
+        return ARD_HR_ERR_I2C;
 
     if (wr_ptr == rd_ptr)
-        return FOVET_HR_ERR_NODATA;
+        return ARD_HR_ERR_NODATA;
 
     /* Read one sample: 3 bytes RED + 3 bytes IR */
-    if (s_read(FOVET_MAX30102_I2C_ADDR, REG_FIFO_DATA, raw, 6) != 0)
-        return FOVET_HR_ERR_I2C;
+    if (s_read(ARD_MAX30102_I2C_ADDR, REG_FIFO_DATA, raw, 6) != 0)
+        return ARD_HR_ERR_I2C;
 
     /* Advance FIFO read pointer */
     uint8_t new_rd = (uint8_t)((rd_ptr + 1U) % 32U);
-    if (s_write(FOVET_MAX30102_I2C_ADDR, REG_FIFO_RD_PTR, new_rd) != 0)
-        return FOVET_HR_ERR_I2C;
+    if (s_write(ARD_MAX30102_I2C_ADDR, REG_FIFO_RD_PTR, new_rd) != 0)
+        return ARD_HR_ERR_I2C;
 
     /* Extract 18-bit values (bits [17:0] of each 3-byte word) */
     uint32_t red_raw = ((uint32_t)(raw[0] & 0x03U) << 16)
@@ -272,43 +272,43 @@ int fovet_hal_hr_read(fovet_biosignal_sample_t *out)
     /* Accumulate into circular window */
     s_ctx.ir_window[s_ctx.window_head]  = (float)ir_raw;
     s_ctx.red_window[s_ctx.window_head] = (float)red_raw;
-    s_ctx.window_head = (s_ctx.window_head + 1U) % FOVET_MAX30102_WINDOW_SIZE;
-    if (s_ctx.window_count < FOVET_MAX30102_WINDOW_SIZE)
+    s_ctx.window_head = (s_ctx.window_head + 1U) % ARD_MAX30102_WINDOW_SIZE;
+    if (s_ctx.window_count < ARD_MAX30102_WINDOW_SIZE)
         s_ctx.window_count++;
 
     /* Window still warming up */
-    if (s_ctx.window_count < FOVET_MAX30102_WINDOW_SIZE)
-        return FOVET_HR_ERR_NODATA;
+    if (s_ctx.window_count < ARD_MAX30102_WINDOW_SIZE)
+        return ARD_HR_ERR_NODATA;
 
     /* Compute BPM + SpO2 */
     compute_bpm_spo2();
 
     if (out != NULL)
     {
-        out->source       = FOVET_SOURCE_HR;
+        out->source       = ARD_SOURCE_HR;
         out->timestamp_ms = hal_time_ms();
         out->value.hr.bpm   = s_ctx.last_bpm;
         out->value.hr.spo2  = s_ctx.last_spo2;
         out->value.hr.rmssd = s_ctx.last_rr_ms;
     }
 
-    return FOVET_HAL_OK;
+    return ARD_HAL_OK;
 }
 
 /* -------------------------------------------------------------------------
- * fovet_max30102_get_spo2
+ * ard_max30102_get_spo2
  * ------------------------------------------------------------------------- */
 
-float fovet_max30102_get_spo2(void)
+float ard_max30102_get_spo2(void)
 {
     return s_ctx.last_spo2;
 }
 
 /* -------------------------------------------------------------------------
- * fovet_max30102_reset
+ * ard_max30102_reset
  * ------------------------------------------------------------------------- */
 
-void fovet_max30102_reset(void)
+void ard_max30102_reset(void)
 {
     memset(&s_ctx, 0, sizeof(s_ctx));
     s_initialised = 0U;
