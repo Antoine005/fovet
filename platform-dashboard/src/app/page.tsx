@@ -151,6 +151,14 @@ export default function DashboardPage() {
     await apiFetch(`/api/devices/${id}`, { method: "DELETE" });
   };
 
+  const handleJanitor = async () => {
+    const res = await apiFetch("/api/devices/janitor", { method: "POST" });
+    if (res.ok) {
+      const r = await res.json() as { deactivated: number; purged: number };
+      alert(`Nettoyage terminé — ${r.deactivated} désactivé(s), ${r.purged} supprimé(s)`);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100 p-6">
       <header className="mb-6 flex items-center justify-between">
@@ -239,6 +247,13 @@ export default function DashboardPage() {
             className="text-xs px-2.5 py-1.5 rounded border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
           >
             + Capteur
+          </button>
+          <button
+            onClick={handleJanitor}
+            title={`Désactive les capteurs sans données depuis ${7}j, supprime ceux sans données depuis ${30}j`}
+            className="text-xs px-2.5 py-1.5 rounded border border-gray-800 text-gray-600 hover:text-gray-400 hover:border-gray-600 transition-colors"
+          >
+            Nettoyer
           </button>
           <button
             onClick={() => {

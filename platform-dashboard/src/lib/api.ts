@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { emitReading, subscribeToReadings } from "@/lib/event-bus";
 import { checkRateLimit, loginBucket } from "@/lib/rate-limiter";
 import { getMqttStatus } from "@/lib/mqtt-ingestion";
+import { runJanitor, startJanitorScheduler } from "@/lib/device-janitor";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -102,6 +103,9 @@ const DeviceSchema = z.object({
 // GET /api/health — public (lightweight ping)
 // -------------------------------------------------------------------------
 app.get("/health", (c) => c.json({ status: "ok", service: "ardent-watch" }));
+
+// Start background janitor (no-op if already started — module is a singleton)
+startJanitorScheduler();
 
 // -------------------------------------------------------------------------
 // GET /api/healthz — extended health check (MQTT + DB) — public
@@ -215,6 +219,14 @@ app.post("/auth/logout", (c) => {
   deleteCookie(c, "ard_token",   { path: "/" });
   deleteCookie(c, "ard_refresh", { path: "/" });
   return c.json({ ok: true });
+});
+
+// -------------------------------------------------------------------------
+// POST /api/devices/janitor — run stale device cleanup immediately
+// -------------------------------------------------------------------------
+app.post("/devices/janitor", cookieAuth, async (c) => {
+  const result = await runJanitor();
+  return c.json(result);
 });
 
 // -------------------------------------------------------------------------
