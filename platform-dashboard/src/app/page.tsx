@@ -32,6 +32,12 @@ interface Device {
   latestLabel: string | null;
 }
 
+interface DeviceForm {
+  name: string;
+  mqttClientId: string;
+  location: string;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [devices, setDevices] = useState<Device[]>([]);
@@ -39,6 +45,13 @@ export default function DashboardPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [view, setView] = useState<"fleet" | "detail" | "pti" | "fatigue" | "thermique" | "sante" | "worker" | "forge">("fleet");
   const [clock, setClock] = useState<string>("");
+
+  // Device CRUD modal
+  const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+  const [deviceForm, setDeviceForm] = useState<DeviceForm>({ name: "", mqttClientId: "", location: "" });
+  const [deviceFormError, setDeviceFormError] = useState<string | null>(null);
+  const [submittingDevice, setSubmittingDevice] = useState(false);
 
   useEffect(() => {
     setClock(new Date().toLocaleString("fr-FR"));
@@ -82,6 +95,59 @@ export default function DashboardPage() {
   const selectWorker = (id: string) => {
     setSelectedId(id);
     setView("worker");
+  };
+
+  const openAddDevice = () => {
+    setEditingDeviceId(null);
+    setDeviceForm({ name: "", mqttClientId: "", location: "" });
+    setDeviceFormError(null);
+    setShowDeviceModal(true);
+  };
+
+  const openEditDevice = (d: Device) => {
+    setEditingDeviceId(d.id);
+    setDeviceForm({ name: d.name, mqttClientId: d.mqttClientId, location: d.location ?? "" });
+    setDeviceFormError(null);
+    setShowDeviceModal(true);
+  };
+
+  const handleDeviceSubmit = async () => {
+    setDeviceFormError(null);
+    if (!deviceForm.name.trim() || !deviceForm.mqttClientId.trim()) {
+      setDeviceFormError("Nom et Client MQTT sont obligatoires");
+      return;
+    }
+    setSubmittingDevice(true);
+    try {
+      const res = editingDeviceId
+        ? await apiFetch(`/api/devices/${editingDeviceId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: deviceForm.name.trim(), location: deviceForm.location.trim() || undefined }),
+          })
+        : await apiFetch("/api/devices", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: deviceForm.name.trim(),
+              mqttClientId: deviceForm.mqttClientId.trim(),
+              location: deviceForm.location.trim() || undefined,
+            }),
+          });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setDeviceFormError((err as { error?: string }).error ?? `Erreur ${res.status}`);
+        return;
+      }
+      setShowDeviceModal(false);
+    } finally {
+      setSubmittingDevice(false);
+    }
+  };
+
+  const handleDeleteDevice = async (id: string) => {
+    if (!confirm("Supprimer ce capteur et toutes ses données ?")) return;
+    await apiFetch(`/api/devices/${id}`, { method: "DELETE" });
   };
 
   return (
@@ -160,6 +226,12 @@ export default function DashboardPage() {
           </div>
           <span className="text-xs text-gray-500 font-mono">{clock}</span>
           <button
+            onClick={openAddDevice}
+            className="text-xs px-2.5 py-1.5 rounded border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+          >
+            + Capteur
+          </button>
+          <button
             onClick={() => {
               apiFetch("/api/auth/logout", { method: "POST" }).finally(() => {
                 router.push("/login");
@@ -182,9 +254,15 @@ export default function DashboardPage() {
         <div className="max-w-2xl mx-auto mt-16 text-center">
           <div className="text-4xl mb-4">📡</div>
           <h2 className="text-lg font-semibold text-white mb-2">Aucun capteur enregistré</h2>
-          <p className="text-gray-400 text-sm mb-6">
-            Enregistrez votre premier capteur via l&apos;API, puis démarrez la transmission MQTT.
+          <p className="text-gray-400 text-sm mb-4">
+            Enregistrez votre premier capteur via le formulaire ou via l&apos;API, puis démarrez la transmission MQTT.
           </p>
+          <button
+            onClick={openAddDevice}
+            className="mb-6 px-4 py-2 rounded border border-gray-600 text-sm text-white hover:border-gray-400 transition-colors"
+          >
+            + Ajouter un capteur
+          </button>
           <div className="text-left space-y-4">
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
@@ -327,9 +405,22 @@ pio run --target upload --environment zscore_demo`}
       {view === "detail" && devices.length > 0 && (
         <>
           <section className="mb-6">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
-              Capteurs actifs
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
+                Capteurs actifs
+              </h2>
+              {selectedId && (() => {
+                const sel = devices.find((d) => d.id === selectedId);
+                return sel ? (
+                  <button
+                    onClick={() => openEditDevice(sel)}
+                    className="text-xs text-gray-600 hover:text-gray-300 border border-gray-800 hover:border-gray-600 rounded px-2 py-1 transition-colors"
+                  >
+                    Modifier / Supprimer
+                  </button>
+                ) : null;
+              })()}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {devices.map((d) => (
                 <DeviceCard
@@ -352,6 +443,83 @@ pio run --target upload --environment zscore_demo`}
             </div>
           )}
         </>
+      )}
+      {/* Device create/edit modal */}
+      {showDeviceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowDeviceModal(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-semibold text-white mb-4">
+              {editingDeviceId ? "Modifier le capteur" : "Ajouter un capteur"}
+            </h2>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Nom</label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={deviceForm.name}
+                  onChange={(e) => setDeviceForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="ESP32-CAM 001"
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-gray-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Client MQTT</label>
+                <input
+                  type="text"
+                  value={deviceForm.mqttClientId}
+                  onChange={(e) => setDeviceForm((f) => ({ ...f, mqttClientId: e.target.value }))}
+                  placeholder="esp32-cam-001"
+                  disabled={!!editingDeviceId}
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 disabled:opacity-40"
+                />
+                {editingDeviceId && <p className="text-[10px] text-gray-600 mt-0.5">Non modifiable après création</p>}
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Emplacement</label>
+                <input
+                  type="text"
+                  value={deviceForm.location}
+                  onChange={(e) => setDeviceForm((f) => ({ ...f, location: e.target.value }))}
+                  placeholder="Bureau, Zone A…"
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-gray-500"
+                />
+              </div>
+            </div>
+
+            {deviceFormError && (
+              <p className="text-red-400 text-xs mt-3">{deviceFormError}</p>
+            )}
+
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={handleDeviceSubmit}
+                disabled={submittingDevice}
+                className="flex-1 py-2 rounded bg-white text-gray-900 text-sm font-semibold hover:bg-gray-100 disabled:opacity-50 transition-colors"
+              >
+                {submittingDevice ? "En cours…" : editingDeviceId ? "Enregistrer" : "Créer"}
+              </button>
+              {editingDeviceId && (
+                <button
+                  onClick={async () => {
+                    await handleDeleteDevice(editingDeviceId);
+                    setShowDeviceModal(false);
+                  }}
+                  className="px-3 py-2 rounded border border-red-700/50 text-red-400 text-sm hover:bg-red-900/20 transition-colors"
+                >
+                  Supprimer
+                </button>
+              )}
+              <button
+                onClick={() => setShowDeviceModal(false)}
+                className="px-3 py-2 rounded border border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

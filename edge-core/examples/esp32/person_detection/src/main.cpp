@@ -39,7 +39,7 @@
  */
 
 #include "config.h"
-#include "fovet_model_manifest.h" /* Forge-generated model metadata */
+#include "ard_model_manifest.h" /* Forge-generated model metadata */
 
 /* --- TFLite Micro (ESP32 port) ------------------------------------------- */
 #include <TensorFlowLite_ESP32.h>

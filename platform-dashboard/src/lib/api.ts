@@ -306,6 +306,17 @@ app.patch("/devices/:id", cookieAuth, async (c) => {
 });
 
 // -------------------------------------------------------------------------
+// DELETE /api/devices/:id — remove a device and all its readings/alerts
+// -------------------------------------------------------------------------
+app.delete("/devices/:id", cookieAuth, async (c) => {
+  const { id } = c.req.param();
+  const existing = await prisma.device.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) return c.json({ error: "Device not found" }, 404);
+  await prisma.device.delete({ where: { id } });
+  return c.json({ ok: true });
+});
+
+// -------------------------------------------------------------------------
 // GET /api/devices/:id/readings — last N readings with cursor pagination
 // ?limit=100&cursor=<bigint-id>  (cursor = last id from previous page, desc order)
 // -------------------------------------------------------------------------

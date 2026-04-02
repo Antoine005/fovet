@@ -27,7 +27,7 @@
  */
 
 #include "config.h"              /* WiFi/MQTT credentials — DO NOT COMMIT */
-#include "fovet_model_manifest.h" /* Forge-generated model metadata       */
+#include "ard_model_manifest.h" /* Forge-generated model metadata       */
 
 extern "C" {
 #include "fovet/zscore.h"

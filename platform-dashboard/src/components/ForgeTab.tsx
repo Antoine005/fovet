@@ -187,6 +187,9 @@ export default function ForgeTab() {
   const [trainProfile,   setTrainProfile]   = useState("standard");
   const [submittingJob,  setSubmittingJob]  = useState(false);
   const [submittingDeploy, setSubmittingDeploy] = useState(false);
+  const [validating,     setValidating]     = useState(false);
+  const [showLogs,       setShowLogs]       = useState(false);
+  const [logsContent,    setLogsContent]    = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     // Models + drift
@@ -298,6 +301,34 @@ export default function ForgeTab() {
     } finally {
       setSubmittingJob(false);
     }
+  };
+
+  const handleValidate = async (decision: "PROMOTE" | "REJECT") => {
+    const job = recentJobs.find((j) => j.status === "DONE");
+    if (!job) return;
+    setValidating(true);
+    try {
+      const res = await apiFetch(`/api/forge/jobs/${job.id}/validate`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, actor: "operator" }),
+      });
+      if (res.ok) await fetchAll();
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleShowLogs = async () => {
+    if (showLogs) { setShowLogs(false); return; }
+    const job = activeJob ?? recentJobs[0];
+    if (!job) return;
+    const res = await apiFetch(`/api/forge/jobs/${job.id}/logs`);
+    if (res.ok) {
+      const data = await res.json();
+      setLogsContent(data.logs ?? "(aucun log)");
+    }
+    setShowLogs(true);
   };
 
   const handleDeploy = async () => {
@@ -491,7 +522,10 @@ export default function ForgeTab() {
                   <span className="font-mono text-[9px] text-gray-500">
                     {activeJob.model ? `${activeJob.model.name} (base)` : "Nouveau modèle"}
                   </span>
-                  <button className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded border border-transparent transition-colors">
+                  <button
+                    onClick={handleShowLogs}
+                    className={`px-2 py-1 text-[10px] font-semibold uppercase tracking-wide hover:bg-gray-800 rounded border transition-colors ${showLogs ? "text-blue-400 border-blue-700/40" : "text-gray-500 border-transparent hover:text-gray-300"}`}
+                  >
                     Logs
                   </button>
                 </div>
@@ -538,13 +572,13 @@ export default function ForgeTab() {
               )}
 
               {/* Logs */}
-              {activeJob.logs && (
+              {(activeJob.logs || (showLogs && logsContent)) && (
                 <>
                   <div className="font-mono text-[9px] uppercase tracking-[.14em] text-gray-700 mb-1.5 pb-1 border-b border-gray-800">
                     Logs temps réel
                   </div>
                   <div className="bg-gray-950 border border-gray-800 rounded px-2.5 py-2 font-mono text-[10px] text-gray-500 max-h-28 overflow-y-auto leading-7 whitespace-pre-wrap">
-                    {activeJob.logs}
+                    {showLogs && logsContent ? logsContent : activeJob.logs}
                   </div>
                 </>
               )}
@@ -652,10 +686,18 @@ export default function ForgeTab() {
                   Cette décision est journalisée dans l&apos;audit log avec horodatage et identifiant opérateur.
                 </div>
                 <div className="flex gap-2 mt-2.5">
-                  <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-green-900/30 text-green-400 border border-green-700/40 hover:bg-green-900/50 transition-colors">
+                  <button
+                    onClick={() => handleValidate("PROMOTE")}
+                    disabled={validating}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-green-900/30 text-green-400 border border-green-700/40 hover:bg-green-900/50 disabled:opacity-50 transition-colors"
+                  >
                     ✓ Valider &amp; promouvoir en staging
                   </button>
-                  <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-red-900/30 text-red-400 border border-red-700/40 hover:bg-red-900/50 transition-colors">
+                  <button
+                    onClick={() => handleValidate("REJECT")}
+                    disabled={validating}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-red-900/30 text-red-400 border border-red-700/40 hover:bg-red-900/50 disabled:opacity-50 transition-colors"
+                  >
                     ✕ Rejeter &amp; archiver
                   </button>
                 </div>
