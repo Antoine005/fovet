@@ -5,7 +5,7 @@
 Zéro cloud US. Cible : défense, industriel, aéronautique.
 
 - Site : [ardent.io](https://ardent.io)
-- Contact : contact@ardent.io
+- Contact : contact@fovet.eu
 - Auteur : Antoine Porte
 
 ---
@@ -56,10 +56,11 @@ Zéro cloud US. Cible : défense, industriel, aéronautique.
 ### 1. Pulse — tester le SDK C en natif (PC)
 
 ```bash
+# Depuis un terminal MSYS2 MINGW64 (Windows)
+export PATH="/c/msys64/mingw64/bin:/c/msys64/usr/bin:$PATH"
 cd edge-core/tests
 make
-./test_zscore
-# 16/16 tests passed
+# 391/391 tests passed (13 suites)
 ```
 
 ### 2. Forge — calibrer un détecteur sur données synthétiques
@@ -71,13 +72,26 @@ uv sync --extra ml        # + TensorFlow (AutoEncoder)
 uv run forge run --config configs/demo_zscore.yaml
 ```
 
-### 3. Watch — démarrer le dashboard localement
+### 3. Watch — démarrer le stack complet (dashboard + MQTT)
+
+```powershell
+# Windows — PowerShell
+.\dev.ps1                  # lance Mosquitto + MQTT listener + Next.js + ouvre le navigateur
+.\dev.ps1 -NoBrowser       # sans ouvrir le navigateur automatiquement
+```
+
+```bash
+# Depuis la racine (MSYS2 ou tout terminal avec make)
+make dev
+```
+
+Ou individuellement :
 
 ```bash
 cd platform-dashboard
-cp .env.example .env      # remplir les variables
-npm install
-npm run dev               # http://localhost:3000
+cp .env.example .env       # remplir les variables
+pnpm install
+pnpm dev                   # http://localhost:3000
 ```
 
 ### 4. Démo — simuler des capteurs sans hardware (U5)
@@ -165,4 +179,4 @@ ardent/
 
 Dual License :
 - **LGPL v3** pour usage non commercial / open source
-- **Licence commerciale** pour toute entreprise — [contact@ardent.io](mailto:contact@ardent.io)
+- **Licence commerciale** pour toute entreprise — [contact@fovet.eu](mailto:contact@fovet.eu)

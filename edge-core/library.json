@@ -9,6 +9,19 @@
   "build": {
     "includeDir": "include",
     "srcDir": "src",
-    "srcFilter": ["+<zscore.c>", "+<drift.c>", "+<mad.c>", "+<platform/platform_esp32.cpp>"]
+    "srcFilter": [
+      "+<zscore.c>",
+      "+<drift.c>",
+      "+<mad.c>",
+      "+<biosignal_hal.c>",
+      "+<mpu6050_hal.c>",
+      "+<max30102_hal.c>",
+      "+<dht22_hal.c>",
+      "+<drivers/mpu6050.c>",
+      "+<profiles/pti_profile.c>",
+      "+<profiles/fatigue_profile.c>",
+      "+<profiles/temp_profile.c>",
+      "+<platform/platform_esp32.cpp>"
+    ]
   }
 }

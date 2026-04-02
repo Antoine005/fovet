@@ -28,8 +28,8 @@ test: test-edge test-watch test-forge
 test-edge:
 	@echo ""
 	@echo "═══ edge-core (gcc natif) ═══════════════════"
-	@export PATH="$(MSYS2_PATH):$$PATH" TEMP=/tmp TMP=/tmp && \
-	 cd edge-core/tests && $(MAKE) --no-print-directory clean all
+	@export PATH="$(MSYS2_PATH):$$PATH" TEMP=/tmp TMP=/tmp TMPDIR=/tmp && \
+	 cd edge-core/tests && $(MAKE) CC=/c/msys64/mingw64/bin/gcc --no-print-directory clean all
 
 # ── Tests — platform-dashboard (vitest) ──────────────────────────────────────
 test-watch:

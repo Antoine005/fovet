@@ -73,8 +73,18 @@ if ($mosqRunning) {
 # ── 2. MQTT Listener ─────────────────────────────────────────────────────────
 step "2/3" "MQTT Listener..."
 $listenerScript = "$Root\scripts\vigie_mqtt_listener.py"
-$uvExe = "C:\Users\Antoine\AppData\Local\Programs\Python\Python313\Scripts\uv.exe"
-if ((Test-Path $listenerScript) -and (Test-Path $uvExe)) {
+# Find uv: try common install locations then fall back to PATH
+$uvExe = @(
+    "$env:LOCALAPPDATA\Programs\Python\Python313\Scripts\uv.exe",
+    "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts\uv.exe",
+    "$env:USERPROFILE\.local\bin\uv.exe",
+    "$env:USERPROFILE\.cargo\bin\uv.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $uvExe) {
+    $uvCmd = Get-Command uv -ErrorAction SilentlyContinue
+    if ($uvCmd) { $uvExe = $uvCmd.Source }
+}
+if ((Test-Path $listenerScript) -and $uvExe) {
     $p = Start-Process -FilePath $uvExe `
         -ArgumentList "run --with paho-mqtt `"$listenerScript`"" `
         -PassThru -WindowStyle Normal `
