@@ -1,4 +1,4 @@
-# Ardent — Dev environment launcher
+﻿# Ardent — Dev environment launcher
 # Usage    : .\dev.ps1
 # Options  : -NoBrowser  (skip auto-open)
 # Stop     : Ctrl+C in this window — kills all child processes

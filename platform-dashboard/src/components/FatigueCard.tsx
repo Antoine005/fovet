@@ -165,7 +165,7 @@ export function FatigueCard({ deviceId, deviceName, location, selected, onSelect
         )}
       </div>
 
-      {/* Sparkline */}
+      {/* Sparkline / warmup progress */}
       {error ? (
         <div className="h-14 flex items-center justify-center text-red-400 text-xs">
           {error}
@@ -173,6 +173,19 @@ export function FatigueCard({ deviceId, deviceName, location, selected, onSelect
       ) : readings.length === 0 ? (
         <div className="h-14 flex items-center justify-center text-gray-600 text-xs">
           En attente de données…
+        </div>
+      ) : level === "UNKNOWN" ? (
+        <div className="h-14 flex flex-col justify-center gap-1.5 px-0.5">
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>Initialisation</span>
+            <span className="tabular-nums font-mono">{readings.length} / {WARMUP_SAMPLES}</span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(100, (readings.length / WARMUP_SAMPLES) * 100)}%` }}
+            />
+          </div>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={56}>
