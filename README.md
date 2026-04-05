@@ -4,8 +4,8 @@
 
 Zéro cloud US. Cible : défense, industriel, aéronautique.
 
-- Site : [ardent.io](https://ardent.io)
-- Contact : contact@fovet.eu
+- Site : [ardent-ai.fr](https://ardent-ai.fr)
+- Contact : contact@ardent-ai.fr
 - Auteur : Antoine Porte
 
 ---
@@ -179,4 +179,4 @@ ardent/
 
 Dual License :
 - **LGPL v3** pour usage non commercial / open source
-- **Licence commerciale** pour toute entreprise — [contact@fovet.eu](mailto:contact@fovet.eu)
+- **Licence commerciale** pour toute entreprise — [contact@ardent-ai.fr](mailto:contact@ardent-ai.fr)
