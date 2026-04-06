@@ -1,0 +1,8 @@
+{
+  "id": "zscore_demo",
+  "label": "Z-Score Demo",
+  "env": "esp32cam",
+  "description": "Signal synthétique → Z-Score + Drift → Watch MQTT",
+  "requiredSensors": [],
+  "warnIfMissing": []
+}

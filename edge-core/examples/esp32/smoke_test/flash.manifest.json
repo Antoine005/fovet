@@ -1,0 +1,8 @@
+{
+  "id": "smoke_test",
+  "label": "Smoke Test",
+  "env": "smoke",
+  "description": "Test complet SDK — HAL + Z-Score + LED (aucun capteur requis)",
+  "requiredSensors": [],
+  "warnIfMissing": []
+}
