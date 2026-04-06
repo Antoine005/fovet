@@ -468,6 +468,94 @@ def deploy_full(
         console.print("[green]OK[/green] Flash complete. Open Watch to monitor your device.")
 
 
+@app.command(name="algorithms")
+def algorithms() -> None:
+    """Print available detector algorithms as JSON — consumed by Watch GET /api/forge/algorithms."""
+    import json  # noqa: PLC0415
+
+    data = [
+        {
+            "id": "zscore",
+            "name": "Z-Score",
+            "description": "Détecteur statistique univarié. Baseline stable. Export header C, zéro malloc.",
+            "export_format": "c_header",
+            "ram_bytes_estimate": "16–64",
+            "params": [
+                {"key": "threshold_sigma", "type": "float", "default": 3.0, "min": 1.0, "max": 6.0},
+                {"key": "min_samples",     "type": "int",   "default": 30,  "min": 10,  "max": 512},
+            ],
+            "suitable_for": ["vibration", "acceleration", "single-channel"],
+        },
+        {
+            "id": "isolation_forest",
+            "name": "Isolation Forest",
+            "description": "Détecteur multivarié tabulaire. Pas d'hypothèse temporelle. Export header C.",
+            "export_format": "c_header",
+            "ram_bytes_estimate": "< 512",
+            "params": [
+                {"key": "n_estimators",  "type": "int",   "default": 100,  "min": 10,   "max": 200},
+                {"key": "contamination", "type": "float", "default": 0.05, "min": 0.01, "max": 0.2},
+            ],
+            "suitable_for": ["multivariate", "tabular"],
+        },
+        {
+            "id": "autoencoder",
+            "name": "AutoEncoder",
+            "description": "Réseau dense (Keras). Détection par reconstruction. Export TFLite Micro.",
+            "export_format": "tflite",
+            "ram_bytes_estimate": "8000–32000",
+            "params": [
+                {"key": "latent_dim",           "type": "int",   "default": 8,    "min": 2,    "max": 32},
+                {"key": "epochs",               "type": "int",   "default": 50,   "min": 5,    "max": 200},
+                {"key": "threshold_percentile", "type": "float", "default": 95.0, "min": 50.0, "max": 99.9},
+            ],
+            "suitable_for": ["complex-temporal", "high-accuracy"],
+            "requires": "uv sync --extra ml",
+        },
+        {
+            "id": "lstm_autoencoder",
+            "name": "LSTM AutoEncoder",
+            "description": "Réseau LSTM (Keras). Contexte temporel. Export TFLite Micro.",
+            "export_format": "tflite",
+            "ram_bytes_estimate": "16000–64000",
+            "params": [
+                {"key": "sequence_length",      "type": "int",   "default": 30,   "min": 5,    "max": 100},
+                {"key": "latent_dim",           "type": "int",   "default": 16,   "min": 2,    "max": 64},
+                {"key": "epochs",               "type": "int",   "default": 50,   "min": 5,    "max": 200},
+                {"key": "threshold_percentile", "type": "float", "default": 95.0, "min": 50.0, "max": 99.9},
+            ],
+            "suitable_for": ["complex-temporal", "time-series"],
+            "requires": "uv sync --extra ml",
+        },
+        {
+            "id": "ewma_drift",
+            "name": "Seuil adaptatif EWMA",
+            "description": "Double EMA pour drift progressif. Très faible RAM. Export header C.",
+            "export_format": "c_header",
+            "ram_bytes_estimate": "32",
+            "params": [
+                {"key": "alpha_fast",           "type": "float", "default": 0.1,  "min": 0.01, "max": 0.5},
+                {"key": "alpha_slow",           "type": "float", "default": 0.01, "min": 0.001,"max": 0.1},
+                {"key": "threshold_percentile", "type": "float", "default": 99.0, "min": 90.0, "max": 99.9},
+            ],
+            "suitable_for": ["slow-drift", "temperature", "pressure"],
+        },
+        {
+            "id": "mad",
+            "name": "MAD (Médiane)",
+            "description": "Détecteur robuste basé sur médiane glissante. Insensible aux outliers. Export header C.",
+            "export_format": "c_header",
+            "ram_bytes_estimate": "64–256",
+            "params": [
+                {"key": "win_size",             "type": "int",   "default": 32,   "min": 4,    "max": 128},
+                {"key": "threshold_percentile", "type": "float", "default": 99.0, "min": 90.0, "max": 99.9},
+            ],
+            "suitable_for": ["vibration", "acceleration", "robust"],
+        },
+    ]
+    print(json.dumps(data, ensure_ascii=False))
+
+
 @app.command()
 def version() -> None:
     """Print Forge version."""

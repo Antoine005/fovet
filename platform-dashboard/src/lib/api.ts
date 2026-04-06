@@ -16,9 +16,11 @@ import { emitReading, subscribeToReadings } from "@/lib/event-bus";
 import { checkRateLimit, loginBucket } from "@/lib/rate-limiter";
 import { getMqttStatus } from "@/lib/mqtt-ingestion";
 import { runJanitor, startJanitorScheduler } from "@/lib/device-janitor";
-import { spawn } from "child_process";
+import { spawn, exec } from "child_process";
+import { promisify } from "util";
 import fs from "fs";
 import path from "path";
+import { flashJobs } from "@/lib/flash-jobs";
 
 // Re-export loginBucket so api.test.ts can clear it between tests
 export { loginBucket };
@@ -870,6 +872,9 @@ const ForgeJobSchema = z.object({
 const REPO_ROOT     = path.resolve(process.cwd(), "..");
 const CONFIGS_DIR   = path.join(REPO_ROOT, "automl-pipeline", "configs");
 const UV_EXE        = process.env.UV_PATH ?? "uv";
+const execAsync  = promisify(exec);
+const AUTOML_DIR = path.join(REPO_ROOT, "automl-pipeline");
+const EDGE_CORE_DIR = path.join(REPO_ROOT, "edge-core");
 
 const ForgeDeploySchema = z.object({
   modelId:   z.string().min(1),
@@ -879,6 +884,27 @@ const ForgeDeploySchema = z.object({
 const ForgeValidateSchema = z.object({
   decision: z.enum(["PROMOTE", "REJECT"]),
   actor:    z.string().min(1).max(100),
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/algorithms — dynamic list from forge CLI
+// -------------------------------------------------------------------------
+app.get("/forge/algorithms", async (c) => {
+  try {
+    const { stdout } = await execAsync(
+      `${UV_EXE} run forge algorithms`,
+      { cwd: AUTOML_DIR, timeout: 12000, env: { ...process.env, PYTHONIOENCODING: "utf-8" } }
+    );
+    return c.json(JSON.parse(stdout.trim()));
+  } catch {
+    // Fallback static list if CLI unavailable
+    return c.json([
+      { id: "zscore",    name: "Z-Score",           export_format: "c_header", ram_bytes_estimate: "16–64",      params: [{ key: "threshold_sigma", type: "float", default: 3.0, min: 1.0, max: 6.0 }, { key: "min_samples", type: "int", default: 30, min: 10, max: 512 }] },
+      { id: "ewma_drift",name: "Seuil adaptatif",   export_format: "c_header", ram_bytes_estimate: "32",         params: [{ key: "alpha_fast", type: "float", default: 0.1, min: 0.01, max: 0.5 }] },
+      { id: "mad",       name: "MAD",               export_format: "c_header", ram_bytes_estimate: "64–256",     params: [{ key: "win_size", type: "int", default: 32, min: 4, max: 128 }] },
+      { id: "autoencoder",name: "AutoEncoder",      export_format: "tflite",   ram_bytes_estimate: "8000–32000", params: [{ key: "epochs", type: "int", default: 50, min: 5, max: 200 }] },
+    ]);
+  }
 });
 
 // -------------------------------------------------------------------------
@@ -1112,6 +1138,119 @@ app.patch("/forge/jobs/:id/validate", async (c) => {
   });
 
   return c.json({ ok: true, decision });
+});
+
+// -------------------------------------------------------------------------
+// POST /api/forge/jobs/:id/deploy — generate config.h + pio flash (USB)
+// -------------------------------------------------------------------------
+const DeploySchema = z.object({
+  deviceId: z.string().min(1),
+  project:  z.string().regex(/^[\w-]+$/).default("zscore_demo"),
+  port:     z.string().min(3).default("COM4"),
+});
+
+app.post("/forge/jobs/:id/deploy", async (c) => {
+  const { id } = c.req.param();
+  const body   = await c.req.json().catch(() => null);
+  const parsed = DeploySchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
+
+  const job = await prisma.forgeJob.findUnique({ where: { id }, select: { id: true, status: true, jobRef: true } });
+  if (!job) return c.json({ error: "Job not found" }, 404);
+  if (job.status !== "DONE") return c.json({ error: `Job is ${job.status}, must be DONE to deploy` }, 409);
+
+  const device = await prisma.device.findUnique({ where: { id: parsed.data.deviceId }, select: { mqttClientId: true } });
+  if (!device) return c.json({ error: "Device not found" }, 404);
+
+  const { project, port } = parsed.data;
+
+  // Generate src/config.h from env vars
+  const wifiSsid  = process.env.DEVICE_WIFI_SSID     ?? "";
+  const wifiPass  = process.env.DEVICE_WIFI_PASSWORD  ?? "";
+  const mqttHost  = process.env.DEVICE_MQTT_BROKER    ?? "192.168.1.20";
+  const mqttPort  = process.env.DEVICE_MQTT_PORT      ?? "1883";
+  const mqttUser  = process.env.DEVICE_MQTT_USER      ?? "ardent-device";
+  const mqttPass  = process.env.DEVICE_MQTT_PASSWORD  ?? "";
+
+  const configH = `\
+/*
+ * Généré par Ardent Watch lors du déploiement — ne pas éditer manuellement.
+ * Job: ${job.jobRef} | Device: ${device.mqttClientId}
+ */
+#ifndef ARD_CONFIG_H
+#define ARD_CONFIG_H
+
+#define WIFI_SSID      "${wifiSsid}"
+#define WIFI_PASSWORD  "${wifiPass}"
+
+#define MQTT_BROKER    "${mqttHost}"
+#define MQTT_PORT      ${mqttPort}
+#define MQTT_USER      "${mqttUser}"
+#define MQTT_PASSWORD  "${mqttPass}"
+
+#define DEVICE_ID      "${device.mqttClientId}"
+#define MODEL_ID       "${job.jobRef}"
+
+#endif /* ARD_CONFIG_H */
+`;
+
+  const projectDir = path.join(EDGE_CORE_DIR, "examples", "esp32", project);
+  const configPath = path.join(projectDir, "src", "config.h");
+
+  try {
+    fs.writeFileSync(configPath, configH, "utf-8");
+  } catch (err) {
+    return c.json({ error: `Failed to write config.h: ${err}` }, 500);
+  }
+
+  // Find pio executable
+  let pioExe = process.env.PIO_PATH ?? "";
+  if (!pioExe) {
+    try {
+      const { stdout } = await execAsync("where pio", { timeout: 2000 });
+      pioExe = stdout.split("\n")[0].trim();
+    } catch {
+      const localApp = process.env.LOCALAPPDATA ?? "";
+      for (const v of ["Python313", "Python312", "Python311"]) {
+        const candidate = path.join(localApp, "Programs", "Python", v, "Scripts", "pio.exe");
+        if (fs.existsSync(candidate)) { pioExe = candidate; break; }
+      }
+    }
+  }
+  if (!pioExe) pioExe = "pio";
+
+  // Spawn pio upload via flash-jobs
+  const { randomUUID } = await import("crypto");
+  const flashJobId = randomUUID();
+  flashJobs.cleanup();
+  const fjob = flashJobs.create(flashJobId, project, project);
+
+  const args = ["run", "--target", "upload", "--environment", project, "--upload-port", port];
+  fjob.lines.push(`[ardent] Déploiement job ${job.jobRef} → ${device.mqttClientId}\n`);
+  fjob.lines.push(`[ardent] config.h écrit dans ${configPath}\n`);
+  fjob.lines.push(`[ardent] pio ${args.join(" ")}\n\n`);
+
+  try {
+    const proc = spawn(pioExe, args, {
+      cwd: projectDir,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+    });
+    proc.stdout.on("data", (d: Buffer) => fjob.lines.push(d.toString("utf8")));
+    proc.stderr.on("data", (d: Buffer) => fjob.lines.push(d.toString("utf8")));
+    proc.on("error", (err: Error) => {
+      fjob.lines.push(`\n[ardent] Erreur : ${err.message}\n`);
+      fjob.done = true; fjob.exitCode = -1;
+    });
+    proc.on("close", (code: number | null) => {
+      fjob.done = true; fjob.exitCode = code;
+      fjob.lines.push(code === 0 ? "\n[ardent] Flash terminé ✓\n" : `\n[ardent] Flash échoué (code ${code})\n`);
+    });
+  } catch (err) {
+    fjob.lines.push(`[ardent] Impossible de lancer pio : ${err}\n`);
+    fjob.done = true; fjob.exitCode = -1;
+  }
+
+  return c.json({ flashJobId });
 });
 
 // -------------------------------------------------------------------------
