@@ -16,16 +16,39 @@
  * Returns: { jobId: string }
  */
 
-import { spawn }       from "child_process";
-import { randomUUID }  from "crypto";
-import path            from "path";
-import { flashJobs }   from "@/lib/flash-jobs";
+import { spawn, execSync } from "child_process";
+import { randomUUID }      from "crypto";
+import path                from "path";
+import fs                  from "fs";
+import { flashJobs }       from "@/lib/flash-jobs";
 
 export const runtime = "nodejs";
 
-// PIO executable — try common Windows install paths
-const PIO_EXE = process.env.PIO_PATH
-  ?? `${process.env.LOCALAPPDATA}\\Programs\\Python\\Python313\\Scripts\\pio.exe`;
+/** Find the pio executable — env override, PATH lookup, then known install locations. */
+function findPio(): string {
+  if (process.env.PIO_PATH && fs.existsSync(process.env.PIO_PATH)) {
+    return process.env.PIO_PATH;
+  }
+  try {
+    // Works if pio is in PATH
+    const found = execSync("where pio", { timeout: 2000 }).toString().split("\n")[0].trim();
+    if (found && fs.existsSync(found)) return found;
+  } catch { /* not in PATH */ }
+  // Common install paths (Python version-agnostic)
+  const localApp = process.env.LOCALAPPDATA ?? "";
+  const candidates = [
+    path.join(localApp, "Programs", "Python", "Python313", "Scripts", "pio.exe"),
+    path.join(localApp, "Programs", "Python", "Python312", "Scripts", "pio.exe"),
+    path.join(localApp, "Programs", "Python", "Python311", "Scripts", "pio.exe"),
+    path.join(process.env.USERPROFILE ?? "", ".platformio", "penv", "Scripts", "pio.exe"),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return "pio"; // last resort — let the OS resolve it
+}
+
+const PIO_EXE = findPio();
 
 // Root of the monorepo (platform-dashboard is one level deep from root)
 const REPO_ROOT = path.resolve(process.cwd(), "..");

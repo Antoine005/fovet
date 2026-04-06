@@ -503,7 +503,7 @@ export default function DashboardPage() {
 
       {/* ── USB device detection toast ────────────────────────────── */}
       {detectedPort && (
-        <div className="fixed bottom-5 right-5 z-50 w-80 rounded-xl border border-gray-700 bg-gray-900 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-3">
+        <div className="fixed bottom-5 right-5 z-50 w-80 rounded-xl border border-gray-700 bg-gray-900 shadow-2xl overflow-hidden">
           {/* top accent bar */}
           <div className="h-0.5 bg-gradient-to-r from-green-500 to-blue-500" />
           <div className="p-4">
