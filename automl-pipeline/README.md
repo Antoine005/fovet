@@ -28,6 +28,9 @@ uv run forge run --config configs/demo_lstm_autoencoder.yaml
 # Valider une config sans lancer le pipeline
 uv run forge validate --config configs/client_vibration.yaml
 
+# Lister les algorithmes disponibles (utilisé par GET /api/forge/algorithms)
+uv run forge algorithms
+
 # Copier le manifest généré dans un projet PlatformIO
 uv run forge deploy-manifest \
     --config configs/demo_zscore.yaml \
@@ -45,7 +48,7 @@ automl-pipeline/
 │   ├── config.py           ← Config Pydantic v2 — DataConfig, DetectorConfig, PreprocessingConfig
 │   ├── pipeline.py         ← Pipeline.run() — données + normalisation + détecteurs + export
 │   ├── preprocessing.py    ← Scaler (StandardScaler wrapper) + export scaler_params.json
-│   ├── cli.py              ← CLI Typer : forge run / validate / version
+│   ├── cli.py              ← CLI Typer : forge run / validate / algorithms / version
 │   ├── data/
 │   │   ├── base.py         ← Dataset dataclass (samples, columns, labels, timestamps)
 │   │   ├── synthetic.py    ← Générateur sinus/random_walk/constant + anomalies injectées
