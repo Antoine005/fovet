@@ -21,7 +21,7 @@ import FlashPanel  from "@/components/FlashPanel";
 import LiveMonitor  from "@/components/LiveMonitor";
 import HistoryView  from "@/components/HistoryView";
 import SettingsView from "@/components/SettingsView";
-import { Sidebar, type ViewType } from "@/components/Sidebar";
+import { Sidebar, firmwareToViews, type ViewType } from "@/components/Sidebar";
 import { Topbar }    from "@/components/Topbar";
 import { Breadcrumb } from "@/components/Breadcrumb";
 
@@ -224,14 +224,34 @@ export default function DashboardPage() {
 
   const selectedDevice = devices.find((d) => d.id === selectedId) ?? null;
 
+  // Views unlocked by the firmware running on any connected device.
+  // Union across all devices so that if one device runs a physiological firmware
+  // the relevant tabs appear for the whole fleet.
+  const enabledViews = devices.reduce(
+    (acc, d) => { firmwareToViews(d.latestFirmware).forEach((v) => acc.add(v)); return acc; },
+    new Set<ViewType>(["fleet", "detail"])
+  );
+
+  // Unique key to remount charts when device or firmware changes → clears stale data
+  const chartKey = `${selectedId ?? "none"}:${selectedDevice?.latestFirmware ?? ""}`;
+
+
   return (
     <div className="flex h-screen bg-gray-950 text-gray-100 overflow-hidden">
 
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       <Sidebar
         view={view}
-        onViewChange={setView}
+        onViewChange={(v) => {
+          // Guard: if navigating to a view that became disabled (firmware changed), go to fleet
+          if (!enabledViews.has(v) && v !== "forge" && v !== "flash" && v !== "monitor" && v !== "history" && v !== "settings") {
+            setView("fleet");
+          } else {
+            setView(v);
+          }
+        }}
         hasDevices={devices.length > 0}
+        enabledViews={enabledViews}
       />
 
       {/* ── Main column ─────────────────────────────────────────────── */}
@@ -365,7 +385,7 @@ export default function DashboardPage() {
                   />
                 ))}
               </div>
-              {selectedId && <HRVChart deviceId={selectedId} />}
+              {selectedId && <HRVChart key={chartKey} deviceId={selectedId} />}
             </>
           )}
 
@@ -384,7 +404,7 @@ export default function DashboardPage() {
                   />
                 ))}
               </div>
-              {selectedId && <TemperatureChart deviceId={selectedId} />}
+              {selectedId && <TemperatureChart key={chartKey} deviceId={selectedId} />}
             </>
           )}
 
@@ -423,7 +443,7 @@ export default function DashboardPage() {
               {selectedId && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2">
-                    <ReadingChart deviceId={selectedId} />
+                    <ReadingChart key={chartKey} deviceId={selectedId} />
                   </div>
                   <div>
                     <AlertList deviceId={selectedId} />

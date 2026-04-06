@@ -86,7 +86,7 @@ export function TemperatureChart({ deviceId }: Props) {
   }, []);
 
   const fetchInitial = useCallback(() => {
-    apiFetch(`/api/devices/${deviceId}/readings?limit=${MAX_READINGS}`)
+    apiFetch(`/api/devices/${deviceId}/readings?limit=${MAX_READINGS}&sensorType=TEMP`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<{ data: Reading[] }>;
@@ -113,7 +113,9 @@ export function TemperatureChart({ deviceId }: Props) {
 
       es.addEventListener("reading", (e: MessageEvent) => {
         try {
-          appendReading(JSON.parse(e.data) as Reading);
+          const r = JSON.parse(e.data) as Reading & { sensorType?: string };
+          if (r.sensorType && r.sensorType !== "TEMP") return; // ignore non-TEMP readings
+          appendReading(r);
           setError(null);
           retryCountRef.current = 0;
         } catch { /* ignore parse errors */ }
