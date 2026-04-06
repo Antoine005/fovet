@@ -140,13 +140,30 @@ const TOOL_ITEMS: NavItem[] = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+/** Derive which specialized views are unlocked by a firmware name. */
+export function firmwareToViews(fw: string | null | undefined): Set<ViewType> {
+  const base: ViewType[] = ["fleet", "detail"];
+  if (!fw) return new Set(base);
+  const f = fw.toLowerCase();
+  const views = new Set<ViewType>(base);
+  if (f.includes("pti") || f.includes("imu") || f.includes("biosignal"))   views.add("pti");
+  if (f.includes("fatigue") || f.includes("hrv") || f.includes("max30102")) views.add("fatigue");
+  if (f.includes("thermique") || f.includes("temp") || f.includes("dht"))   views.add("thermique");
+  if (f.includes("sante") || f.includes("worker"))                           { views.add("sante"); views.add("worker"); }
+  // If any physiological view is present, add sante for fleet health
+  if (views.has("pti") || views.has("fatigue") || views.has("thermique"))   views.add("sante");
+  return views;
+}
+
 interface SidebarProps {
   view:          ViewType;
   onViewChange:  (v: ViewType) => void;
   hasDevices:    boolean;
+  /** Views unlocked by the active firmware — defaults to generic (fleet + detail) */
+  enabledViews?: Set<ViewType>;
 }
 
-export function Sidebar({ view, onViewChange, hasDevices }: SidebarProps) {
+export function Sidebar({ view, onViewChange, hasDevices, enabledViews }: SidebarProps) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -171,7 +188,11 @@ export function Sidebar({ view, onViewChange, hasDevices }: SidebarProps) {
 
       {/* Main nav */}
       <div className="flex flex-col gap-0.5 px-1.5 pt-3 flex-1">
-        {NAV_ITEMS.filter((item) => !item.devicesRequired || hasDevices).map((item) => (
+        {NAV_ITEMS.filter((item) => {
+          if (item.devicesRequired && !hasDevices) return false;
+          if (enabledViews && !enabledViews.has(item.view)) return false;
+          return true;
+        }).map((item) => (
           <NavButton
             key={item.view}
             item={item}

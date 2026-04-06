@@ -336,6 +336,7 @@ app.delete("/devices/:id", cookieAuth, async (c) => {
 // -------------------------------------------------------------------------
 // GET /api/devices/:id/readings — last N readings with cursor pagination
 // ?limit=100&cursor=<bigint-id>  (cursor = last id from previous page, desc order)
+// ?sensorType=HR|TEMP|IMU        (optional — filter by sensorType)
 // -------------------------------------------------------------------------
 app.get("/devices/:id/readings", cookieAuth, async (c) => {
   const { id } = c.req.param();
@@ -345,7 +346,8 @@ app.get("/devices/:id/readings", cookieAuth, async (c) => {
     return c.json({ error: "Invalid limit — must be a positive integer" }, 400);
   }
   const limit = Math.min(rawLimit, 1000);
-  const cursorParam = c.req.query("cursor");
+  const cursorParam    = c.req.query("cursor");
+  const sensorTypeParam = c.req.query("sensorType") ?? null;
 
   const device = await prisma.device.findUnique({ where: { id }, select: { id: true } });
   if (!device) return c.json({ error: "Device not found" }, 404);
@@ -367,7 +369,10 @@ app.get("/devices/:id/readings", cookieAuth, async (c) => {
 
   // Fetch limit+1 to detect next page
   const rows = await prisma.reading.findMany({
-    where: { deviceId: id },
+    where: {
+      deviceId: id,
+      ...(sensorTypeParam ? { sensorType: sensorTypeParam } : {}),
+    },
     orderBy: { timestamp: "desc" },
     take: limit + 1,
     ...(cursorId !== undefined && {
