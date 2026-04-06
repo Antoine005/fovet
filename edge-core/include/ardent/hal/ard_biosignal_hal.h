@@ -24,6 +24,7 @@
 #ifndef ARD_BIOSIGNAL_HAL_H
 #define ARD_BIOSIGNAL_HAL_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus

@@ -9,8 +9,11 @@
  * GET /api/flash/ports — list available serial (COM) ports on Windows.
  *
  * Strategy:
- *  1. Get-CimInstance Win32_SerialPort  (~450ms, descriptions)
+ *  1. Get-PnpDevice -Class Ports (includes USB-SERIAL CH340 etc.)
  *  2. [System.IO.Ports.SerialPort]::GetPortNames()  (fast, no descriptions)
+ *
+ * Win32_SerialPort intentionally avoided — it only returns ACPI COM ports,
+ * not USB-UART bridges (CH340, CP2102, FTDI), which are the ones we care about.
  */
 
 import { exec } from "child_process";
@@ -22,14 +25,16 @@ export const dynamic = "force-dynamic";
 const execAsync = promisify(exec);
 
 export async function GET() {
-  // Strategy 1 — Get-CimInstance (modern WMI, fast, includes description)
+  // Strategy 1 — Get-PnpDevice (sees USB-SERIAL CH340, CP2102, FTDI, etc.)
   try {
     const { stdout } = await execAsync(
       `powershell -NoProfile -Command "` +
-      `$r = Get-CimInstance Win32_SerialPort -ErrorAction Stop | ` +
-      `Select-Object @{N='name';E={$_.DeviceID}},@{N='description';E={$_.Description}}; ` +
+      `$r = Get-PnpDevice -Class Ports -ErrorAction Stop | ` +
+      `Where-Object { $_.Status -eq 'OK' } | ` +
+      `Select-Object @{N='name';E={if ($_.FriendlyName -match '(COM[0-9]+)') { $matches[1] }}},@{N='description';E={$_.FriendlyName}} | ` +
+      `Where-Object { $_.name }; ` +
       `if ($r) { $r | ConvertTo-Json -Compress } else { '[]' }"`,
-      { timeout: 3000 }
+      { timeout: 4000 }
     );
     const raw = stdout.trim();
     if (raw && raw !== "null") {
