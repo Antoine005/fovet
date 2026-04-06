@@ -8,8 +8,8 @@
 
 **Ardent** est un SDK C/C++ embarqué souverain pour la détection d'anomalies en temps réel sur microcontrôleurs. Zéro cloud US. Cible : défense, industriel, aéronautique.
 
-- **Site :** ardent.io
-- **Email :** contact@ardent.io
+- **Site :** ardent-ai.fr
+- **Email :** contact@ardent-ai.fr
 - **Auteur :** Antoine Porte
 
 ---
@@ -199,7 +199,7 @@ Contient tout master + modules physiologiques H1–H3 :
 
 Dual License :
 - **LGPL v3** pour usage non commercial / open source
-- **Licence commerciale** pour toute entreprise (contact@ardent.io)
+- **Licence commerciale** pour toute entreprise (contact@ardent-ai.fr)
 
 Header à inclure dans chaque fichier source :
 ```c
@@ -207,7 +207,7 @@ Header à inclure dans chaque fichier source :
  * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@ardent-ai.fr
  */
 ```
 
