@@ -6,7 +6,7 @@
  */
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/api-client";
 
 // ── API types ─────────────────────────────────────────────────────────────────
@@ -82,6 +82,26 @@ interface ApiAuditEntry {
   deployRef: string | null;
   createdAt: string;
 }
+
+interface AlgorithmMeta {
+  id: string;
+  name: string;
+  description: string;
+  export_format: string;
+  ram_bytes_estimate: string;
+  params: { key: string; type: string; default: number; min: number; max: number }[];
+  suitable_for: string[];
+  requires?: string;
+}
+
+const ALGO_TO_YAML: Record<string, string> = {
+  zscore:            "demo_zscore.yaml",
+  isolation_forest:  "demo_zscore.yaml",
+  ewma_drift:        "demo_drift.yaml",
+  mad:               "demo_mad.yaml",
+  autoencoder:       "demo_autoencoder.yaml",
+  lstm_autoencoder:  "demo_lstm_autoencoder.yaml",
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -193,6 +213,25 @@ export default function ForgeTab() {
   const [showLogs,       setShowLogs]       = useState(false);
   const [logsContent,    setLogsContent]    = useState<string | null>(null);
 
+  // Algorithms (from API)
+  const [algorithms,      setAlgorithms]      = useState<AlgorithmMeta[]>([]);
+  const [selectedAlgo,    setSelectedAlgo]    = useState("zscore");
+
+  // Live SSE logs for active Forge job
+  const [liveLog,         setLiveLog]         = useState("");
+  const liveLogEs         = useRef<EventSource | null>(null);
+  const liveLogRef        = useRef<HTMLDivElement>(null);
+
+  // Flash-deploy from Forge job
+  const [showFlashDeployModal, setShowFlashDeployModal] = useState(false);
+  const [flashDeployJobId,     setFlashDeployJobId]     = useState<string | null>(null);
+  const [flashDeployLog,       setFlashDeployLog]       = useState("");
+  const [flashDeployStatus,    setFlashDeployStatus]    = useState<"idle" | "running" | "ok" | "error">("idle");
+  const [flashDeployPort,      setFlashDeployPort]      = useState("COM4");
+  const [flashDeployDeviceId,  setFlashDeployDeviceId]  = useState("");
+  const flashDeployEs     = useRef<EventSource | null>(null);
+  const flashLogRef       = useRef<HTMLDivElement>(null);
+
   const fetchAll = useCallback(async () => {
     // Models + drift
     setLoadingModels(true);
@@ -263,9 +302,12 @@ export default function ForgeTab() {
 
   useEffect(() => {
     fetchAll();
-    // Load available forge configs
-    apiFetch("/api/forge/configs").then(async (r) => {
-      if (r.ok) setConfigs(await r.json());
+    // Load algorithms from API (dynamic from forge CLI)
+    apiFetch("/api/forge/algorithms").then(async (r) => {
+      if (r.ok) {
+        const data: AlgorithmMeta[] = await r.json();
+        setAlgorithms(data);
+      }
     });
   }, [fetchAll]);
 
@@ -275,6 +317,49 @@ export default function ForgeTab() {
     const id = setInterval(fetchAll, interval);
     return () => clearInterval(id);
   }, [activeJob, fetchAll]);
+
+  // SSE: stream live logs when a Forge job is RUNNING
+  useEffect(() => {
+    if (!activeJob || activeJob.status !== "RUNNING") {
+      liveLogEs.current?.close();
+      liveLogEs.current = null;
+      return;
+    }
+    // Close previous
+    liveLogEs.current?.close();
+    setLiveLog("");
+
+    const es = new EventSource(`/api/forge/jobs/${activeJob.id}/stream`);
+    liveLogEs.current = es;
+
+    es.addEventListener("log", (e) => {
+      try {
+        const chunk: string = JSON.parse((e as MessageEvent).data);
+        setLiveLog((prev) => {
+          const next = prev + chunk;
+          // Auto-scroll
+          setTimeout(() => {
+            if (liveLogRef.current) liveLogRef.current.scrollTop = liveLogRef.current.scrollHeight;
+          }, 0);
+          return next;
+        });
+      } catch { /* ignore */ }
+    });
+
+    es.addEventListener("done", () => {
+      es.close();
+      liveLogEs.current = null;
+      fetchAll(); // refresh job status
+    });
+
+    es.onerror = () => { es.close(); liveLogEs.current = null; };
+
+    return () => { es.close(); liveLogEs.current = null; };
+  }, [activeJob?.id, activeJob?.status, fetchAll]);
+
+  useEffect(() => {
+    if (flashLogRef.current) flashLogRef.current.scrollTop = flashLogRef.current.scrollHeight;
+  }, [flashDeployLog]);
 
   const toggleDevice = (id: string, offline: boolean) => {
     if (offline) return;
@@ -298,7 +383,7 @@ export default function ForgeTab() {
           dataFrom:        trainFrom,
           dataTo:          trainTo,
           profile:         trainProfile,
-          config:          trainConfig || undefined,
+          config:          ALGO_TO_YAML[selectedAlgo] ?? "demo_zscore.yaml",
         }),
       });
       if (res.ok) {
@@ -324,6 +409,52 @@ export default function ForgeTab() {
     } finally {
       setValidating(false);
     }
+  };
+
+  const handleFlashDeploy = async () => {
+    if (!flashDeployDeviceId) return;
+    const doneJob = recentJobs.find((j) => j.status === "DONE");
+    if (!doneJob) return;
+
+    setFlashDeployStatus("running");
+    setFlashDeployLog("");
+    flashDeployEs.current?.close();
+
+    const res = await apiFetch(`/api/forge/jobs/${doneJob.id}/deploy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deviceId: flashDeployDeviceId,
+        project:  "zscore_demo",
+        port:     flashDeployPort,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setFlashDeployLog(`Erreur : ${(err as { error?: string }).error ?? res.status}`);
+      setFlashDeployStatus("error");
+      return;
+    }
+
+    const { flashJobId } = await res.json() as { flashJobId: string };
+    const es = new EventSource(`/api/flash/stream/${flashJobId}`);
+    flashDeployEs.current = es;
+
+    es.addEventListener("log", (e) => {
+      try {
+        const text: string = JSON.parse((e as MessageEvent).data);
+        setFlashDeployLog((prev) => prev + text);
+      } catch { setFlashDeployLog((prev) => prev + (e as MessageEvent).data); }
+    });
+
+    es.addEventListener("done", (e) => {
+      const code = parseInt((e as MessageEvent).data, 10);
+      setFlashDeployStatus(code === 0 ? "ok" : "error");
+      es.close();
+    });
+
+    es.onerror = () => { setFlashDeployStatus("error"); es.close(); };
   };
 
   const handleShowLogs = async () => {
@@ -578,14 +709,15 @@ export default function ForgeTab() {
                 </div>
               )}
 
-              {/* Logs */}
-              {(activeJob.logs || (showLogs && logsContent)) && (
+              {/* Logs — live SSE stream */}
+              {(liveLog || activeJob.logs) && (
                 <>
-                  <div className="font-mono text-[9px] uppercase tracking-[.14em] text-gray-700 mb-1.5 pb-1 border-b border-gray-800">
-                    Logs temps réel
+                  <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-gray-800">
+                    <span className="font-mono text-[9px] uppercase tracking-[.14em] text-gray-700">Logs temps réel</span>
+                    {liveLog && <span className="flex items-center gap-1 text-[9px] text-blue-400 font-mono"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />SSE live</span>}
                   </div>
-                  <div className="bg-gray-950 border border-gray-800 rounded px-2.5 py-2 font-mono text-[10px] text-gray-500 max-h-28 overflow-y-auto leading-7 whitespace-pre-wrap">
-                    {showLogs && logsContent ? logsContent : activeJob.logs}
+                  <div ref={liveLogRef} className="bg-gray-950 border border-gray-800 rounded px-2.5 py-2 font-mono text-[10px] text-gray-500 max-h-36 overflow-y-auto leading-5 whitespace-pre-wrap break-all">
+                    {liveLog || activeJob.logs}
                   </div>
                 </>
               )}
@@ -620,6 +752,14 @@ export default function ForgeTab() {
               <div className="font-mono text-[9px] text-gray-600 mt-1">
                 Terminé {recentJobs[0].finishedAt ? new Date(recentJobs[0].finishedAt).toLocaleString("fr-FR") : "—"}
               </div>
+              {recentJobs[0].status === "DONE" && (
+                <button
+                  onClick={() => { setShowFlashDeployModal(true); setFlashDeployLog(""); setFlashDeployStatus("idle"); }}
+                  className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-blue-900/30 text-blue-400 border border-blue-700/40 hover:bg-blue-900/50 transition-colors"
+                >
+                  ⚡ Flash USB
+                </button>
+              )}
             </Panel>
           )}
 
@@ -692,7 +832,7 @@ export default function ForgeTab() {
                   Comparez les métriques finales et décidez de promouvoir le modèle en STAGING ou de le rejeter.
                   Cette décision est journalisée dans l&apos;audit log avec horodatage et identifiant opérateur.
                 </div>
-                <div className="flex gap-2 mt-2.5">
+                <div className="flex gap-2 mt-2.5 flex-wrap">
                   <button
                     onClick={() => handleValidate("PROMOTE")}
                     disabled={validating}
@@ -706,6 +846,12 @@ export default function ForgeTab() {
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-red-900/30 text-red-400 border border-red-700/40 hover:bg-red-900/50 disabled:opacity-50 transition-colors"
                   >
                     ✕ Rejeter &amp; archiver
+                  </button>
+                  <button
+                    onClick={() => { setShowFlashDeployModal(true); setFlashDeployLog(""); setFlashDeployStatus("idle"); }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-blue-900/30 text-blue-400 border border-blue-700/40 hover:bg-blue-900/50 transition-colors"
+                  >
+                    ⚡ Flash USB
                   </button>
                 </div>
               </div>
@@ -851,18 +997,38 @@ export default function ForgeTab() {
             </div>
           </div>
           <div className="mb-2.5">
-            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Config pipeline (YAML)</label>
-            <select
-              value={trainConfig}
-              onChange={(e) => setTrainConfig(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500"
-            >
-              {configs.length === 0 && <option value="">Chargement…</option>}
-              {configs.map((c) => (
-                <option key={c.filename} value={c.filename}>{c.label}</option>
-              ))}
-            </select>
-            <p className="font-mono text-[9px] text-gray-600 mt-0.5">automl-pipeline/configs/{trainConfig}</p>
+            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-2">Algorithme de détection</label>
+            {algorithms.length === 0 ? (
+              <div className="font-mono text-[9px] text-gray-600 py-2">Chargement des algorithmes…</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5">
+                {algorithms.map((algo) => (
+                  <button
+                    key={algo.id}
+                    type="button"
+                    onClick={() => setSelectedAlgo(algo.id)}
+                    className={`text-left p-2 rounded border transition-all ${
+                      selectedAlgo === algo.id
+                        ? "border-blue-700/60 bg-blue-900/15"
+                        : "border-gray-800 hover:border-gray-700 hover:bg-gray-800/40"
+                    }`}
+                  >
+                    <div className="text-[10px] font-semibold text-gray-100">{algo.name}</div>
+                    <div className="font-mono text-[8px] text-gray-600 mt-0.5">
+                      RAM {algo.ram_bytes_estimate} · {algo.export_format}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedAlgo && (
+              <p className="font-mono text-[9px] text-gray-600 mt-1">
+                ↳ {ALGO_TO_YAML[selectedAlgo] ?? "demo_zscore.yaml"}
+                {algorithms.find(a => a.id === selectedAlgo)?.requires && (
+                  <span className="ml-1 text-amber-600">(nécessite {algorithms.find(a => a.id === selectedAlgo)?.requires})</span>
+                )}
+              </p>
+            )}
           </div>
           <div className="mb-3">
             <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Profil d&apos;entraînement</label>
@@ -923,6 +1089,76 @@ export default function ForgeTab() {
               className="px-3 py-1.5 rounded text-[11px] font-semibold uppercase tracking-wide bg-red-900/30 text-red-400 border border-red-700/40 hover:bg-red-900/50 transition-colors disabled:opacity-60 disabled:cursor-wait"
             >
               {submittingDeploy ? "Déploiement…" : "Confirmer le déploiement"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal — Flash USB depuis job Forge ────────────────────────────── */}
+      {showFlashDeployModal && (
+        <Modal title="⚡ Flash USB — déploiement firmware" onClose={() => setShowFlashDeployModal(false)}>
+          <p className="text-[11px] text-gray-400 mb-3 leading-relaxed">
+            Génère <code className="text-[10px] bg-gray-800 px-1 rounded">config.h</code> (WiFi + MQTT + deviceId)
+            et flash le firmware via PlatformIO sur le port USB sélectionné.
+          </p>
+
+          <div className="mb-2.5">
+            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Device cible</label>
+            <select
+              value={flashDeployDeviceId}
+              onChange={(e) => setFlashDeployDeviceId(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500"
+            >
+              <option value="">— Sélectionner un device —</option>
+              {devices.map((d) => (
+                <option key={d.id} value={d.id}>{d.name} ({d.mqttClientId})</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-3">
+            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Port série</label>
+            <input
+              type="text"
+              value={flashDeployPort}
+              onChange={(e) => setFlashDeployPort(e.target.value)}
+              placeholder="COM4"
+              className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {/* Flash log terminal */}
+          {(flashDeployLog || flashDeployStatus !== "idle") && (
+            <div className="mb-3 rounded border border-gray-800 bg-gray-950 overflow-hidden">
+              <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-800">
+                <span className="font-mono text-[8px] uppercase tracking-widest text-gray-600">PlatformIO</span>
+                {flashDeployStatus === "running" && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
+                {flashDeployStatus === "ok"      && <span className="text-[9px] text-green-400 font-mono">✓ OK</span>}
+                {flashDeployStatus === "error"   && <span className="text-[9px] text-red-400 font-mono">✕ Erreur</span>}
+              </div>
+              <div ref={flashLogRef} className="p-2 font-mono text-[9px] text-gray-500 max-h-40 overflow-y-auto whitespace-pre-wrap break-all leading-5">
+                {flashDeployLog || "Lancement…"}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 justify-end pt-3 border-t border-gray-800">
+            <button
+              onClick={() => setShowFlashDeployModal(false)}
+              className="px-3 py-1.5 rounded text-[11px] font-semibold uppercase tracking-wide border border-gray-700 text-gray-400 hover:border-gray-600 hover:bg-gray-800 transition-colors"
+            >
+              Fermer
+            </button>
+            <button
+              onClick={handleFlashDeploy}
+              disabled={flashDeployStatus === "running" || !flashDeployDeviceId}
+              className={`px-3 py-1.5 rounded text-[11px] font-semibold uppercase tracking-wide border transition-colors disabled:opacity-50 ${
+                flashDeployStatus === "ok"
+                  ? "bg-green-700 border-green-600 text-white"
+                  : "bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              {flashDeployStatus === "running" ? "⟳ Flash en cours…" : "⚡ Compiler & Flasher"}
             </button>
           </div>
         </Modal>
