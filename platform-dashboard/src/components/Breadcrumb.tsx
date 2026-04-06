@@ -31,6 +31,7 @@ const VIEW_LABEL: Record<ViewType, string> = {
   flash:     "Flash ESP32",
   monitor:   "Live Monitor",
   history:   "Historique",
+  settings:  "Paramètres",
 };
 
 function buildSegments(view: ViewType, device: BreadcrumbDevice | null): string[] {

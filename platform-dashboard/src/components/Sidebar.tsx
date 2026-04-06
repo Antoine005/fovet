@@ -13,7 +13,7 @@ import React, { useState } from "react";
 export type ViewType =
   | "fleet" | "detail" | "pti" | "fatigue"
   | "thermique" | "sante" | "worker" | "forge" | "flash"
-  | "monitor" | "history";
+  | "monitor" | "history" | "settings";
 
 // ── SVG icons (20×20, stroke-based) ──────────────────────────────────────────
 
@@ -99,6 +99,18 @@ function IconClock() {
     </svg>
   );
 }
+function IconSliders() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5">
+      <line x1="4" y1="6" x2="16" y2="6" strokeLinecap="round" />
+      <line x1="4" y1="10" x2="16" y2="10" strokeLinecap="round" />
+      <line x1="4" y1="14" x2="16" y2="14" strokeLinecap="round" />
+      <circle cx="8"  cy="6"  r="2" fill="currentColor" stroke="none" />
+      <circle cx="13" cy="10" r="2" fill="currentColor" stroke="none" />
+      <circle cx="7"  cy="14" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 
 // ── Nav items definition ───────────────────────────────────────────────────────
 
@@ -119,10 +131,11 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const TOOL_ITEMS: NavItem[] = [
-  { view: "monitor", label: "Monitor", icon: <IconEye />,   devicesRequired: false },
-  { view: "history", label: "Historique", icon: <IconClock />, devicesRequired: false },
-  { view: "forge",   label: "Forge",    icon: <IconGear />, devicesRequired: false },
-  { view: "flash",   label: "Flash",    icon: <IconBolt />, devicesRequired: false },
+  { view: "monitor",  label: "Monitor",    icon: <IconEye />,     devicesRequired: false },
+  { view: "history",  label: "Historique", icon: <IconClock />,   devicesRequired: false },
+  { view: "forge",    label: "Forge",      icon: <IconGear />,    devicesRequired: false },
+  { view: "flash",    label: "Flash",      icon: <IconBolt />,    devicesRequired: false },
+  { view: "settings", label: "Paramètres", icon: <IconSliders />, devicesRequired: false },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────

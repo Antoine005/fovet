@@ -202,12 +202,33 @@ export default function ForgeTab() {
 
   // Train modal form state
   const [trainBaseModel, setTrainBaseModel] = useState("");
-  const [trainFrom,      setTrainFrom]      = useState("2026-01-01");
-  const [trainTo,        setTrainTo]        = useState("2026-02-28");
   const [trainProfile,   setTrainProfile]   = useState("standard");
-  const [trainConfig,    setTrainConfig]    = useState("demo_zscore.yaml");
-  const [configs,        setConfigs]        = useState<{ filename: string; label: string }[]>([]);
   const [submittingJob,  setSubmittingJob]  = useState(false);
+
+  // Data source tabs
+  type DataTab = "csv" | "capture" | "synthetic";
+  const [dataTab,        setDataTab]        = useState<DataTab>("synthetic");
+
+  // CSV upload
+  const [uploadFile,     setUploadFile]     = useState<File | null>(null);
+  const [uploadResult,   setUploadResult]   = useState<{ dataPath: string; columns: string[]; rows: number; preview: string[] } | null>(null);
+  const [uploadError,    setUploadError]    = useState<string | null>(null);
+  const [uploading,      setUploading]      = useState(false);
+
+  // DB capture
+  const [captureDevice,  setCaptureDevice]  = useState("");
+  const [captureFrom,    setCaptureFrom]    = useState(() => new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+  const [captureTo,      setCaptureTo]      = useState(() => new Date().toISOString().slice(0, 10));
+  const [captureResult,  setCaptureResult]  = useState<{ dataPath: string; rows: number } | null>(null);
+  const [captureError,   setCaptureError]   = useState<string | null>(null);
+  const [capturing,      setCapturing]      = useState(false);
+
+  // Synthetic params
+  const [synthSignal,    setSynthSignal]    = useState<"sine" | "random_walk" | "constant">("sine");
+  const [synthSamples,   setSynthSamples]   = useState(1000);
+  const [synthNoise,     setSynthNoise]     = useState(0.1);
+  const [synthAnomalyRate, setSynthAnomalyRate] = useState(0.05);
+  const [synthAnomalyMag,  setSynthAnomalyMag]  = useState(5.0);
   const [submittingDeploy, setSubmittingDeploy] = useState(false);
   const [validating,     setValidating]     = useState(false);
   const [showLogs,       setShowLogs]       = useState(false);
@@ -370,24 +391,83 @@ export default function ForgeTab() {
     });
   };
 
+  // Validate that a data source is ready before launching
+  const dataSourceReady = (): boolean => {
+    if (dataTab === "csv")     return uploadResult !== null;
+    if (dataTab === "capture") return captureResult !== null;
+    return true; // synthetic always ready
+  };
+
+  const handleUploadCsv = async () => {
+    if (!uploadFile) return;
+    setUploading(true); setUploadError(null); setUploadResult(null);
+    try {
+      const form = new FormData();
+      form.append("file", uploadFile);
+      const res = await fetch("/api/forge/data/upload", { method: "POST", body: form, credentials: "include" });
+      const json = await res.json() as { dataPath?: string; columns?: string[]; rows?: number; preview?: string[]; error?: string };
+      if (!res.ok) { setUploadError(json.error ?? "Erreur upload"); return; }
+      setUploadResult({ dataPath: json.dataPath!, columns: json.columns!, rows: json.rows!, preview: json.preview! });
+    } catch (e) { setUploadError(String(e)); }
+    finally { setUploading(false); }
+  };
+
+  const handleCapture = async () => {
+    setCapturing(true); setCaptureError(null); setCaptureResult(null);
+    try {
+      const res = await apiFetch("/api/forge/data/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId: captureDevice || undefined, from: captureFrom, to: captureTo, limit: 5000 }),
+      });
+      const json = await res.json() as { dataPath?: string; rows?: number; error?: string };
+      if (!res.ok) { setCaptureError(json.error ?? "Erreur capture"); return; }
+      setCaptureResult({ dataPath: json.dataPath!, rows: json.rows! });
+    } catch (e) { setCaptureError(String(e)); }
+    finally { setCapturing(false); }
+  };
+
   const handleLaunchJob = async () => {
+    if (!dataSourceReady()) return;
     setSubmittingJob(true);
     try {
+      const epochs = trainProfile === "rapide" ? 25 : trainProfile === "precis" ? 100 : 50;
+
+      // Build dataSource or fall back to static YAML
+      let body: Record<string, unknown>;
+      if (dataTab === "synthetic") {
+        body = {
+          baseModelId: trainBaseModel || undefined,
+          totalEpochs: epochs,
+          algo:        selectedAlgo,
+          dataSource: {
+            type:        "synthetic",
+            signal:      synthSignal,
+            nSamples:    synthSamples,
+            noiseStd:    synthNoise,
+            anomalyRate: synthAnomalyRate,
+            anomalyMag:  synthAnomalyMag,
+          },
+        };
+      } else {
+        const dataPath   = dataTab === "csv" ? uploadResult!.dataPath : captureResult!.dataPath;
+        const columns    = dataTab === "csv" ? uploadResult!.columns  : ["value"];
+        body = {
+          baseModelId: trainBaseModel || undefined,
+          totalEpochs: epochs,
+          algo:        selectedAlgo,
+          dataSource: { type: dataTab === "csv" ? "csv" : "db", dataPath, columns },
+        };
+      }
+
       const res = await apiFetch("/api/forge/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          baseModelId:     trainBaseModel || undefined,
-          totalEpochs:     trainProfile === "rapide" ? 25 : trainProfile === "precis" ? 100 : 50,
-          datasetSessions: undefined,
-          dataFrom:        trainFrom,
-          dataTo:          trainTo,
-          profile:         trainProfile,
-          config:          ALGO_TO_YAML[selectedAlgo] ?? "demo_zscore.yaml",
-        }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         setShowTrainModal(false);
+        setUploadResult(null); setCaptureResult(null);
         await fetchAll();
       }
     } finally {
@@ -972,89 +1052,184 @@ export default function ForgeTab() {
       {/* ── Modal — Nouveau cycle ──────────────────────────────────────────── */}
       {showTrainModal && (
         <Modal title="+ Nouveau cycle d'entraînement" onClose={() => setShowTrainModal(false)}>
-          <p className="text-[11px] text-gray-400 mb-3 leading-relaxed">
-            Configurez les paramètres du cycle. Les données terrain seront extraites depuis les dispositifs
-            Pulse pour la plage sélectionnée.
-          </p>
-          <div className="mb-2.5">
-            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Modèle de base</label>
-            <select
-              value={trainBaseModel}
-              onChange={(e) => setTrainBaseModel(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500"
-            >
-              <option value="">— Nouveau modèle —</option>
-              {prodModels.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} {m.version} (PROD)</option>
-              ))}
-            </select>
+
+          {/* ── Step 1: Data source ──────────────────────────────────────── */}
+          <p className="font-mono text-[9px] uppercase tracking-wide text-gray-500 mb-2">1 · Source de données</p>
+
+          {/* Tab switcher */}
+          <div className="flex gap-1 mb-3 bg-gray-800/60 rounded-lg p-0.5">
+            {(["csv", "capture", "synthetic"] as const).map((tab) => {
+              const labels: Record<typeof tab, string> = { csv: "📁 CSV", capture: "📡 MQTT DB", synthetic: "🔬 Synthétique" };
+              return (
+                <button key={tab} onClick={() => setDataTab(tab)}
+                  className={`flex-1 py-1.5 rounded text-[10px] font-semibold transition-colors ${
+                    dataTab === tab ? "bg-gray-700 text-white" : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  {labels[tab]}
+                </button>
+              );
+            })}
           </div>
-          <div className="mb-2.5">
-            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Plage de données terrain</label>
-            <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={trainFrom} onChange={(e) => setTrainFrom(e.target.value)} className="bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
-              <input type="date" value={trainTo}   onChange={(e) => setTrainTo(e.target.value)}   className="bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
+
+          {/* ── CSV Upload ──────────────────────────────────────────────── */}
+          {dataTab === "csv" && (
+            <div className="mb-3 space-y-2">
+              <p className="text-[10px] text-gray-400">Importez votre dataset CSV. La première ligne doit être l&apos;en-tête.</p>
+              <div className="flex gap-2">
+                <label className="flex-1 cursor-pointer">
+                  <div className={`border-2 border-dashed rounded-lg px-3 py-3 text-center transition-colors ${
+                    uploadFile ? "border-blue-600/50 bg-blue-900/10" : "border-gray-700 hover:border-gray-600"
+                  }`}>
+                    <p className="text-[10px] text-gray-300 font-medium">{uploadFile ? uploadFile.name : "Cliquez ou glissez un fichier .csv"}</p>
+                    {uploadFile && <p className="text-[9px] text-gray-500 mt-0.5">{(uploadFile.size / 1024).toFixed(0)} KB</p>}
+                  </div>
+                  <input type="file" accept=".csv" className="hidden"
+                    onChange={(e) => { setUploadFile(e.target.files?.[0] ?? null); setUploadResult(null); }} />
+                </label>
+                <button onClick={handleUploadCsv} disabled={!uploadFile || uploading}
+                  className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-semibold disabled:opacity-40 self-center transition-colors">
+                  {uploading ? "…" : "Analyser"}
+                </button>
+              </div>
+              {uploadError && <p className="text-[10px] text-red-400">{uploadError}</p>}
+              {uploadResult && (
+                <div className="rounded border border-green-700/40 bg-green-900/10 p-2.5 space-y-1">
+                  <p className="text-[10px] text-green-400 font-semibold">✓ {uploadResult.rows} lignes · colonnes : {uploadResult.columns.join(", ")}</p>
+                  <div className="font-mono text-[9px] text-gray-500 max-h-16 overflow-y-auto">
+                    {uploadResult.preview.map((l, i) => <div key={i}>{l}</div>)}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-          <div className="mb-2.5">
-            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-2">Algorithme de détection</label>
+          )}
+
+          {/* ── MQTT DB Capture ─────────────────────────────────────────── */}
+          {dataTab === "capture" && (
+            <div className="mb-3 space-y-2">
+              <p className="text-[10px] text-gray-400">Exportez les lectures stockées en base pour les utiliser comme dataset d&apos;entraînement.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Appareil (optionnel)</label>
+                  <select value={captureDevice} onChange={(e) => setCaptureDevice(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500">
+                    <option value="">Tous les appareils</option>
+                    {devices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Limite (lignes)</label>
+                  <input type="number" defaultValue={5000} min={50} max={20000}
+                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Depuis</label>
+                  <input type="date" value={captureFrom} onChange={(e) => setCaptureFrom(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Jusqu&apos;à</label>
+                  <input type="date" value={captureTo} onChange={(e) => setCaptureTo(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
+                </div>
+              </div>
+              <button onClick={handleCapture} disabled={capturing}
+                className="w-full py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-semibold disabled:opacity-40 transition-colors">
+                {capturing ? "Export en cours…" : "Exporter depuis la BDD"}
+              </button>
+              {captureError && <p className="text-[10px] text-red-400">{captureError}</p>}
+              {captureResult && (
+                <p className="text-[10px] text-green-400 font-semibold">✓ {captureResult.rows} lectures exportées — prêt pour l&apos;entraînement</p>
+              )}
+            </div>
+          )}
+
+          {/* ── Synthetic ────────────────────────────────────────────────── */}
+          {dataTab === "synthetic" && (
+            <div className="mb-3 space-y-2">
+              <p className="text-[10px] text-gray-400">Forge génère un signal synthétique avec anomalies injectées. Idéal pour valider un algo rapidement.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Signal</label>
+                  <select value={synthSignal} onChange={(e) => setSynthSignal(e.target.value as typeof synthSignal)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500">
+                    <option value="sine">Sinusoïdal</option>
+                    <option value="random_walk">Marche aléatoire</option>
+                    <option value="constant">Constant</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">N échantillons</label>
+                  <input type="number" value={synthSamples} min={50} max={50000}
+                    onChange={(e) => setSynthSamples(parseInt(e.target.value, 10) || 1000)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Bruit (σ)</label>
+                  <input type="number" value={synthNoise} min={0.01} max={5} step={0.01}
+                    onChange={(e) => setSynthNoise(parseFloat(e.target.value) || 0.1)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Taux anomalie</label>
+                  <input type="number" value={synthAnomalyRate} min={0} max={0.5} step={0.01}
+                    onChange={(e) => setSynthAnomalyRate(parseFloat(e.target.value) || 0.05)}
+                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500" />
+                </div>
+              </div>
+              <p className="text-[9px] text-green-400">✓ Prêt — aucune importation nécessaire</p>
+            </div>
+          )}
+
+          {/* ── Step 2: Algorithm ───────────────────────────────────────── */}
+          <div className="border-t border-gray-800 pt-3 mb-2.5">
+            <p className="font-mono text-[9px] uppercase tracking-wide text-gray-500 mb-2">2 · Algorithme de détection</p>
             {algorithms.length === 0 ? (
-              <div className="font-mono text-[9px] text-gray-600 py-2">Chargement des algorithmes…</div>
+              <div className="font-mono text-[9px] text-gray-600 py-2">Chargement…</div>
             ) : (
               <div className="grid grid-cols-2 gap-1.5">
                 {algorithms.map((algo) => (
-                  <button
-                    key={algo.id}
-                    type="button"
-                    onClick={() => setSelectedAlgo(algo.id)}
+                  <button key={algo.id} type="button" onClick={() => setSelectedAlgo(algo.id)}
                     className={`text-left p-2 rounded border transition-all ${
-                      selectedAlgo === algo.id
-                        ? "border-blue-700/60 bg-blue-900/15"
-                        : "border-gray-800 hover:border-gray-700 hover:bg-gray-800/40"
-                    }`}
-                  >
+                      selectedAlgo === algo.id ? "border-blue-700/60 bg-blue-900/15" : "border-gray-800 hover:border-gray-700 hover:bg-gray-800/40"
+                    }`}>
                     <div className="text-[10px] font-semibold text-gray-100">{algo.name}</div>
                     <div className="font-mono text-[8px] text-gray-600 mt-0.5">
                       RAM {algo.ram_bytes_estimate} · {algo.export_format}
+                      {algo.requires && <span className="ml-1 text-amber-600/80"> · {algo.requires}</span>}
                     </div>
                   </button>
                 ))}
               </div>
             )}
-            {selectedAlgo && (
-              <p className="font-mono text-[9px] text-gray-600 mt-1">
-                ↳ {ALGO_TO_YAML[selectedAlgo] ?? "demo_zscore.yaml"}
-                {algorithms.find(a => a.id === selectedAlgo)?.requires && (
-                  <span className="ml-1 text-amber-600">(nécessite {algorithms.find(a => a.id === selectedAlgo)?.requires})</span>
-                )}
-              </p>
-            )}
           </div>
-          <div className="mb-3">
-            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Profil d&apos;entraînement</label>
-            <select
-              value={trainProfile}
-              onChange={(e) => setTrainProfile(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500"
-            >
-              <option value="standard">Standard — 50 epochs, batch 32</option>
-              <option value="rapide">Rapide — 25 epochs, batch 64</option>
-              <option value="precis">Précis — 100 epochs, batch 16</option>
+
+          {/* ── Step 3: Profile ─────────────────────────────────────────── */}
+          <div className="border-t border-gray-800 pt-3 mb-3">
+            <p className="font-mono text-[9px] uppercase tracking-wide text-gray-500 mb-1">3 · Profil d&apos;entraînement</p>
+            <select value={trainProfile} onChange={(e) => setTrainProfile(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500">
+              <option value="standard">Standard — 50 epochs</option>
+              <option value="rapide">Rapide — 25 epochs</option>
+              <option value="precis">Précis — 100 epochs</option>
             </select>
           </div>
+
           <div className="bg-amber-900/10 border border-amber-700/40 rounded px-3 py-2 text-[10px] text-amber-400 mb-3 leading-relaxed">
-            Point de décision humaine : vous devrez valider manuellement le modèle résultant avant tout déploiement
-            sur les dispositifs Pulse. Cette action sera journalisée.
+            Validation humaine requise avant déploiement. Cette action sera journalisée.
           </div>
+
           <div className="flex gap-2 justify-end pt-3 border-t border-gray-800">
-            <button onClick={() => setShowTrainModal(false)} className="px-3 py-1.5 rounded text-[11px] font-semibold uppercase tracking-wide border border-gray-700 text-gray-400 hover:border-gray-600 hover:bg-gray-800 transition-colors">
+            <button onClick={() => setShowTrainModal(false)}
+              className="px-3 py-1.5 rounded text-[11px] font-semibold uppercase tracking-wide border border-gray-700 text-gray-400 hover:border-gray-600 hover:bg-gray-800 transition-colors">
               Annuler
             </button>
-            <button
-              onClick={handleLaunchJob}
-              disabled={submittingJob}
-              className="px-3 py-1.5 rounded text-[11px] font-semibold uppercase tracking-wide bg-blue-600 hover:bg-blue-700 text-white border border-blue-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
-            >
+            <button onClick={handleLaunchJob}
+              disabled={submittingJob || !dataSourceReady()}
+              title={!dataSourceReady() ? "Importez d'abord votre dataset" : ""}
+              className="px-3 py-1.5 rounded text-[11px] font-semibold uppercase tracking-wide bg-blue-600 hover:bg-blue-700 text-white border border-blue-600 transition-colors disabled:opacity-60 disabled:cursor-wait">
               {submittingJob ? "Lancement…" : "Lancer l'entraînement"}
             </button>
           </div>
