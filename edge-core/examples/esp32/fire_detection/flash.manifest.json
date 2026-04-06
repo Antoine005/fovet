@@ -1,0 +1,8 @@
+{
+  "id": "fire_detection",
+  "label": "Détection Feu",
+  "env": "fire_detection",
+  "description": "OV2640 RGB565 → 3×Z-Score (R/G/B) → Watch MQTT",
+  "requiredSensors": ["ov2640"],
+  "warnIfMissing": []
+}

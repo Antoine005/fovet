@@ -26,34 +26,13 @@ interface Example {
   warnIfMissing:   Sensor[];   // missing → yellow warning, but not blocked
 }
 
-// ── Catalogue ─────────────────────────────────────────────────────────────────
+// ── Catalogue (loaded dynamically from /api/flash/examples) ──────────────────
 
-const EXAMPLES: Example[] = [
-  {
-    id: "zscore_demo", label: "Z-Score Demo", env: "esp32cam",
+// Fallback shown while loading
+const EXAMPLES_FALLBACK: Example[] = [
+  { id: "zscore_demo", label: "Z-Score Demo", env: "esp32cam",
     description: "Signal synthétique → Z-Score + Drift → Watch MQTT",
-    requiredSensors: [], warnIfMissing: [],
-  },
-  {
-    id: "imu_zscore", label: "IMU Z-Score", env: "esp32cam",
-    description: "MPU-6050 accéléromètre → Z-Score → Watch",
-    requiredSensors: ["mpu6050"], warnIfMissing: [],
-  },
-  {
-    id: "fire_detection", label: "Détection Feu", env: "fire_detection",
-    description: "OV2640 QQVGA RGB565 — 3×Z-Score sur R/G/B",
-    requiredSensors: ["ov2640"], warnIfMissing: [],
-  },
-  {
-    id: "person_detection", label: "Détection Personne", env: "person_detection",
-    description: "VWW TFLite Micro (MobileNetV1) + Z-Score → Watch",
-    requiredSensors: ["ov2640"], warnIfMissing: [],
-  },
-  {
-    id: "smoke_test", label: "Smoke Test", env: "smoke",
-    description: "Test complet SDK — HAL + Z-Score + LED (aucun capteur requis)",
-    requiredSensors: [], warnIfMissing: [],
-  },
+    requiredSensors: [], warnIfMissing: [] },
 ];
 
 // ── Sensor metadata ───────────────────────────────────────────────────────────
@@ -83,8 +62,8 @@ function getCompat(ex: Example, selected: Set<Sensor>): Compat {
   return allPresent ? "recommended" : "incompatible";
 }
 
-function sortedExamples(selected: Set<Sensor>): (Example & { compat: Compat })[] {
-  const ranked = EXAMPLES.map((ex) => ({ ...ex, compat: getCompat(ex, selected) }));
+function sortedExamples(list: Example[], selected: Set<Sensor>): (Example & { compat: Compat })[] {
+  const ranked = list.map((ex) => ({ ...ex, compat: getCompat(ex, selected) }));
   const order: Record<Compat, number> = { recommended: 0, compatible: 1, incompatible: 2 };
   return ranked.sort((a, b) => order[a.compat] - order[b.compat]);
 }
@@ -116,7 +95,8 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
   const [portStatus,   setPortStatus]   = useState<PortStatus>(preselectedPort ? "detected" : "scanning");
   const [manualPort,   setManualPort]   = useState("");
   const [sensors,      setSensors]      = useState<Set<Sensor>>(new Set());
-  const [example,      setExample]      = useState<Example>(EXAMPLES[0]);
+  const [examples,     setExamples]     = useState<Example[]>(EXAMPLES_FALLBACK);
+  const [example,      setExample]      = useState<Example>(EXAMPLES_FALLBACK[0]);
   const [flashStatus,  setFlashStatus]  = useState<"idle" | "running" | "ok" | "error">("idle");
   const [log,          setLog]          = useState("");
   const [historyHint,  setHistoryHint]  = useState<string | null>(null); // last firmware from DB
@@ -135,6 +115,20 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
     setSensors(loadSavedSensors());
   }, []);
 
+  // Load example catalogue from API (dynamic — no code change needed to add examples)
+  useEffect(() => {
+    apiFetch("/api/flash/examples")
+      .then(async (r) => {
+        if (!r.ok) return;
+        const data = await r.json() as Example[];
+        if (data.length > 0) {
+          setExamples(data);
+          setExample((prev) => data.find((e) => e.id === prev.id) ?? data[0]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Sync preselectedPort
   useEffect(() => {
     if (preselectedPort) { setPort(preselectedPort); setPortStatus("detected"); }
@@ -150,7 +144,7 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
         if (!lastFw) return;
         setHistoryHint(lastFw);
         // Only auto-select if user hasn't manually changed from the default
-        const match = EXAMPLES.find((e) => e.id === lastFw);
+        const match = examples.find((e) => e.id === lastFw);
         if (match) setExample(match);
       })
       .catch(() => {});
@@ -269,7 +263,7 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
 
   // ── Sorted example list ────────────────────────────────────────────────────
 
-  const ranked = sortedExamples(sensors);
+  const ranked = sortedExamples(examples, sensors);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

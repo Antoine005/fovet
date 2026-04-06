@@ -1,0 +1,8 @@
+{
+  "id": "person_detection",
+  "label": "Détection Personne",
+  "env": "person_detection",
+  "description": "OV2640 96×96 GRAY → TFLite MobileNetV1 → Z-Score → Watch MQTT",
+  "requiredSensors": ["ov2640"],
+  "warnIfMissing": []
+}

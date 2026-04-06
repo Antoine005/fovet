@@ -1,0 +1,8 @@
+{
+  "id": "imu_zscore",
+  "label": "IMU Z-Score",
+  "env": "esp32cam",
+  "description": "MPU-6050 accéléromètre → Z-Score → Watch MQTT",
+  "requiredSensors": ["mpu6050"],
+  "warnIfMissing": []
+}
