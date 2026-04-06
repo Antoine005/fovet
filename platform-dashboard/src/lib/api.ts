@@ -858,6 +858,19 @@ const ForgeModelSchema = z.object({
   accuracy:  z.number().min(0).max(100).optional(),
 });
 
+const ForgeDataSourceSchema = z.object({
+  type:      z.enum(["csv", "synthetic", "db"]),
+  // csv / db-capture
+  dataPath:  z.string().optional(),
+  columns:   z.array(z.string()).optional(),
+  // synthetic
+  signal:    z.enum(["sine", "random_walk", "constant"]).optional(),
+  nSamples:  z.number().int().min(50).max(50000).optional(),
+  noiseStd:  z.number().min(0).max(10).optional(),
+  anomalyRate: z.number().min(0).max(0.5).optional(),
+  anomalyMag:  z.number().min(1).max(20).optional(),
+}).optional();
+
 const ForgeJobSchema = z.object({
   baseModelId:     z.string().optional(),
   totalEpochs:     z.number().int().min(1).max(1000).default(50),
@@ -866,6 +879,11 @@ const ForgeJobSchema = z.object({
   dataTo:          z.string().optional(),
   profile:         z.string().optional(),
   config:          z.string().regex(/^[\w\-]+\.yaml$/).optional(),
+  // New: data source from Forge Studio
+  dataSource:      ForgeDataSourceSchema,
+  algo:            z.string().optional(),
+  threshold:       z.number().optional(),
+  minSamples:      z.number().int().optional(),
 });
 
 // Monorepo root — platform-dashboard is one level below root
@@ -1018,9 +1036,41 @@ app.post("/forge/jobs", async (c) => {
     },
   });
 
+  // ── Resolve config path (static YAML or generated from dataSource) ──────────
+  let resolvedConfig: string | null = null;
+
+  if (parsed.data.dataSource) {
+    // Generate YAML from Forge Studio data source
+    ensureDir(CONFIGS_GEN_DIR);
+    const ds       = parsed.data.dataSource;
+    const genName  = `forge_studio_${job.id}`;
+    const outputDir = path.join(REPO_ROOT, "automl-pipeline", "outputs", job.id);
+    const yaml = generateForgeYaml({
+      name:        genName,
+      source:      ds.type === "synthetic" ? "synthetic" : "csv",
+      csvPath:     ds.dataPath,
+      columns:     ds.columns ?? ["value"],
+      signal:      ds.signal ?? "sine",
+      nSamples:    ds.nSamples ?? 1000,
+      noiseStd:    ds.noiseStd ?? 0.1,
+      anomalyRate: ds.anomalyRate ?? 0.05,
+      anomalyMag:  ds.anomalyMag ?? 5.0,
+      algo:        parsed.data.algo ?? "zscore",
+      threshold:   parsed.data.threshold ?? 3.0,
+      minSamples:  parsed.data.minSamples ?? 30,
+      epochs:      parsed.data.totalEpochs,
+      outputDir,
+    });
+    const genConfigPath = path.join(CONFIGS_GEN_DIR, `${genName}.yaml`);
+    fs.writeFileSync(genConfigPath, yaml, "utf8");
+    resolvedConfig = genConfigPath;
+  } else if (parsed.data.config) {
+    resolvedConfig = path.join(CONFIGS_DIR, parsed.data.config);
+  }
+
   // Spawn automl-pipeline CLI in background (fire and forget)
-  if (parsed.data.config) {
-    const configPath = path.join(CONFIGS_DIR, parsed.data.config);
+  if (resolvedConfig) {
+    const configPath = resolvedConfig;
     const cliDir     = path.join(REPO_ROOT, "automl-pipeline");
     const jobId      = job.id;
 
@@ -1526,4 +1576,244 @@ app.get("/readings/export", cookieAuth, async (c) => {
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
+});
+
+// =============================================================================
+// FORGE DATA STUDIO (G3)
+// =============================================================================
+
+const UPLOADS_DIR = path.resolve(process.cwd(), "..", "automl-pipeline", "data", "uploads");
+const CONFIGS_GEN_DIR = path.resolve(process.cwd(), "..", "automl-pipeline", "configs", "generated");
+
+function ensureDir(dir: string) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+/**
+ * Peek at first N lines of a CSV file → return columns + row count estimate.
+ */
+function csvMeta(filePath: string): { columns: string[]; rows: number } {
+  const raw = fs.readFileSync(filePath, "utf8");
+  const lines = raw.trim().split(/\r?\n/);
+  const header = lines[0]?.split(",").map((c) => c.trim().replace(/^"|"$/g, "")) ?? [];
+  return { columns: header, rows: Math.max(0, lines.length - 1) };
+}
+
+/**
+ * Generate a Forge YAML config string from a data source descriptor + algo + profile.
+ */
+function generateForgeYaml(opts: {
+  name:       string;
+  source:     "csv" | "synthetic";
+  csvPath?:   string;
+  columns:    string[];
+  signal?:    string;
+  nSamples?:  number;
+  noiseStd?:  number;
+  anomalyRate?: number;
+  anomalyMag?:  number;
+  algo:       string;
+  threshold?: number;
+  minSamples?: number;
+  epochs?:    number;
+  outputDir:  string;
+}): string {
+  const {
+    name, source, csvPath, columns, signal = "sine",
+    nSamples = 1000, noiseStd = 0.1, anomalyRate = 0.05, anomalyMag = 5.0,
+    algo, threshold = 3.0, minSamples = 30, epochs = 50,
+    outputDir,
+  } = opts;
+
+  const colYaml = columns.map((c) => `"${c}"`).join(", ");
+
+  const dataBlock = source === "csv"
+    ? `data:\n  source: csv\n  path: "${csvPath}"\n  columns: [${colYaml}]`
+    : `data:\n  source: synthetic\n  signal: ${signal}\n  n_samples: ${nSamples}\n  noise_std: ${noiseStd}\n  anomaly_rate: ${anomalyRate}\n  anomaly_magnitude: ${anomalyMag}\n  columns: [${colYaml}]\n  seed: 42`;
+
+  let detectorBlock = "";
+  if (algo === "zscore") {
+    detectorBlock = `detectors:\n  - type: zscore\n    threshold_sigma: ${threshold}\n    min_samples: ${minSamples}`;
+  } else if (algo === "ewma_drift") {
+    detectorBlock = `detectors:\n  - type: ewma_drift\n    alpha: 0.1\n    threshold_sigma: ${threshold}`;
+  } else if (algo === "mad") {
+    detectorBlock = `detectors:\n  - type: mad\n    threshold_mad: ${threshold}\n    window: 50`;
+  } else if (algo === "autoencoder") {
+    detectorBlock = `detectors:\n  - type: autoencoder\n    latent_dim: 4\n    epochs: ${epochs}\n    batch_size: 32\n    threshold_percentile: 95.0`;
+  } else if (algo === "lstm_autoencoder") {
+    detectorBlock = `detectors:\n  - type: lstm_autoencoder\n    seq_len: 20\n    latent_dim: 8\n    epochs: ${epochs}\n    batch_size: 32\n    threshold_percentile: 95.0`;
+  } else {
+    // isolation_forest or fallback
+    detectorBlock = `detectors:\n  - type: isolation_forest\n    contamination: ${anomalyRate}`;
+  }
+
+  const exportTargets = ["autoencoder", "lstm_autoencoder"].includes(algo)
+    ? "[tflite_micro, json_config]"
+    : "[c_header, json_config]";
+
+  return [
+    `# Ardent Forge — auto-generated config`,
+    `name: ${name}`,
+    `description: "Généré par Ardent Watch Forge Studio"`,
+    ``,
+    dataBlock,
+    ``,
+    detectorBlock,
+    ``,
+    `split:\n  enabled: true\n  test_ratio: 0.2\n  random_state: 42`,
+    ``,
+    `export:\n  targets: ${exportTargets}\n  output_dir: ${outputDir}\n  quantization: float32`,
+    ``,
+    `report:\n  enabled: true\n  format: html\n  output_dir: reports`,
+  ].join("\n");
+}
+
+// -------------------------------------------------------------------------
+// POST /api/forge/data/upload — receive CSV file, save to uploads dir
+// Body: multipart/form-data { file: File, columns?: string (comma-sep) }
+// Returns: { dataPath, columns, rows, uploadId }
+// -------------------------------------------------------------------------
+app.post("/forge/data/upload", cookieAuth, async (c) => {
+  ensureDir(UPLOADS_DIR);
+  let formData: FormData;
+  try {
+    formData = await c.req.raw.formData();
+  } catch {
+    return c.json({ error: "Expected multipart/form-data" }, 400);
+  }
+  const file = formData.get("file") as File | null;
+  if (!file) return c.json({ error: "No file field" }, 400);
+  if (!file.name.endsWith(".csv")) return c.json({ error: "Only .csv files accepted" }, 400);
+  if (file.size > 50 * 1024 * 1024) return c.json({ error: "File too large (max 50 MB)" }, 400);
+
+  const uploadId  = crypto.randomUUID();
+  const destPath  = path.join(UPLOADS_DIR, `${uploadId}.csv`);
+  const buf       = await file.arrayBuffer();
+  fs.writeFileSync(destPath, Buffer.from(buf));
+
+  const { columns, rows } = csvMeta(destPath);
+  // Return preview of first 5 data rows
+  const raw     = fs.readFileSync(destPath, "utf8").trim().split(/\r?\n/);
+  const preview = raw.slice(1, 6);
+
+  return c.json({ uploadId, dataPath: destPath, columns, rows, preview });
+});
+
+// -------------------------------------------------------------------------
+// POST /api/forge/data/capture — export readings from DB as CSV
+// Body: { deviceId?, from?, to?, limit? }
+// Returns: { dataPath, columns, rows, uploadId }
+// -------------------------------------------------------------------------
+app.post("/forge/data/capture", cookieAuth, async (c) => {
+  ensureDir(UPLOADS_DIR);
+  const body = await c.req.json().catch(() => ({})) as {
+    deviceId?: string; from?: string; to?: string; limit?: number;
+  };
+  const rawLimit = Math.min(body.limit ?? 5000, 20_000);
+  const where: Record<string, unknown> = {};
+  if (body.deviceId) where.deviceId = body.deviceId;
+  if (body.from || body.to) {
+    const ts: Record<string, Date> = {};
+    if (body.from) ts.gte = new Date(body.from);
+    if (body.to)   ts.lte = new Date(body.to);
+    where.timestamp = ts;
+  }
+
+  const rows = await prisma.reading.findMany({
+    where,
+    orderBy: { timestamp: "asc" },
+    take: rawLimit,
+    select: { timestamp: true, value: true, zScore: true, isAnomaly: true, sensorType: true, deviceId: true },
+  });
+
+  if (rows.length === 0) return c.json({ error: "Aucune donnée trouvée pour ces critères" }, 404);
+
+  const header = "timestamp,value,zscore,is_anomaly,sensor_type,device_id";
+  const lines  = rows.map((r) =>
+    [r.timestamp.toISOString(), r.value, r.zScore, r.isAnomaly ? 1 : 0, r.sensorType ?? "", r.deviceId].join(",")
+  );
+  const csv = [header, ...lines].join("\n");
+
+  const uploadId = crypto.randomUUID();
+  const destPath = path.join(UPLOADS_DIR, `${uploadId}.csv`);
+  fs.writeFileSync(destPath, csv, "utf8");
+
+  return c.json({
+    uploadId,
+    dataPath: destPath,
+    columns:  ["value"],  // Forge will use "value" column by default
+    rows:     rows.length,
+    preview:  lines.slice(0, 5),
+  });
+});
+
+// =============================================================================
+// SETTINGS (G9)
+// =============================================================================
+
+const SETTINGS_FILE = path.resolve(process.cwd(), "data", "settings.json");
+
+const SETTINGS_DEFAULTS = {
+  zscore_default_threshold:    3.0,
+  min_samples_default:         30,
+  device_inactive_days:        parseInt(process.env.DEVICE_INACTIVE_DAYS ?? "7", 10),
+  device_purge_days:           parseInt(process.env.DEVICE_PURGE_DAYS    ?? "30", 10),
+  alert_webhook_url:           process.env.ALERT_WEBHOOK_URL ?? "",
+  alert_webhook_min_level:     process.env.ALERT_WEBHOOK_MIN_LEVEL ?? "DANGER",
+};
+
+type SettingsKey = keyof typeof SETTINGS_DEFAULTS;
+const EDITABLE_KEYS = new Set<string>(Object.keys(SETTINGS_DEFAULTS));
+
+function readSettings(): typeof SETTINGS_DEFAULTS {
+  try {
+    const raw = fs.readFileSync(SETTINGS_FILE, "utf8");
+    return { ...SETTINGS_DEFAULTS, ...(JSON.parse(raw) as Partial<typeof SETTINGS_DEFAULTS>) };
+  } catch {
+    return { ...SETTINGS_DEFAULTS };
+  }
+}
+
+function writeSettings(data: Partial<typeof SETTINGS_DEFAULTS>) {
+  const current = readSettings();
+  const next    = { ...current };
+  for (const [k, v] of Object.entries(data)) {
+    if (EDITABLE_KEYS.has(k)) (next as Record<string, unknown>)[k] = v;
+  }
+  fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2), "utf8");
+  return next;
+}
+
+// -------------------------------------------------------------------------
+// GET /api/settings — return current settings + env-level info (read-only)
+// -------------------------------------------------------------------------
+app.get("/settings", cookieAuth, async (c) => {
+  const settings = readSettings();
+  // Append read-only env info (masked for security)
+  const mqttUrl = process.env.MQTT_BROKER_URL ?? "";
+  const dbUrl   = process.env.DATABASE_URL ?? "";
+  return c.json({
+    ...settings,
+    _readonly: {
+      mqtt_broker_url: mqttUrl || "(non configuré)",
+      mqtt_username:   process.env.MQTT_USERNAME ?? "",
+      database_url:    dbUrl ? dbUrl.replace(/:([^:@]+)@/, ":****@") : "(non configuré)",
+    },
+  });
+});
+
+// -------------------------------------------------------------------------
+// PATCH /api/settings — update editable settings
+// -------------------------------------------------------------------------
+app.patch("/settings", cookieAuth, async (c) => {
+  const body = await c.req.json().catch(() => null) as Partial<typeof SETTINGS_DEFAULTS> | null;
+  if (!body) return c.json({ error: "Invalid JSON" }, 400);
+  // Strip unknown / read-only keys
+  const safe: Partial<typeof SETTINGS_DEFAULTS> = {};
+  for (const k of Object.keys(body) as SettingsKey[]) {
+    if (EDITABLE_KEYS.has(k)) (safe as Record<string, unknown>)[k] = (body as Record<string, unknown>)[k];
+  }
+  const next = writeSettings(safe);
+  return c.json(next);
 });
