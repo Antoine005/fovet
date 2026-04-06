@@ -397,6 +397,8 @@ app.get("/devices/:id/stream", cookieAuth, async (c) => {
   if (!device) return c.json({ error: "Device not found" }, 404);
 
   return streamSSE(c, async (stream) => {
+    await stream.writeSSE({ event: "ping", data: "connected" });
+
     const cleanup = subscribeToReadings(id, async (reading) => {
       try {
         await stream.writeSSE({ event: "reading", data: JSON.stringify(reading) });
@@ -1425,10 +1427,13 @@ app.get("/forge/jobs/:id/download", async (c) => {
   const AUTOML_DIR = path.resolve(process.cwd(), "..", "automl-pipeline");
   const outputDir  = path.join(AUTOML_DIR, "outputs", job.id);
 
-  // Try C header first, then .tflite
+  // Try all known output file names (Forge generates ard_*_config.h)
   const candidates = [
-    { file: path.join(outputDir, "model.h"),      mime: "text/plain",       ext: ".h" },
-    { file: path.join(outputDir, "model.tflite"),  mime: "application/octet-stream", ext: ".tflite" },
+    { file: path.join(outputDir, "ard_zscore_config.h"),      mime: "text/plain", ext: ".h" },
+    { file: path.join(outputDir, "ard_drift_config.h"),       mime: "text/plain", ext: ".h" },
+    { file: path.join(outputDir, "ard_mad_config.h"),         mime: "text/plain", ext: ".h" },
+    { file: path.join(outputDir, "model.h"),                  mime: "text/plain", ext: ".h" },
+    { file: path.join(outputDir, "model.tflite"),             mime: "application/octet-stream", ext: ".tflite" },
   ];
   for (const { file, mime, ext } of candidates) {
     if (fs.existsSync(file)) {
@@ -1450,6 +1455,9 @@ app.get("/forge/jobs/:id/download", async (c) => {
 // -------------------------------------------------------------------------
 app.get("/events", cookieAuth, (c) => {
   return streamSSE(c, async (stream) => {
+    // Immediate ping to establish connection (prevents client timeout)
+    await stream.writeSSE({ event: "ping", data: "connected" });
+
     const cleanup = subscribeToAllReadings(async (reading) => {
       try {
         await stream.writeSSE({ event: "reading", data: JSON.stringify(reading) });
