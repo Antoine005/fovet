@@ -153,9 +153,20 @@ Pré-requis validés : ESP32-CAM opérationnel ✅ — capteurs MPU-6050/MAX3010
 - [x] `mqtt-ingestion.ts` — parse et persiste les nouveaux champs
 - [x] `ReadingChart.tsx` — auto-scale Y, label unité, ligne zéro, badge `model_id`
 
+**Phase 3.6 — Spec v2 Dashboard (G2–G10)** ✅ (2026-04-06)
+- [x] G2 : `forge algorithms` CLI + `GET /api/forge/algorithms` — liste dynamique des algo disponibles
+- [x] G4 : `POST /api/forge/jobs/:id/deploy` — génère `config.h` + lance `pio upload` → `flashJobId`
+- [x] G5 : `GET /api/forge/jobs/:id/stream` — SSE logs Forge (offset-based, 500ms tick)
+- [x] G6 : `GET /api/events` — SSE global toutes lectures + `LiveMonitor.tsx` (sparklines, latence, ANOMALY/NORMAL)
+- [x] G8 : `GET /api/readings` + `GET /api/readings/export` — historique cross-device + export CSV
+- [x] G10 : `GET /api/forge/jobs/:id/download` — téléchargement `model.h` ou `model.tflite`
+- [x] G12 : `docker-compose.yml` (DB + Mosquitto + dashboard) + Dockerfile rebrandé Ardent Watch
+- [x] G13 : `.github/workflows/ci.yml` — edge-core (gcc) + dashboard (tsc + vitest) + forge (pytest) + smoke (Docker e2e)
+- [x] Vitest : 52 tests, 0 failing — TypeScript : 0 erreurs
+
 **Phase 4 — Déploiement production** (après Phase 3)
 - [ ] VPS Scaleway : Nginx + HTTPS + TimescaleDB
-- [ ] CI/CD : décider GitHub Actions vs Forgejo self-hosted
+- [ ] CI/CD : GitHub Actions (configuré en G13)
 
 ---
 

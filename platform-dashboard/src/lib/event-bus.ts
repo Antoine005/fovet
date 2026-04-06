@@ -33,6 +33,7 @@ function getBus(): EventEmitter {
 
 export function emitReading(deviceId: string, reading: unknown): void {
   getBus().emit(`reading:${deviceId}`, reading);
+  getBus().emit("reading:*", reading);
 }
 
 /**
@@ -46,4 +47,15 @@ export function subscribeToReadings(
   const event = `reading:${deviceId}`;
   getBus().on(event, callback);
   return () => getBus().off(event, callback);
+}
+
+/**
+ * Subscribe to ALL readings across all devices (global monitor).
+ * Returns a cleanup function.
+ */
+export function subscribeToAllReadings(
+  callback: (reading: unknown) => void
+): () => void {
+  getBus().on("reading:*", callback);
+  return () => getBus().off("reading:*", callback);
 }

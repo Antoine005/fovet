@@ -12,7 +12,8 @@ import React, { useState } from "react";
 
 export type ViewType =
   | "fleet" | "detail" | "pti" | "fatigue"
-  | "thermique" | "sante" | "worker" | "forge" | "flash";
+  | "thermique" | "sante" | "worker" | "forge" | "flash"
+  | "monitor" | "history";
 
 // ── SVG icons (20×20, stroke-based) ──────────────────────────────────────────
 
@@ -82,6 +83,22 @@ function IconBolt() {
     </svg>
   );
 }
+function IconEye() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5">
+      <path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" strokeLinejoin="round" />
+      <circle cx="10" cy="10" r="2.5" />
+    </svg>
+  );
+}
+function IconClock() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5">
+      <circle cx="10" cy="10" r="7.5" />
+      <polyline points="10,5.5 10,10 13,12.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 // ── Nav items definition ───────────────────────────────────────────────────────
 
@@ -102,8 +119,10 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const TOOL_ITEMS: NavItem[] = [
-  { view: "forge", label: "Forge", icon: <IconGear />,  devicesRequired: false },
-  { view: "flash", label: "Flash", icon: <IconBolt />,  devicesRequired: false },
+  { view: "monitor", label: "Monitor", icon: <IconEye />,   devicesRequired: false },
+  { view: "history", label: "Historique", icon: <IconClock />, devicesRequired: false },
+  { view: "forge",   label: "Forge",    icon: <IconGear />, devicesRequired: false },
+  { view: "flash",   label: "Flash",    icon: <IconBolt />, devicesRequired: false },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────

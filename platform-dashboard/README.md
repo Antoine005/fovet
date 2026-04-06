@@ -15,7 +15,7 @@ Reçoit les lectures MQTT des ESP32, stocke en PostgreSQL, expose une API REST s
 | MQTT ingestion | mqtt.js → `startMqttIngestion()` au boot Next.js |
 | Temps réel | SSE via EventEmitter in-process (`event-bus.ts`) |
 | Auth | JWT HS256 — cookies httpOnly (pas de localStorage) |
-| Tests | Vitest — 44 tests |
+| Tests | Vitest — 52 tests |
 
 ---
 
@@ -70,7 +70,10 @@ platform-dashboard/
 │   │   ├── FleetPanel.tsx              ← Sparkline compacte + badge alerte (vue flotte)
 │   │   ├── FleetHealth.tsx             ← Santé flotte cross-module (alertes par module par dispositif)
 │   │   ├── FleetAlertTimeline.tsx      ← Chronologie alertes flotte (toutes sources, filtre sévérité, auto-refresh)
-│   │   └── WorkerDetail.tsx            ← Vue individuelle cross-module (résumé capteurs + export rapport)
+│   │   ├── WorkerDetail.tsx            ← Vue individuelle cross-module (résumé capteurs + export rapport)
+│   │   ├── LiveMonitor.tsx             ← [G6] Monitor global SSE — sparklines + badges ANOMALY/NORMAL + latence
+│   │   ├── HistoryView.tsx             ← [G8] Historique lectures cross-device — filtres + export CSV
+│   │   └── ForgeTab.tsx                ← [G2/G4/G5] Ardent Forge — algo cards, SSE logs, deploy USB
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
@@ -101,15 +104,27 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `GET` | `/api/devices` | JWT | Liste tous les dispositifs |
 | `POST` | `/api/devices` | JWT | Enregistrer un nouveau dispositif |
 | `GET` | `/api/devices/:id/readings` | JWT | Lectures paginées (cursor-based) |
-| `GET` | `/api/devices/:id/stream` | JWT | Flux SSE temps réel des nouvelles lectures |
+| `GET` | `/api/devices/:id/stream` | JWT | Flux SSE temps réel des nouvelles lectures (par device) |
 | `GET` | `/api/devices/:id/alerts` | JWT | Alertes non acquittées |
 | `PATCH` | `/api/alerts/:id/ack` | JWT | Acquitter une alerte |
+| `GET` | `/api/events` | JWT | **[G6]** Flux SSE global toutes lectures — `event: reading` |
+| `GET` | `/api/readings` | JWT | **[G8]** Historique cross-device `?deviceId&from&to&anomalyOnly=1&limit&cursor` |
+| `GET` | `/api/readings/export` | JWT | **[G8]** Export CSV des lectures (max 10 000 lignes) |
 | `GET` | `/api/fleet/health` | JWT | Santé flotte cross-module (alertes par module par dispositif) |
 | `GET` | `/api/fleet/alerts/recent` | JWT | Alertes récentes toutes sources — `?limit=50&cursor=<id>` |
 | `GET` | `/api/pti/fleet` | JWT | État flotte PTI (chute/immobilité/SOS par dispositif) |
 | `GET` | `/api/pti/alerts/recent` | JWT | Alertes PTI récentes — `?limit=50&cursor=<id>` |
 | `GET` | `/api/workers/:deviceId/summary` | JWT | Résumé individuel cross-module (lectures HR + TEMP + alertes récentes) |
 | `GET` | `/api/devices/:id/report` | JWT | Rapport de session `?from=ISO&to=ISO&format=json\|csv` (défaut: 8h, cap 7j) |
+| `GET` | `/api/forge/algorithms` | JWT | **[G2]** Liste des algorithmes Forge disponibles (via `uv run forge algorithms`) |
+| `POST` | `/api/forge/jobs` | JWT | Lancer un job d'entraînement Forge |
+| `GET` | `/api/forge/jobs/:id/logs` | JWT | Logs d'un job Forge |
+| `GET` | `/api/forge/jobs/:id/stream` | Non | **[G5]** Flux SSE logs Forge (live, offset-based, 500ms tick) |
+| `POST` | `/api/forge/jobs/:id/deploy` | JWT | **[G4]** Générer `config.h` + lancer `pio upload` — retourne `flashJobId` |
+| `GET` | `/api/forge/jobs/:id/download` | Non | **[G10]** Télécharger le modèle généré (`model.h` ou `model.tflite`) |
+| `GET` | `/api/flash/ports` | Non | Ports COM disponibles (Win32_SerialPort) |
+| `POST` | `/api/flash/start` | Non | Lancer un flash PlatformIO — retourne `jobId` |
+| `GET` | `/api/flash/stream/:jobId` | Non | Flux SSE logs du flash en cours |
 
 ### Pagination des lectures
 
@@ -193,9 +208,8 @@ Watch souscrit à `ardent/devices/+/readings`, insère chaque reading, crée une
 ESP32 → MQTT → mqtt-ingestion.ts → prisma.reading.create()
                                   → emitReading() → EventEmitter (event-bus.ts)
                                                           ↓
-                                GET /devices/:id/stream ← subscribeToReadings()
-                                          ↓
-                                   Browser EventSource (ReadingChart.tsx)
+                              GET /devices/:id/stream ← subscribeToReadings()   → ReadingChart.tsx
+                              GET /events             ← subscribeToAllReadings() → LiveMonitor.tsx
 ```
 
 Le singleton `global.__ardentEventBus` survit aux hot-reloads Next.js en développement.

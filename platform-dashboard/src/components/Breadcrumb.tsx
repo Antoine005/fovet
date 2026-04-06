@@ -29,6 +29,8 @@ const VIEW_LABEL: Record<ViewType, string> = {
   worker:    "Détail travailleur",
   forge:     "Ardent Forge",
   flash:     "Flash ESP32",
+  monitor:   "Live Monitor",
+  history:   "Historique",
 };
 
 function buildSegments(view: ViewType, device: BreadcrumbDevice | null): string[] {

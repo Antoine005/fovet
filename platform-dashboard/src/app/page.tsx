@@ -18,6 +18,8 @@ import WorkerDetail from "@/components/WorkerDetail";
 import { FleetAlertTimeline } from "@/components/FleetAlertTimeline";
 import ForgeTab    from "@/components/ForgeTab";
 import FlashPanel  from "@/components/FlashPanel";
+import LiveMonitor from "@/components/LiveMonitor";
+import HistoryView from "@/components/HistoryView";
 import { Sidebar, type ViewType } from "@/components/Sidebar";
 import { Topbar }    from "@/components/Topbar";
 import { Breadcrumb } from "@/components/Breadcrumb";
@@ -261,7 +263,7 @@ export default function DashboardPage() {
           )}
 
           {/* Empty state */}
-          {!fetchError && devices.length === 0 && view !== "forge" && view !== "flash" && (
+          {!fetchError && devices.length === 0 && view !== "forge" && view !== "flash" && view !== "monitor" && view !== "history" && (
             <div className="max-w-md mx-auto mt-20 text-center space-y-4">
               <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mx-auto">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-7 h-7 text-gray-500">
@@ -302,6 +304,12 @@ export default function DashboardPage() {
 
           {/* Flash */}
           {view === "flash" && <FlashPanel preselectedPort={flashPreport} />}
+
+          {/* Monitor */}
+          {view === "monitor" && <LiveMonitor />}
+
+          {/* History */}
+          {view === "history" && <HistoryView />}
 
           {/* Fleet */}
           {view === "fleet" && devices.length > 0 && (

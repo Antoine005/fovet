@@ -12,7 +12,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { emitReading, subscribeToReadings } from "@/lib/event-bus";
+import { emitReading, subscribeToReadings, subscribeToAllReadings } from "@/lib/event-bus";
 import { checkRateLimit, loginBucket } from "@/lib/rate-limiter";
 import { getMqttStatus } from "@/lib/mqtt-ingestion";
 import { runJanitor, startJanitorScheduler } from "@/lib/device-janitor";
@@ -1358,4 +1358,172 @@ app.get("/forge/audit", async (c) => {
     take: limit,
   });
   return c.json(entries);
+});
+
+// -------------------------------------------------------------------------
+// GET /api/forge/jobs/:id/download — serve generated C header or .tflite
+// -------------------------------------------------------------------------
+app.get("/forge/jobs/:id/download", async (c) => {
+  const { id } = c.req.param();
+  const job = await prisma.forgeJob.findUnique({
+    where: { id },
+    select: { id: true, status: true, jobRef: true },
+  });
+  if (!job) return c.json({ error: "Job not found" }, 404);
+  if (job.status !== "DONE") return c.json({ error: "Job not finished" }, 409);
+
+  const AUTOML_DIR = path.resolve(process.cwd(), "..", "automl-pipeline");
+  const outputDir  = path.join(AUTOML_DIR, "outputs", job.id);
+
+  // Try C header first, then .tflite
+  const candidates = [
+    { file: path.join(outputDir, "model.h"),      mime: "text/plain",       ext: ".h" },
+    { file: path.join(outputDir, "model.tflite"),  mime: "application/octet-stream", ext: ".tflite" },
+  ];
+  for (const { file, mime, ext } of candidates) {
+    if (fs.existsSync(file)) {
+      const buf = fs.readFileSync(file);
+      const safe = job.jobRef.replace(/[^a-zA-Z0-9_-]/g, "_");
+      return new Response(buf, {
+        headers: {
+          "Content-Type": mime,
+          "Content-Disposition": `attachment; filename="ardent_model_${safe}${ext}"`,
+        },
+      });
+    }
+  }
+  return c.json({ error: "No output file found — job may have failed or outputs were cleaned up" }, 404);
+});
+
+// -------------------------------------------------------------------------
+// GET /api/events — global SSE stream of all readings (Live Monitor)
+// -------------------------------------------------------------------------
+app.get("/events", cookieAuth, (c) => {
+  return streamSSE(c, async (stream) => {
+    const cleanup = subscribeToAllReadings(async (reading) => {
+      try {
+        await stream.writeSSE({ event: "reading", data: JSON.stringify(reading) });
+      } catch {
+        cleanup();
+      }
+    });
+
+    stream.onAbort(() => cleanup());
+
+    while (!stream.aborted) {
+      await stream.sleep(30_000);
+      if (!stream.aborted) {
+        await stream.writeSSE({ event: "ping", data: "heartbeat" });
+      }
+    }
+  });
+});
+
+// -------------------------------------------------------------------------
+// GET /api/readings — cross-device reading history with filters
+// ?deviceId=<id>   optional — filter to one device
+// ?from=<ISO>      optional — start datetime
+// ?to=<ISO>        optional — end datetime
+// ?anomalyOnly=1   optional — only anomalous readings
+// ?limit=200       default 200, max 1000
+// ?cursor=<bigint> optional — last id for pagination (desc)
+// -------------------------------------------------------------------------
+app.get("/readings", cookieAuth, async (c) => {
+  const deviceId   = c.req.query("deviceId");
+  const from       = c.req.query("from");
+  const to         = c.req.query("to");
+  const anomalyOnly = c.req.query("anomalyOnly") === "1";
+  const rawLimit   = parseInt(c.req.query("limit") ?? "200", 10);
+  const limit      = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 200, 1000);
+  const cursorRaw  = c.req.query("cursor");
+  const cursor     = cursorRaw ? BigInt(cursorRaw) : undefined;
+
+  const where: Record<string, unknown> = {};
+  if (deviceId) where.deviceId = deviceId;
+  if (anomalyOnly) where.isAnomaly = true;
+  if (from || to) {
+    const ts: Record<string, Date> = {};
+    if (from) ts.gte = new Date(from);
+    if (to)   ts.lte = new Date(to);
+    where.timestamp = ts;
+  }
+
+  const rows = await prisma.reading.findMany({
+    where,
+    orderBy: { id: "desc" },
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    select: {
+      id: true, deviceId: true, sensorType: true, value: true,
+      isAnomaly: true, zScore: true, firmware: true, modelId: true,
+      unit: true, label: true, timestamp: true,
+    },
+  });
+
+  const hasMore = rows.length > limit;
+  const data = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? String(data[data.length - 1].id) : null;
+  const serialized = data.map((r) => ({
+    ...r,
+    id: String(r.id),
+    // Normalize to client-friendly names
+    channel: r.sensorType,
+    anomaly: r.isAnomaly,
+    zscore: r.zScore,
+    algo: r.firmware,
+  }));
+
+  return c.json({ data: serialized, pagination: { limit, hasMore, nextCursor } });
+});
+
+// -------------------------------------------------------------------------
+// GET /api/readings/export — CSV export of reading history
+// Same filters as GET /api/readings (deviceId, from, to, anomalyOnly)
+// max 10 000 rows
+// -------------------------------------------------------------------------
+app.get("/readings/export", cookieAuth, async (c) => {
+  const deviceId    = c.req.query("deviceId");
+  const from        = c.req.query("from");
+  const to          = c.req.query("to");
+  const anomalyOnly = c.req.query("anomalyOnly") === "1";
+
+  const where: Record<string, unknown> = {};
+  if (deviceId) where.deviceId = deviceId;
+  if (anomalyOnly) where.isAnomaly = true;
+  if (from || to) {
+    const ts: Record<string, Date> = {};
+    if (from) ts.gte = new Date(from);
+    if (to)   ts.lte = new Date(to);
+    where.timestamp = ts;
+  }
+
+  const rows = await prisma.reading.findMany({
+    where,
+    orderBy: { timestamp: "asc" },
+    take: 10_000,
+    select: {
+      id: true, deviceId: true, sensorType: true, value: true,
+      isAnomaly: true, zScore: true, firmware: true, modelId: true,
+      unit: true, label: true, timestamp: true,
+    },
+  });
+
+  const header = "id,deviceId,sensorType,value,isAnomaly,zScore,firmware,modelId,unit,label,timestamp";
+  const lines = rows.map((r) =>
+    [
+      String(r.id), r.deviceId, r.sensorType ?? "",
+      r.value, r.isAnomaly ? "1" : "0", r.zScore ?? "",
+      r.firmware ?? "", r.modelId ?? "", r.unit ?? "", r.label ?? "",
+      r.timestamp.toISOString(),
+    ].join(",")
+  );
+  const csv = [header, ...lines].join("\n");
+
+  const filename = `ardent_readings_${new Date().toISOString().slice(0, 10)}.csv`;
+  return new Response(csv, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    },
+  });
 });
