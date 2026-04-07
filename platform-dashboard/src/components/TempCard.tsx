@@ -121,7 +121,7 @@ export function TempCard({
   const [error, setError]       = useState<string | null>(null);
 
   const refresh = useCallback(() => {
-    apiFetch(`/api/devices/${deviceId}/readings?limit=${READINGS_LIMIT}`)
+    apiFetch(`/api/devices/${deviceId}/readings?limit=${READINGS_LIMIT}&sensorType=TEMP`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<{ data: Reading[] }>;

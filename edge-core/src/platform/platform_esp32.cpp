@@ -162,7 +162,7 @@ hal_i2c_err_t hal_i2c_read_reg(uint8_t addr, uint8_t reg,
     if (status != 0)                return HAL_I2C_ERR_BUS;
 
     /* Read bytes */
-    uint8_t received = Wire.requestFrom(addr, (uint8_t)len, (bool)true);
+    uint8_t received = Wire.requestFrom((uint8_t)addr, (uint8_t)len, (uint8_t)1);
     if (received < len) return HAL_I2C_ERR_NACK;
 
     for (uint8_t i = 0; i < len; i++) {

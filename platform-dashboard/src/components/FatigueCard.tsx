@@ -95,7 +95,7 @@ export function FatigueCard({ deviceId, deviceName, location, selected, onSelect
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
-    apiFetch(`/api/devices/${deviceId}/readings?limit=${READINGS_LIMIT}`)
+    apiFetch(`/api/devices/${deviceId}/readings?limit=${READINGS_LIMIT}&sensorType=HR`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<{ data: Reading[] }>;

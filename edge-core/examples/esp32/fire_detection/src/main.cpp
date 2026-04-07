@@ -45,7 +45,6 @@ extern "C" {
 #include "ardent/zscore.h"
 #include "ardent/hal/hal_uart.h"
 #include "ardent/hal/hal_time.h"
-#include "ardent/hal/hal_gpio.h"
 }
 
 #include "esp_camera.h"
@@ -75,9 +74,6 @@ extern "C" {
 #define CAM_PIN_VSYNC    25
 #define CAM_PIN_HREF     23
 #define CAM_PIN_PCLK     22
-
-/* LED flash GPIO4 active LOW (transistor entre GPIO4 et la LED) */
-#define LED_PIN           4U
 
 /* -------------------------------------------------------------------------
  * Paramètres de détection
@@ -299,8 +295,6 @@ void setup(void)
     hal_uart_init(115200);
     hal_delay_ms(2000);   /* CH340 enumération + moniteur ready */
 
-    hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
-    hal_gpio_write(LED_PIN, HAL_GPIO_HIGH);  /* LED off (active LOW) */
 
     /* Tentative d'init PSRAM sous notre contrôle (pas dans le bootloader).
      * Si ça échoue, le programme continue en DRAM uniquement — pas de crash. */
@@ -336,6 +330,7 @@ void setup(void)
     wifi_connect();
     g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     g_mqtt.setKeepAlive(30);
+    g_mqtt.setBufferSize(512);
     mqtt_ensure_connected();
 
     hal_uart_print("[CAM] AEC/AWB stabilisation (5 frames)...\r\n");
@@ -387,10 +382,6 @@ void loop(void)
     float z_r     = (sd_r     > 1e-6f) ? (r_mean   - ard_zscore_get_mean(&g_zs_r))     / sd_r     : 0.0f;
     float z_ratio = (sd_ratio > 1e-6f) ? (ratio_rb - ard_zscore_get_mean(&g_zs_ratio)) / sd_ratio : 0.0f;
     float z_var   = (sd_var   > 1e-6f) ? (variance - ard_zscore_get_mean(&g_zs_var))   / sd_var   : 0.0f;
-
-    /* --- LED -------------------------------------------------------------- */
-
-    hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
 
     /* --- Label d'événement ------------------------------------------------ */
 
