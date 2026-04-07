@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mentions légales — Ardent</title>
+  <meta name="description" content="Mentions légales et politique de confidentialité du site ardent-ai.fr — Ardent SDK embarqué souverain." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0b0c0e;
+      --bg2:       #111318;
+      --bg3:       #181b22;
+      --border:    #1e2230;
+      --border2:   #2a3045;
+      --blue:      #3b82f6;
+      --blue-dim:  #1d4ed8;
+      --text:      #e8eaf0;
+      --text-muted:#8b92a8;
+      --text-dim:  #5c6378;
+      --radius:    10px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+    /* NAV */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(11,12,14,0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      height: 64px;
+      display: flex; align-items: center;
+    }
+    .nav-inner {
+      max-width: 1140px; margin: 0 auto; padding: 0 24px;
+      display: flex; align-items: center; justify-content: space-between; width: 100%;
+    }
+    .nav-logo { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
+
+    /* MAIN */
+    main { padding: 120px 0 80px; }
+
+    .page-header { margin-bottom: 56px; border-bottom: 1px solid var(--border); padding-bottom: 32px; }
+    .page-label {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--blue); margin-bottom: 12px;
+    }
+    h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 700; line-height: 1.2; margin-bottom: 12px; }
+    .page-meta { font-size: 13px; color: var(--text-dim); }
+
+    /* SECTIONS */
+    .legal-section { margin-bottom: 48px; }
+    .legal-section h2 {
+      font-size: 18px; font-weight: 600; color: var(--text);
+      margin-bottom: 16px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .legal-section h3 { font-size: 14px; font-weight: 600; color: var(--text-muted); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .legal-section p { font-size: 15px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.7; }
+    .legal-section ul { padding-left: 20px; margin-bottom: 12px; }
+    .legal-section li { font-size: 15px; color: var(--text-muted); margin-bottom: 6px; line-height: 1.7; }
+    .legal-section strong { color: var(--text); font-weight: 500; }
+
+    .info-block {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 24px; margin-bottom: 16px;
+    }
+    .info-block p { margin-bottom: 4px; }
+    .info-block p:last-child { margin-bottom: 0; }
+
+    .rights-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+    @media (max-width: 600px) { .rights-grid { grid-template-columns: 1fr; } }
+    .right-item {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+    }
+    .right-item strong { display: block; font-size: 13px; color: var(--text); margin-bottom: 4px; }
+    .right-item span { font-size: 13px; color: var(--text-muted); }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      background: var(--bg);
+    }
+    .footer-bottom {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+      font-size: 13px; color: var(--text-dim);
+    }
+    .footer-bottom-links { display: flex; gap: 20px; }
+    .footer-bottom-links a { color: var(--text-dim); }
+    .footer-bottom-links a:hover { color: var(--text); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">A<span style="color:var(--blue)">r</span>dent</a>
+    <a href="/#contact" style="font-size:14px;color:var(--text-muted);">← Retour au site</a>
+  </div>
+</nav>
+
+<main>
+  <div class="container">
+
+    <div class="page-header">
+      <div class="page-label">Informations légales</div>
+      <h1>Mentions légales &amp; Confidentialité</h1>
+      <p class="page-meta">Dernière mise à jour : avril 2026</p>
+    </div>
+
+    <!-- 1. ÉDITEUR -->
+    <div class="legal-section">
+      <h2>1. Éditeur du site</h2>
+      <div class="info-block">
+        <p><strong>Site web :</strong> ardent-ai.fr</p>
+        <p><strong>Responsable de la publication :</strong> Antoine Porte</p>
+        <p><strong>Statut :</strong> Entrepreneur individuel</p>
+        <p><strong>Email :</strong> <a href="mailto:contact@ardent-ai.fr">contact@ardent-ai.fr</a></p>
+        <p><strong>Pays :</strong> France</p>
+      </div>
+    </div>
+
+    <!-- 2. HÉBERGEMENT -->
+    <div class="legal-section">
+      <h2>2. Hébergement</h2>
+      <div class="info-block">
+        <p><strong>Hébergeur :</strong> GitHub Pages (Microsoft Corporation)</p>
+        <p><strong>Adresse :</strong> 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, États-Unis</p>
+        <p><strong>Site :</strong> <a href="https://pages.github.com" target="_blank" rel="noopener">pages.github.com</a></p>
+      </div>
+      <p>GitHub Pages est un service d'hébergement de sites statiques. Aucune donnée saisie sur ce site n'est stockée sur les serveurs GitHub, à l'exception des journaux d'accès standards (adresse IP, user-agent, URL consultée) conservés par GitHub selon sa propre politique de confidentialité.</p>
+    </div>
+
+    <!-- 3. PROPRIÉTÉ INTELLECTUELLE -->
+    <div class="legal-section">
+      <h2>3. Propriété intellectuelle</h2>
+      <p>L'ensemble du contenu de ce site (textes, visuels, code source de la landing page) est la propriété exclusive d'Antoine Porte, sauf mention contraire.</p>
+      <p><strong>Ardent Pulse</strong> est distribué sous double licence : <strong>LGPL v3</strong> pour les usages non commerciaux et open source, et une <strong>licence commerciale</strong> pour tout usage industriel ou de défense. Voir le dépôt GitHub pour les conditions complètes.</p>
+      <p>Toute reproduction, représentation ou exploitation non autorisée des éléments de ce site est interdite.</p>
+    </div>
+
+    <!-- 4. POLITIQUE DE CONFIDENTIALITÉ -->
+    <div class="legal-section" id="confidentialite">
+      <h2>4. Politique de confidentialité</h2>
+
+      <h3>4.1 Responsable du traitement</h3>
+      <p>Antoine Porte — <a href="mailto:contact@ardent-ai.fr">contact@ardent-ai.fr</a></p>
+
+      <h3>4.2 Données collectées</h3>
+      <p>Ce site ne collecte aucune donnée de navigation (pas de cookie de suivi, pas d'analytics). Les seules données personnelles collectées sont celles que vous saisissez volontairement dans le <strong>formulaire de contact</strong> :</p>
+      <ul>
+        <li>Prénom et nom</li>
+        <li>Adresse email professionnelle</li>
+        <li>Organisation</li>
+        <li>Secteur d'activité</li>
+        <li>Microcontrôleur cible (optionnel)</li>
+        <li>Description de votre besoin</li>
+      </ul>
+
+      <h3>4.3 Finalité du traitement</h3>
+      <p>Les données collectées via le formulaire sont utilisées <strong>uniquement</strong> pour :</p>
+      <ul>
+        <li>Répondre à votre demande commerciale ou technique</li>
+        <li>Prendre contact avec vous concernant Ardent SDK</li>
+      </ul>
+      <p>Elles ne sont jamais vendues, cédées ou utilisées à des fins marketing sans votre consentement explicite.</p>
+
+      <h3>4.4 Sous-traitant technique</h3>
+      <div class="info-block">
+        <p><strong>Formspree, Inc.</strong> — traitement des soumissions de formulaire</p>
+        <p>Adresse : États-Unis — <a href="https://formspree.io/legal/privacy-policy" target="_blank" rel="noopener">Politique de confidentialité Formspree</a></p>
+        <p>Formspree reçoit les données du formulaire et les achemine vers notre adresse email. Ces données sont soumises à leur propre politique de confidentialité et à leurs conditions de service.</p>
+      </div>
+
+      <h3>4.5 Durée de conservation</h3>
+      <p>Les données sont conservées le temps nécessaire au traitement de votre demande, et supprimées ou anonymisées dans un délai de <strong>12 mois</strong> sans suite commerciale.</p>
+
+      <h3>4.6 Vos droits (RGPD)</h3>
+      <p>Conformément au Règlement Général sur la Protection des Données (RGPD — UE 2016/679) et à la loi Informatique et Libertés, vous disposez des droits suivants :</p>
+      <div class="rights-grid">
+        <div class="right-item">
+          <strong>Droit d'accès</strong>
+          <span>Obtenir une copie de vos données</span>
+        </div>
+        <div class="right-item">
+          <strong>Droit de rectification</strong>
+          <span>Corriger des données inexactes</span>
+        </div>
+        <div class="right-item">
+          <strong>Droit à l'effacement</strong>
+          <span>Demander la suppression de vos données</span>
+        </div>
+        <div class="right-item">
+          <strong>Droit d'opposition</strong>
+          <span>S'opposer à un traitement</span>
+        </div>
+        <div class="right-item">
+          <strong>Droit à la portabilité</strong>
+          <span>Recevoir vos données dans un format lisible</span>
+        </div>
+        <div class="right-item">
+          <strong>Droit de limitation</strong>
+          <span>Restreindre le traitement</span>
+        </div>
+      </div>
+      <p style="margin-top:16px;">Pour exercer ces droits, écrivez à : <a href="mailto:contact@ardent-ai.fr">contact@ardent-ai.fr</a></p>
+      <p>Vous pouvez également introduire une réclamation auprès de la <strong>CNIL</strong> (<a href="https://www.cnil.fr" target="_blank" rel="noopener">cnil.fr</a>).</p>
+
+      <h3>4.7 Cookies</h3>
+      <p>Ce site n'utilise <strong>aucun cookie</strong> de traçage ou de mesure d'audience. Aucun outil analytics tiers (Google Analytics, Matomo, etc.) n'est activé.</p>
+    </div>
+
+    <!-- 5. LIENS EXTERNES -->
+    <div class="legal-section">
+      <h2>5. Liens hypertextes</h2>
+      <p>Ce site contient des liens vers des sites tiers (GitHub, Formspree). Ardent décline toute responsabilité quant au contenu de ces sites externes et à leur politique de confidentialité.</p>
+    </div>
+
+    <!-- 6. LOI APPLICABLE -->
+    <div class="legal-section">
+      <h2>6. Loi applicable</h2>
+      <p>Les présentes mentions légales sont régies par le droit français. En cas de litige, les tribunaux français seront seuls compétents.</p>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <div class="container">
+    <div class="footer-bottom">
+      <span>© 2026 Antoine Porte — Ardent. Tous droits réservés.</span>
+      <div class="footer-bottom-links">
+        <a href="/mentions-legales">Mentions légales</a>
+        <a href="/mentions-legales#confidentialite">Politique de confidentialité</a>
+        <a href="https://github.com/Antoine005/ardent" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
