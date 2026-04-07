@@ -200,6 +200,7 @@ void setup(void)
     g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     g_mqtt.setKeepAlive(60);       /* 60s keep-alive — more robust on flaky WiFi */
     g_mqtt.setSocketTimeout(15);   /* 15s socket timeout                         */
+    g_mqtt.setBufferSize(512);     /* default 256 too small for canonical payload */
     mqtt_ensure_connected();
 }
 

@@ -2,7 +2,7 @@
  * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent-ai.fr
  *
  * IMU Z-Score Demo — MPU-6050 → ESP32-CAM → MQTT → Vigie
  *
@@ -35,7 +35,6 @@ extern "C" {
 #include "ardent/zscore.h"
 #include "ardent/hal/hal_uart.h"
 #include "ardent/hal/hal_time.h"
-#include "ardent/hal/hal_gpio.h"
 #include "ardent/hal/hal_i2c.h"
 #include "ardent/drivers/mpu6050.h"
 }
@@ -49,8 +48,6 @@ extern "C" {
 /* -------------------------------------------------------------------------
  * Constants
  * ------------------------------------------------------------------------- */
-
-#define LED_PIN               4        /* ESP32-CAM onboard LED (active LOW) */
 
 /* I2C bus — ESP32-CAM external sensor header */
 #define I2C_SDA_PIN           13
@@ -174,8 +171,6 @@ static void mqtt_publish_reading(float magnitude, float zscore_val, bool anomaly
 void setup(void)
 {
     hal_uart_init(115200);
-    hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
-    hal_gpio_write(LED_PIN, HAL_GPIO_HIGH); /* LED off (active LOW) */
 
     /* I2C bus */
     hal_i2c_init(I2C_SDA_PIN, I2C_SCL_PIN, I2C_FREQ_HZ);
@@ -205,6 +200,7 @@ void setup(void)
     wifi_connect();
     g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     g_mqtt.setKeepAlive(30);
+    g_mqtt.setBufferSize(512);
     mqtt_ensure_connected();
 }
 
@@ -239,10 +235,6 @@ void loop(void)
     float mean       = ard_zscore_get_mean(&g_zscore);
     float stddev     = ard_zscore_get_stddev(&g_zscore);
     float zscore_val = (stddev > 0.0f) ? ((magnitude - mean) / stddev) : 0.0f;
-
-    /* --- LED feedback ----------------------------------------------------- */
-
-    hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
 
     /* --- Serial log (CSV) ------------------------------------------------- */
 

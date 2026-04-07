@@ -376,7 +376,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
                 {devices.map((d) => (
                   <FatigueCard
-                    key={d.id}
+                    key={`${chartKey}:${d.id}`}
                     deviceId={d.id}
                     deviceName={d.name}
                     location={d.location}
@@ -395,7 +395,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
                 {devices.map((d) => (
                   <TempCard
-                    key={d.id}
+                    key={`${chartKey}:${d.id}`}
                     deviceId={d.id}
                     deviceName={d.name}
                     location={d.location}

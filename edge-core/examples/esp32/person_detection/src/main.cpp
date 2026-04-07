@@ -1,11 +1,11 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent-ai.fr
  *
  * person_detection/src/main.cpp
- * Visual Wake Words — détection de personne via TFLite Micro + OV2640 + Z-Score.
+ * Visual Wake Words — détection de personne via TFLite Micro + OV2640.
  *
  * Modèle : person_detect (MobileNetV1 0.25×, Visual Wake Words)
  *   Input  : 96×96×1 grayscale, int8 [-128, 127]
@@ -15,13 +15,12 @@
  * Pipeline :
  *   OV2640 GRAYSCALE 96×96 ──► TFLite Micro ──► person_score
  *                                                     │
- *                                               FovetZScore ──► MQTT → Vigie
+ *                                             score > 0.75 ──► MQTT → Watch
  *
- * Le FovetZScore modélise le score "personne" sur les WARMUP_FRAMES premières
- * inférences (scène vide) et signale une anomalie lorsque le score dépasse
- * ZSCORE_THRESHOLD sigmas — i.e., une personne entre dans le champ.
+ * Détection : seuil direct person_score > 0.75f (le z-score est calculé
+ * séparément pour affichage UART uniquement).
  *
- * MQTT topic : fovet/devices/<DEVICE_ID>/readings
+ * MQTT topic : ardent/devices/<DEVICE_ID>/readings
  * Payload (format canonique multi-modèle) :
  *   { "device_id": "esp32cam_001", "firmware": "person_detection",
  *     "sensor": "camera", "value": 0.87, "label": "person",
@@ -51,12 +50,11 @@
 /* --- ESP32 heap (pour heap_caps_malloc) ----------------------------------- */
 #include "esp_heap_caps.h"
 
-/* --- Fovet SDK ----------------------------------------------------------- */
+/* --- Ardent SDK ---------------------------------------------------------- */
 extern "C" {
-#include "fovet/zscore.h"
-#include "fovet/hal/hal_uart.h"
-#include "fovet/hal/hal_gpio.h"
-#include "fovet/hal/hal_time.h"
+#include "ardent/zscore.h"
+#include "ardent/hal/hal_uart.h"
+#include "ardent/hal/hal_time.h"
 }
 
 /* --- Modèle bundlé (copié depuis TensorFlowLite_ESP32 lib) ---------------- */
@@ -88,9 +86,6 @@ extern "C" {
 #define CAM_PIN_VSYNC  25
 #define CAM_PIN_HREF   23
 #define CAM_PIN_PCLK   22
-
-/* LED flash GPIO4, active LOW (transistor inverseur sur ESP32-CAM) */
-#define LED_PIN  4U
 
 /* =========================================================================
  * Paramètres de détection
@@ -131,7 +126,7 @@ static tflite::MicroInterpreter    *interpreter   = nullptr;
 static TfLiteTensor                *input_tensor  = nullptr;
 static TfLiteTensor                *output_tensor = nullptr;
 
-static FovetZScore  g_zs_person;   /* suivi temporel du score "personne" */
+static ArdentZScore g_zs_person;   /* suivi temporel du score "personne" (affichage z uniquement) */
 
 static WiFiClient   wifi_client;
 static PubSubClient mqtt_client(wifi_client);
@@ -260,6 +255,7 @@ static bool tflite_init(void)
 static bool wifi_connect(void)
 {
     WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
     WiFi.disconnect(true);
     hal_delay_ms(100);
 
@@ -290,7 +286,9 @@ static bool wifi_connect(void)
 static bool mqtt_connect(void)
 {
     mqtt_client.setServer(MQTT_BROKER, MQTT_PORT);
-    mqtt_client.setKeepAlive(30);
+    mqtt_client.setKeepAlive(60);
+    mqtt_client.setSocketTimeout(15);
+    mqtt_client.setBufferSize(512);
 
     snprintf(g_buf, sizeof(g_buf), "[MQTT] Connexion a %s:%d...\r\n",
              MQTT_BROKER, MQTT_PORT);
@@ -308,17 +306,23 @@ static bool mqtt_connect(void)
     return false;
 }
 
+/* Non-blocking throttled reconnect — single attempt every 5 s. */
 static void mqtt_ensure_connected(void)
 {
-    if (!mqtt_client.connected()) {
-        uint32_t t0 = hal_time_ms();
-        while (!mqtt_client.connected() && (hal_time_ms() - t0) < 5000U) {
-            if (mqtt_client.connect(DEVICE_ID, MQTT_USER, MQTT_PASSWORD)) {
-                hal_uart_print("[MQTT] Reconnecte\r\n");
-            } else {
-                hal_delay_ms(1000);
-            }
-        }
+    static uint32_t last_attempt_ms = 0;
+    if (mqtt_client.connected()) return;
+    if (WiFi.status() != WL_CONNECTED) return;
+
+    uint32_t now = hal_time_ms();
+    if ((now - last_attempt_ms) < 5000U) return;
+    last_attempt_ms = now;
+
+    if (mqtt_client.connect(DEVICE_ID, MQTT_USER, MQTT_PASSWORD)) {
+        hal_uart_print("[MQTT] Reconnecte\r\n");
+    } else {
+        snprintf(g_buf, sizeof(g_buf),
+                 "[MQTT] Reconnexion echouee (state=%d)\r\n", mqtt_client.state());
+        hal_uart_print(g_buf);
     }
 }
 
@@ -336,27 +340,27 @@ static void mqtt_publish(float person_score)
     snprintf(g_buf, sizeof(g_buf),
              "{"
              "\"device_id\":\"%s\","
-             "\"model_id\":\"" FOVET_MODEL_ID "\","
+             "\"model_id\":\"" ARD_MODEL_ID "\","
              "\"firmware\":\"person_detection\","
-             "\"sensor\":\"" FOVET_MODEL_SENSOR "\","
+             "\"sensor\":\"" ARD_MODEL_SENSOR "\","
              "\"value\":%.3f,"
              "\"value_min\":%.3f,"
              "\"value_max\":%.3f,"
              "\"label\":\"%s\","
-             "\"unit\":\"" FOVET_MODEL_UNIT "\","
+             "\"unit\":\"" ARD_MODEL_UNIT "\","
              "\"anomaly\":%s,"
              "\"ts\":%lu"
              "}",
              DEVICE_ID,
              person_score,
-             (double)FOVET_MODEL_VALUE_MIN,
-             (double)FOVET_MODEL_VALUE_MAX,
+             (double)ARD_MODEL_VALUE_MIN,
+             (double)ARD_MODEL_VALUE_MAX,
              label,
              anomaly ? "true" : "false",
              (unsigned long)hal_time_ms());
 
     char topic[64];
-    snprintf(topic, sizeof(topic), "fovet/devices/%s/readings", DEVICE_ID);
+    snprintf(topic, sizeof(topic), "ardent/devices/%s/readings", DEVICE_ID);
     mqtt_client.publish(topic, g_buf);
 }
 
@@ -407,11 +411,8 @@ void setup(void)
     hal_uart_init(115200);
     hal_delay_ms(2000);
 
-    hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
-    hal_gpio_write(LED_PIN, HAL_GPIO_HIGH);
-
     hal_uart_print("\r\n");
-    hal_uart_print("[Fovet] Person Detection — TFLite Micro + Z-Score\r\n\r\n");
+    hal_uart_print("[Ardent] Person Detection — TFLite Micro + seuil direct\r\n\r\n");
 
     /* WiFi must connect before TFLite allocates its 100 KB arena from DRAM.
      * The WiFi stack needs ~60-100 KB of DRAM; starting it first guarantees
@@ -430,7 +431,7 @@ void setup(void)
         while (true) { hal_delay_ms(1000); }
     }
 
-    fovet_zscore_init(&g_zs_person, ZSCORE_THRESHOLD, WARMUP_FRAMES);
+    ard_zscore_init(&g_zs_person, ZSCORE_THRESHOLD, WARMUP_FRAMES);
 
     hal_uart_print("[CAM] Stabilisation AEC/AWB (5 frames)...\r\n");
     for (int i = 0; i < 5; i++) {
@@ -440,11 +441,10 @@ void setup(void)
     }
 
     snprintf(g_buf, sizeof(g_buf),
-             "Warmup  : %u frames | Seuil Z-Score : %.1f sigma\r\n"
+             "Seuil   : person_score > 0.75 (z-score affichage uniquement)\r\n"
              "MQTT    : %s\r\n"
              "CSV     : frame_id,person_score,no_person_score,z_score,anomaly,mean,stddev\r\n\r\n",
-             WARMUP_FRAMES, ZSCORE_THRESHOLD,
-             mqtt_client.connected() ? "connecte -> Vigie" : "desactive (UART only)");
+             mqtt_client.connected() ? "connecte -> Watch" : "desactive (UART only)");
     hal_uart_print(g_buf);
     hal_uart_print("[PRET] Calibration en cours sur scene vide...\r\n\r\n");
 }
@@ -457,10 +457,11 @@ void loop(void)
 {
     static uint32_t last_ms = 0U;
     uint32_t now = hal_time_ms();
-    if ((now - last_ms) < INFERENCE_MS) {
-        mqtt_client.loop();
-        return;
-    }
+
+    mqtt_client.loop();        /* keep-alive — must run every iteration */
+    mqtt_ensure_connected();   /* non-blocking reconnect if dropped     */
+
+    if ((now - last_ms) < INFERENCE_MS) return;
     last_ms = now;
 
     camera_fb_t *fb = esp_camera_fb_get();
@@ -475,15 +476,17 @@ void loop(void)
 
     if (!ok) return;
 
-    bool anomaly = fovet_zscore_update(&g_zs_person, person_score);
+    /* Detection: direct threshold on normalized score (z-score variance too
+     * small on a [0.0, 1.0] signal to reliably exceed a 3-sigma threshold).
+     * Z-score is still updated and computed for UART display only. */
+    bool anomaly = person_score > 0.75f;
 
-    float mean   = fovet_zscore_get_mean  (&g_zs_person);
-    float stddev = fovet_zscore_get_stddev(&g_zs_person);
+    ard_zscore_update(&g_zs_person, person_score);
+    float mean   = ard_zscore_get_mean  (&g_zs_person);
+    float stddev = ard_zscore_get_stddev(&g_zs_person);
     float z_score = (stddev > 1e-6f)
                     ? (person_score - mean) / stddev
                     : 0.0f;
-
-    hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
 
     snprintf(g_buf, sizeof(g_buf),
              "%lu,%.3f,%.3f,%.3f,%d,%.3f,%.3f%s\r\n",
@@ -495,7 +498,6 @@ void loop(void)
     hal_uart_print(g_buf);
 
     if (mqtt_client.connected()) {
-        mqtt_ensure_connected();
         mqtt_publish(person_score);
     }
 

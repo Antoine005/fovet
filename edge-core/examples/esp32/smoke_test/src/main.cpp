@@ -31,7 +31,6 @@ extern "C" {
 #include "ardent/zscore.h"
 #include "ardent/hal/hal_uart.h"
 #include "ardent/hal/hal_time.h"
-#include "ardent/hal/hal_gpio.h"
 }
 
 #include <Arduino.h>
@@ -39,13 +38,6 @@ extern "C" {
 #include <PubSubClient.h>
 #include <math.h>
 #include <stdio.h>
-
-/* -------------------------------------------------------------------------
- * Hardware — board=esp32dev physiquement sur ESP32-CAM AI-Thinker
- * LED flash (GPIO4) : transistor entre GPIO4 et la LED, active LOW.
- * ------------------------------------------------------------------------- */
-
-#define LED_PIN           4U
 
 /* -------------------------------------------------------------------------
  * Detector
@@ -133,14 +125,12 @@ void setup(void)
      * pas de reset — ouvrir le moniteur AVANT de presser RST. */
     hal_delay_ms(2000);
 
-    hal_gpio_set_mode(LED_PIN, HAL_GPIO_MODE_OUTPUT);
-    hal_gpio_write(LED_PIN, HAL_GPIO_HIGH); /* LED off (active LOW) */
-
     ard_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMP);
 
     wifi_connect();
     g_mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     g_mqtt.setKeepAlive(30);
+    g_mqtt.setBufferSize(512);
     mqtt_ensure_connected();
 
     hal_uart_print("\r\n=== Ardent Pulse — Smoke Test ===\r\n");
@@ -184,10 +174,6 @@ void loop(void)
     float mean   = ard_zscore_get_mean(&g_zscore);
     float stddev = ard_zscore_get_stddev(&g_zscore);
     float z      = (stddev > 1e-6f) ? ((sample - mean) / stddev) : 0.0f;
-
-    /* --- LED -------------------------------------------------------------- */
-
-    hal_gpio_write(LED_PIN, anomaly ? HAL_GPIO_LOW : HAL_GPIO_HIGH);
 
     /* --- CSV sur UART ----------------------------------------------------- */
 

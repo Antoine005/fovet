@@ -98,6 +98,7 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
   const [examples,     setExamples]     = useState<Example[]>(EXAMPLES_FALLBACK);
   const [example,      setExample]      = useState<Example>(EXAMPLES_FALLBACK[0]);
   const [flashStatus,  setFlashStatus]  = useState<"idle" | "running" | "ok" | "error">("idle");
+  const [cleanBuild,   setCleanBuild]   = useState(false);
   const [log,          setLog]          = useState("");
   const [historyHint,  setHistoryHint]  = useState<string | null>(null); // last firmware from DB
 
@@ -210,6 +211,26 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
     esRef.current?.close();
     setLog(""); setFlashStatus("running");
 
+    // Clean build: delete .pio/build/<env> before compiling
+    if (cleanBuild) {
+      setLog("[ardent] Suppression du cache de compilation (.pio/build)…\n");
+      try {
+        const cleanRes = await apiFetch("/api/flash/clean", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ env: example.env, project: example.id }),
+        });
+        const cleanData = await cleanRes.json() as { ok: boolean; reason?: string; deleted?: string };
+        if (cleanData.ok) {
+          setLog((p) => p + `[ardent] Cache supprimé : ${cleanData.deleted ?? ""}\n\n`);
+        } else {
+          setLog((p) => p + `[ardent] Aucun cache trouvé (${cleanData.reason ?? "not_found"}) — compilation complète de toute façon.\n\n`);
+        }
+      } catch {
+        setLog((p) => p + "[ardent] Avertissement : impossible de nettoyer le cache, flash quand même.\n\n");
+      }
+    }
+
     let res: Response;
     try {
       res = await apiFetch("/api/flash/start", {
@@ -218,7 +239,7 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
         body: JSON.stringify({ env: example.env, project: example.id, port: effectivePort }),
       });
     } catch (err) {
-      setLog(`Erreur réseau : ${err}`); setFlashStatus("error"); return;
+      setLog((p) => p + `Erreur réseau : ${err}`); setFlashStatus("error"); return;
     }
 
     if (!res.ok) {
@@ -476,6 +497,28 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
             </div>
           )}
 
+          {/* Clean build toggle */}
+          <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+            <div
+              onClick={() => setCleanBuild((v) => !v)}
+              className={`w-8 h-4 rounded-full transition-colors shrink-0 relative ${
+                cleanBuild ? "bg-orange-600" : "bg-gray-700"
+              }`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                cleanBuild ? "translate-x-4" : "translate-x-0"
+              }`} />
+            </div>
+            <span className="text-[10px] text-gray-400 group-hover:text-gray-200 transition-colors leading-tight">
+              Compilation complète
+              <span className="block text-[9px] text-gray-600">
+                {cleanBuild
+                  ? "Supprime .pio/build avant la compilation"
+                  : "Réutilise le cache de compilation (+ rapide)"}
+              </span>
+            </span>
+          </label>
+
           {/* Launch */}
           <button
             onClick={handleFlash}
@@ -483,14 +526,15 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
             className={`w-full py-2.5 rounded font-semibold text-sm tracking-wide transition-colors disabled:opacity-50 ${
               flashStatus === "running" ? "bg-blue-700 text-white cursor-wait"
               : flashStatus === "ok"    ? "bg-green-700 hover:bg-green-600 text-white"
+              : cleanBuild             ? "bg-orange-600 hover:bg-orange-500 text-white"
               : "bg-blue-600 hover:bg-blue-500 text-white"
             }`}
           >
             {flashStatus === "running"
               ? "⟳ Flash en cours…"
               : effectivePort
-              ? `⚡ Flasher ${example.label} sur ${effectivePort}`
-              : "⚡ Compiler & Flasher"}
+              ? `${cleanBuild ? "🔄" : "⚡"} Flasher ${example.label} sur ${effectivePort}`
+              : `${cleanBuild ? "🔄" : "⚡"} Compiler & Flasher`}
           </button>
         </div>
       </div>
