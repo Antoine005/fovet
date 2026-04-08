@@ -2,7 +2,7 @@
  * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@ardent-ai.fr
  */
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
@@ -1260,6 +1260,37 @@ app.post("/forge/jobs/:id/deploy", async (c) => {
     return c.json({ error: `Failed to write config.h: ${err}` }, 500);
   }
 
+  // Copy Forge model artifacts (calibrated C headers) into firmware src/
+  // Convention: job outputs are stored in automl-pipeline/outputs/<jobId>/
+  const AUTOML_DIR  = path.resolve(process.cwd(), "..", "automl-pipeline");
+  const forgeOutDir = path.join(AUTOML_DIR, "outputs", id);
+  const fwSrcDir    = path.join(projectDir, "src");
+  const FORGE_ARTIFACTS = [
+    "ard_zscore_config.h",
+    "ard_drift_config.h",
+    "ard_mad_config.h",
+    "ard_model_manifest.h",
+  ];
+  const copiedArtifacts: string[] = [];
+  if (fs.existsSync(forgeOutDir)) {
+    for (const artifact of FORGE_ARTIFACTS) {
+      const src = path.join(forgeOutDir, artifact);
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, path.join(fwSrcDir, artifact));
+        copiedArtifacts.push(artifact);
+      }
+    }
+  }
+
+  // Read flash.manifest.json to get the correct PlatformIO env name
+  // (env name may differ from the directory name, e.g. zscore_demo uses env "esp32cam")
+  let pioEnv = project; // fallback: use project dir name
+  try {
+    const manifestPath = path.join(projectDir, "flash.manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as { env?: string };
+    if (manifest.env) pioEnv = manifest.env;
+  } catch { /* no manifest — use fallback */ }
+
   // Find pio executable
   let pioExe = process.env.PIO_PATH ?? "";
   if (!pioExe) {
@@ -1280,11 +1311,17 @@ app.post("/forge/jobs/:id/deploy", async (c) => {
   const { randomUUID } = await import("crypto");
   const flashJobId = randomUUID();
   flashJobs.cleanup();
-  const fjob = flashJobs.create(flashJobId, project, project);
+  const fjob = flashJobs.create(flashJobId, pioEnv, project);
 
-  const args = ["run", "--target", "upload", "--environment", project, "--upload-port", port];
+  const args = ["run", "--target", "upload", "--environment", pioEnv, "--upload-port", port];
   fjob.lines.push(`[ardent] Déploiement job ${job.jobRef} → ${device.mqttClientId}\n`);
   fjob.lines.push(`[ardent] config.h écrit dans ${configPath}\n`);
+  if (copiedArtifacts.length > 0) {
+    fjob.lines.push(`[ardent] Artifacts Forge copiés : ${copiedArtifacts.join(", ")}\n`);
+    fjob.lines.push(`[ardent] Firmware compilé avec paramètres pré-calibrés Forge ✓\n`);
+  } else {
+    fjob.lines.push(`[ardent] Aucun artifact Forge trouvé dans outputs/${id} — compilation avec paramètres par défaut\n`);
+  }
   fjob.lines.push(`[ardent] pio ${args.join(" ")}\n\n`);
 
   try {

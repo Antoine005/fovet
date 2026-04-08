@@ -598,27 +598,27 @@ class TestThermalStressPipeline:
 
     def test_header_include_guard(self, exported_dir):
         content = (exported_dir / "thermal_thresholds.h").read_text()
-        assert "FOVET_THERMAL_THRESHOLDS_H" in content
+        assert "ARD_THERMAL_THRESHOLDS_H" in content
 
     def test_header_wbgt_warn_define(self, exported_dir):
         content = (exported_dir / "thermal_thresholds.h").read_text()
-        assert "FOVET_TEMP_WBGT_WARN_C" in content
+        assert "ARD_TEMP_WBGT_WARN_C" in content
 
     def test_header_wbgt_danger_define(self, exported_dir):
         content = (exported_dir / "thermal_thresholds.h").read_text()
-        assert "FOVET_TEMP_WBGT_DANGER_C" in content
+        assert "ARD_TEMP_WBGT_DANGER_C" in content
 
     def test_header_cold_alert_define(self, exported_dir):
         content = (exported_dir / "thermal_thresholds.h").read_text()
-        assert "FOVET_TEMP_COLD_ALERT_C" in content
+        assert "ARD_TEMP_COLD_ALERT_C" in content
 
     def test_header_n_features_define(self, exported_dir):
         content = (exported_dir / "thermal_thresholds.h").read_text()
-        assert f"FOVET_TEMP_N_FEATURES" in content
+        assert f"ARD_TEMP_N_FEATURES" in content
 
     def test_header_normal_celsius_mean_define(self, exported_dir):
         content = (exported_dir / "thermal_thresholds.h").read_text()
-        assert "FOVET_TEMP_NORMAL_CELSIUS_MEAN" in content
+        assert "ARD_TEMP_NORMAL_CELSIUS_MEAN" in content
 
     def test_model_pkl_loadable(self, exported_dir):
         import joblib

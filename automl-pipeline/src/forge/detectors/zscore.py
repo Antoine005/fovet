@@ -33,6 +33,15 @@ _C_HEADER_TEMPLATE = """\
 
 #include "ardent/zscore.h"
 
+/* Defined when this file is present: firmware uses pre-calibrated structs
+ * instead of calling ard_zscore_init() with hardcoded defaults. */
+#define ARD_FORGE_CALIBRATED  1
+
+/* Primary channel struct (first feature: {primary_col}).
+ * Use ARD_FORGE_ZSCORE_PRIMARY as a drop-in for the ArdentZScore context
+ * in single-channel firmware loops. */
+#define ARD_FORGE_ZSCORE_PRIMARY  ard_zscore_{primary_safe_col}
+
 /* One ArdentZScore context per feature channel.
  * Pass the matching struct to ard_zscore_update() in your HAL loop. */
 {contexts}
@@ -137,12 +146,17 @@ class ZScoreDetector(Detector):
                 threshold=self.config.threshold_sigma,
             ))
 
+        primary_col      = self._columns[0]
+        primary_safe_col = primary_col.replace(" ", "_").replace("-", "_")
+
         header = _C_HEADER_TEMPLATE.format(
             pipeline_name=stem,
             n_samples=self._count,
             n_features=len(self._columns),
             columns=", ".join(self._columns),
             threshold_sigma=self.config.threshold_sigma,
+            primary_col=primary_col,
+            primary_safe_col=primary_safe_col,
             contexts="\n\n".join(contexts),
         )
 

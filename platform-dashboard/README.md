@@ -15,7 +15,7 @@ Reçoit les lectures MQTT des ESP32, stocke en PostgreSQL, expose une API REST s
 | MQTT ingestion | mqtt.js → `startMqttIngestion()` au boot Next.js |
 | Temps réel | SSE via EventEmitter in-process (`event-bus.ts`) |
 | Auth | JWT HS256 — cookies httpOnly (pas de localStorage) |
-| Tests | Vitest — 52 tests |
+| Tests | Vitest — 52 tests (39 API + 13 rate-limiter) |
 
 ---
 
@@ -73,17 +73,19 @@ platform-dashboard/
 │   │   ├── WorkerDetail.tsx            ← Vue individuelle cross-module (résumé capteurs + export rapport)
 │   │   ├── LiveMonitor.tsx             ← [G6] Monitor global SSE — sparklines + badges ANOMALY/NORMAL + latence
 │   │   ├── HistoryView.tsx             ← [G8] Historique lectures cross-device — filtres + export CSV
-│   │   └── ForgeTab.tsx                ← [G2/G4/G5] Ardent Forge — algo cards, SSE logs, deploy USB
+│   │   ├── ForgeTab.tsx                ← [G2/G4/G5] Ardent Forge — algo cards, SSE logs, deploy USB
+│   │   └── FlashPanel.tsx              ← Onglet Flash — onglets Exemples + Modèles Forge, sélecteur capteurs, compilation complète
 │   └── lib/
 │       ├── api.ts                      ← Routes Hono + middleware cookieAuth
 │       ├── api-client.ts               ← Fetch wrapper (credentials: include)
 │       ├── event-bus.ts                ← EventEmitter singleton MQTT → SSE
+│       ├── flash-jobs.ts               ← Singleton in-memory des jobs flash PlatformIO
 │       ├── mqtt-ingestion.ts           ← Subscribe MQTT → insertion PostgreSQL + emit
 │       └── prisma.ts                   ← PrismaClient singleton
 ├── prisma/
 │   └── schema.prisma                   ← Modèles Device, Reading (BigInt id, sensorType, value2), Alert (ptiType, alertModule, alertLevel)
 ├── src/__tests__/
-│   ├── api.test.ts                     ← 31 tests Vitest — routes REST, auth, pagination, report
+│   ├── api.test.ts                     ← 39 tests Vitest — routes REST, auth, pagination, report
 │   └── rate-limiter.test.ts            ← 13 tests Vitest — rate limiting IP
 └── .env.example                        ← Template variables d'environnement
 ```
@@ -120,11 +122,14 @@ Toutes les routes sont préfixées `/api/`. Les routes marquées JWT requièrent
 | `POST` | `/api/forge/jobs` | JWT | Lancer un job d'entraînement Forge |
 | `GET` | `/api/forge/jobs/:id/logs` | JWT | Logs d'un job Forge |
 | `GET` | `/api/forge/jobs/:id/stream` | Non | **[G5]** Flux SSE logs Forge (live, offset-based, 500ms tick) |
-| `POST` | `/api/forge/jobs/:id/deploy` | JWT | **[G4]** Générer `config.h` + lancer `pio upload` — retourne `flashJobId` |
+| `POST` | `/api/forge/jobs/:id/deploy` | JWT | **[G4]** Générer `config.h` + copier headers Forge calibrés + `pio upload` — retourne `flashJobId` |
 | `GET` | `/api/forge/jobs/:id/download` | Non | **[G10]** Télécharger le modèle généré (`model.h` ou `model.tflite`) |
 | `GET` | `/api/flash/ports` | Non | Ports COM disponibles (Win32_SerialPort) |
+| `GET` | `/api/flash/examples` | Non | Liste des exemples flashables découverts dynamiquement (via `flash.manifest.json`) |
 | `POST` | `/api/flash/start` | Non | Lancer un flash PlatformIO — retourne `jobId` |
+| `POST` | `/api/flash/clean` | Non | Supprimer le cache `.pio/build/<env>` pour forcer une recompilation complète |
 | `GET` | `/api/flash/stream/:jobId` | Non | Flux SSE logs du flash en cours |
+| `GET` | `/api/forge/jobs` | JWT | Historique des jobs Forge (filtrable par `?status=DONE`) |
 
 ### Pagination des lectures
 
@@ -308,10 +313,54 @@ Les champs `sensorType`, `level`, `value2` sont optionnels — les firmwares exi
 
 ---
 
+## Onglet Flash — Ardent Pulse
+
+L'onglet **Flash** (`FlashPanel.tsx`) permet de compiler et flasher un firmware sur l'ESP32-CAM directement depuis le dashboard.
+
+### Firmwares exemples (`/api/flash/examples`)
+
+Chaque exemple sous `edge-core/examples/esp32/<project>/` expose un fichier `flash.manifest.json` :
+
+```json
+{
+  "id":              "imu_zscore",
+  "label":           "IMU Z-Score",
+  "env":             "imu_zscore",
+  "description":     "MPU-6050 → Z-Score → Watch MQTT",
+  "requiredSensors": ["mpu6050"],
+  "warnIfMissing":   []
+}
+```
+
+- `env` : nom de l'environnement PlatformIO (`[env:…]` dans `platformio.ini`) — **peut différer du nom du répertoire** (ex: `zscore_demo/` utilise `env: "esp32cam"`)
+- `requiredSensors` : capteurs physiquement nécessaires — affiche un badge coloré dans l'UI
+- Aucune modification de code pour ajouter un exemple : créer le `flash.manifest.json` suffit
+
+### Modèles Forge (déploiement via `/api/forge/jobs/:id/deploy`)
+
+L'onglet **Modèles Forge** liste les jobs en statut `DONE`. Le bouton **⚡ Flash USB** :
+1. Génère `src/config.h` avec les credentials WiFi/MQTT du device cible
+2. **Copie les headers Forge calibrés** depuis `automl-pipeline/outputs/<jobId>/` vers `firmware/src/` :
+   - `ard_zscore_config.h` — struct `ArdentZScore` pré-initialisée depuis les vraies données
+   - `ard_drift_config.h` — struct `ArdentDrift` avec threshold auto-calibré
+   - `ard_mad_config.h` — struct `ArdentMAD` + ring buffer pré-chargé
+   - `ard_model_manifest.h` — métadonnées Watch (model_id, unit, value_min/max, labels)
+3. Lit le `flash.manifest.json` du projet cible pour résoudre le nom d'env PlatformIO
+4. Lance `pio run --target upload --environment <env> --upload-port <port>`
+5. Retourne un `flashJobId` → même flux SSE que les flashs standards
+
+Le firmware `zscore_demo` détecte automatiquement `#ifdef ARD_FORGE_CALIBRATED` et utilise les paramètres Forge sans warm-up. Sans les headers, il démarre en mode démo avec paramètres par défaut.
+
+### Compilation complète
+
+Le toggle **Compilation complète** appelle `POST /api/flash/clean` avant le flash pour supprimer `.pio/build/<env>`, forçant une recompilation depuis zéro.
+
+---
+
 ## Tests
 
 ```bash
-npm run test          # Vitest — 44 tests
+npm run test          # Vitest — 52 tests
 npm run test:coverage # Avec couverture
 ```
 

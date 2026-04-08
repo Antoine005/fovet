@@ -16,6 +16,21 @@ interface Port { name: string; description: string }
 type PortStatus = "scanning" | "detected" | "manual" | "disconnected";
 type Sensor     = "ov2640" | "mpu6050" | "max30102" | "dht22";
 type Compat     = "recommended" | "compatible" | "incompatible";
+type FlashMode  = "example" | "forge";
+
+interface ForgeJob {
+  id:          string;
+  jobRef:      string;
+  status:      string;
+  valAccuracy: number | null;
+  model:       { name: string; version: string; type: string } | null;
+}
+
+interface Device {
+  id:           string;
+  name:         string;
+  mqttClientId: string;
+}
 
 interface Example {
   id:              string;
@@ -102,6 +117,13 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
   const [log,          setLog]          = useState("");
   const [historyHint,  setHistoryHint]  = useState<string | null>(null); // last firmware from DB
 
+  // Forge mode
+  const [flashMode,         setFlashMode]         = useState<FlashMode>("example");
+  const [forgeJobs,         setForgeJobs]         = useState<ForgeJob[]>([]);
+  const [selectedForgeJob,  setSelectedForgeJob]  = useState<ForgeJob | null>(null);
+  const [devices,           setDevices]           = useState<Device[]>([]);
+  const [selectedDeviceId,  setSelectedDeviceId]  = useState("");
+
   const prevPortNames = useRef<Set<string>>(new Set());
   const logRef        = useRef<HTMLDivElement>(null);
   const esRef         = useRef<EventSource | null>(null);
@@ -147,6 +169,21 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
         // Only auto-select if user hasn't manually changed from the default
         const match = examples.find((e) => e.id === lastFw);
         if (match) setExample(match);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch completed Forge jobs + devices
+  useEffect(() => {
+    apiFetch("/api/forge/jobs?status=DONE")
+      .then(async (r) => { if (r.ok) setForgeJobs(await r.json() as ForgeJob[]); })
+      .catch(() => {});
+    apiFetch("/api/devices")
+      .then(async (r) => {
+        if (!r.ok) return;
+        const list = await r.json() as Device[];
+        setDevices(list);
+        if (list.length > 0) setSelectedDeviceId(list[0].id);
       })
       .catch(() => {});
   }, []);
@@ -208,17 +245,22 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
 
   const handleFlash = async () => {
     if (flashStatus === "running" || !effectivePort) return;
+    if (flashMode === "forge" && (!selectedForgeJob || !selectedDeviceId)) return;
     esRef.current?.close();
     setLog(""); setFlashStatus("running");
 
     // Clean build: delete .pio/build/<env> before compiling
+    // In Forge mode, target is always zscore_demo — env comes from its manifest (esp32cam)
+    const cleanProject = flashMode === "forge" ? "zscore_demo" : example.id;
+    const cleanEnv     = flashMode === "forge" ? "esp32cam"    : example.env;
+
     if (cleanBuild) {
       setLog("[ardent] Suppression du cache de compilation (.pio/build)…\n");
       try {
         const cleanRes = await apiFetch("/api/flash/clean", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ env: example.env, project: example.id }),
+          body: JSON.stringify({ env: cleanEnv, project: cleanProject }),
         });
         const cleanData = await cleanRes.json() as { ok: boolean; reason?: string; deleted?: string };
         if (cleanData.ok) {
@@ -231,25 +273,48 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
       }
     }
 
-    let res: Response;
-    try {
-      res = await apiFetch("/api/flash/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ env: example.env, project: example.id, port: effectivePort }),
-      });
-    } catch (err) {
-      setLog((p) => p + `Erreur réseau : ${err}`); setFlashStatus("error"); return;
+    let flashJobId: string;
+
+    if (flashMode === "forge" && selectedForgeJob) {
+      // Deploy a Forge-trained model via /api/forge/jobs/:id/deploy
+      let res: Response;
+      try {
+        res = await apiFetch(`/api/forge/jobs/${selectedForgeJob.id}/deploy`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId: selectedDeviceId, project: "zscore_demo", port: effectivePort }),
+        });
+      } catch (err) {
+        setLog((p) => p + `Erreur réseau : ${err}`); setFlashStatus("error"); return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setLog(`Erreur : ${(err as { error?: string }).error ?? res.status}`);
+        setFlashStatus("error"); return;
+      }
+      ({ flashJobId } = await res.json());
+    } else {
+      // Standard example flash via /api/flash/start
+      let res: Response;
+      try {
+        res = await apiFetch("/api/flash/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ env: example.env, project: example.id, port: effectivePort }),
+        });
+      } catch (err) {
+        setLog((p) => p + `Erreur réseau : ${err}`); setFlashStatus("error"); return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setLog(`Erreur : ${(err as { error?: string }).error ?? res.status}`);
+        setFlashStatus("error"); return;
+      }
+      const body = await res.json();
+      flashJobId = body.jobId;
     }
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      setLog(`Erreur : ${(err as { error?: string }).error ?? res.status}`);
-      setFlashStatus("error"); return;
-    }
-
-    const { jobId } = await res.json();
-    const es = new EventSource(`/api/flash/stream/${jobId}`);
+    const es = new EventSource(`/api/flash/stream/${flashJobId}`);
     esRef.current = es;
 
     es.addEventListener("log", (e) => {
@@ -350,78 +415,169 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
       {/* Config grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-        {/* Example selector */}
+        {/* Firmware selector — tabs: Exemples | Modèles Forge */}
         <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
-              Firmware à flasher
-            </label>
-            {historyHint && (
-              <span className="text-[10px] text-gray-600 italic">
-                Dernier : <span className="text-gray-400 font-mono">{historyHint}</span>
+          {/* Tab bar */}
+          <div className="flex items-center gap-1 mb-3 border-b border-gray-800 pb-2">
+            <button
+              onClick={() => setFlashMode("example")}
+              className={`px-2.5 py-1 rounded text-[10px] font-semibold transition-colors ${
+                flashMode === "example"
+                  ? "bg-gray-700 text-gray-100"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Exemples
+            </button>
+            <button
+              onClick={() => setFlashMode("forge")}
+              className={`px-2.5 py-1 rounded text-[10px] font-semibold transition-colors flex items-center gap-1 ${
+                flashMode === "forge"
+                  ? "bg-purple-900/60 text-purple-300 border border-purple-700/50"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Modèles Forge
+              {forgeJobs.length > 0 && (
+                <span className="text-[9px] bg-purple-800/60 text-purple-300 px-1 rounded">{forgeJobs.length}</span>
+              )}
+            </button>
+            {historyHint && flashMode === "example" && (
+              <span className="ml-auto text-[9px] text-gray-600 italic">
+                Dernier : <span className="text-gray-500 font-mono">{historyHint}</span>
               </span>
             )}
           </div>
-          <div className="space-y-1.5">
-            {ranked.map((ex) => {
-              const isSelected = example.id === ex.id;
-              const compatColor =
-                ex.compat === "recommended"  ? "text-green-400"
-              : ex.compat === "incompatible" ? "text-gray-600"
-              : "text-gray-500";
-              const compatLabel =
-                ex.compat === "recommended"  ? "● Recommandé"
-              : ex.compat === "incompatible" ? "○ Capteur(s) manquant(s)"
-              : null;
-              return (
-                <button
-                  key={ex.id}
-                  onClick={() => setExample(ex)}
-                  className={`w-full text-left p-2.5 rounded border transition-all ${
-                    isSelected
-                      ? ex.compat === "recommended"
-                        ? "border-green-700/50 bg-green-900/10"
-                        : "border-blue-700/50 bg-blue-900/10"
-                      : ex.compat === "incompatible"
-                      ? "border-gray-800 opacity-50 hover:opacity-70"
-                      : "border-gray-800 hover:border-gray-700 hover:bg-gray-800/40"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`text-[11px] font-semibold ${ex.compat === "incompatible" ? "text-gray-500" : "text-gray-100"}`}>
-                      {ex.label}
-                    </span>
-                    {compatLabel && sensors.size > 0 && (
-                      <span className={`text-[9px] font-mono shrink-0 ${compatColor}`}>
-                        {compatLabel}
+
+          {/* Examples list */}
+          {flashMode === "example" && (
+            <div className="space-y-1.5">
+              {ranked.map((ex) => {
+                const isSelected = example.id === ex.id && flashMode === "example";
+                const compatColor =
+                  ex.compat === "recommended"  ? "text-green-400"
+                : ex.compat === "incompatible" ? "text-amber-600"
+                : "text-gray-500";
+                const compatLabel =
+                  ex.compat === "recommended"  ? "● Recommandé"
+                : ex.compat === "incompatible" ? "○ Capteur(s) requis"
+                : null;
+                return (
+                  <button
+                    key={ex.id}
+                    onClick={() => { setExample(ex); setFlashMode("example"); }}
+                    className={`w-full text-left p-2.5 rounded border transition-all ${
+                      isSelected
+                        ? ex.compat === "recommended"
+                          ? "border-green-700/50 bg-green-900/10"
+                          : "border-blue-700/50 bg-blue-900/10"
+                        : ex.compat === "incompatible"
+                        ? "border-gray-800 hover:border-gray-700 hover:bg-gray-800/30"
+                        : "border-gray-800 hover:border-gray-700 hover:bg-gray-800/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[11px] font-semibold ${ex.compat === "incompatible" ? "text-gray-500" : "text-gray-100"}`}>
+                        {ex.label}
                       </span>
-                    )}
-                  </div>
-                  <div className="text-[9px] font-mono text-gray-500 mt-0.5">{ex.description}</div>
-                  {ex.requiredSensors.length > 0 && (
-                    <div className="flex gap-1 mt-1">
-                      {ex.requiredSensors.map((s) => {
-                        const meta = SENSORS.find((m) => m.id === s);
-                        const ok   = sensors.has(s);
-                        return (
-                          <span
-                            key={s}
-                            className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
-                              ok
-                                ? "border-green-700/40 text-green-400 bg-green-900/10"
-                                : "border-gray-700 text-gray-600"
-                            }`}
-                          >
-                            {meta?.icon} {meta?.label}
-                          </span>
-                        );
-                      })}
+                      {compatLabel && (
+                        <span className={`text-[9px] font-mono shrink-0 ${compatColor}`}>
+                          {compatLabel}
+                        </span>
+                      )}
                     </div>
+                    <div className="text-[9px] font-mono text-gray-500 mt-0.5">{ex.description}</div>
+                    {ex.requiredSensors.length > 0 && (
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        {ex.requiredSensors.map((s) => {
+                          const meta = SENSORS.find((m) => m.id === s);
+                          const ok   = sensors.has(s);
+                          return (
+                            <span
+                              key={s}
+                              title={ok ? "Capteur déclaré ✓" : "Capteur non déclaré — vérifiez le câblage"}
+                              className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
+                                ok
+                                  ? "border-green-700/40 text-green-400 bg-green-900/10"
+                                  : "border-amber-700/40 text-amber-500 bg-amber-900/10"
+                              }`}
+                            >
+                              {meta?.icon} {meta?.label}{ok ? " ✓" : " ?"}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Forge jobs list */}
+          {flashMode === "forge" && (
+            <div className="space-y-1.5">
+              {forgeJobs.length === 0 ? (
+                <p className="text-[11px] text-gray-600 py-4 text-center">
+                  Aucun modèle entraîné — lancez un job Forge depuis l&apos;onglet Forge.
+                </p>
+              ) : (
+                forgeJobs.slice(0, 8).map((job) => {
+                  const isSel = selectedForgeJob?.id === job.id;
+                  return (
+                    <button
+                      key={job.id}
+                      onClick={() => setSelectedForgeJob(job)}
+                      className={`w-full text-left p-2.5 rounded border transition-all ${
+                        isSel
+                          ? "border-purple-700/50 bg-purple-900/10"
+                          : "border-gray-800 hover:border-gray-700 hover:bg-gray-800/40"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold text-gray-100">
+                          {job.model?.name ?? job.jobRef}
+                          <span className="ml-1 text-[9px] text-gray-500 font-mono">{job.model?.version}</span>
+                        </span>
+                        {job.valAccuracy != null && (
+                          <span className="text-[9px] font-mono text-green-400 shrink-0">
+                            acc {(job.valAccuracy * 100).toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[9px] font-mono text-gray-600 mt-0.5">
+                        {job.jobRef} · {job.model?.type ?? "zscore"} · cible zscore_demo
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+
+              {/* Device selector for Forge deploy */}
+              {forgeJobs.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-800">
+                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest block mb-1">
+                    Déployer sur
+                  </label>
+                  {devices.length === 0 ? (
+                    <p className="text-[10px] text-gray-600">Aucun device enregistré.</p>
+                  ) : (
+                    <select
+                      value={selectedDeviceId}
+                      onChange={(e) => setSelectedDeviceId(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-purple-500"
+                    >
+                      {devices.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.mqttClientId})
+                        </option>
+                      ))}
+                    </select>
                   )}
-                </button>
-              );
-            })}
-          </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Port + launch */}
@@ -485,15 +641,21 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
             Ouvrir le moniteur série <em>après</em> le flash.
           </div>
 
-          {/* Incompatibility warning */}
-          {example && getCompat(example, sensors) === "incompatible" && sensors.size > 0 && (
-            <div className="rounded border border-orange-700/40 bg-orange-900/10 px-3 py-2 text-[10px] text-orange-400 leading-relaxed">
-              <b>Attention :</b> {example.label} nécessite{" "}
+          {/* Incompatibility warning — shown even when no sensors declared */}
+          {flashMode === "example" && example && getCompat(example, sensors) === "incompatible" && (
+            <div className="rounded border border-amber-700/40 bg-amber-900/10 px-3 py-2 text-[10px] text-amber-400 leading-relaxed">
+              <b>Capteur(s) requis :</b>{" "}
               {example.requiredSensors
                 .filter((s) => !sensors.has(s))
                 .map((s) => SENSORS.find((m) => m.id === s)?.label)
                 .join(", ")}{" "}
-              — non sélectionné. Le flash peut quand même réussir si le capteur est branché.
+              — déclarez-les ci-dessus si déjà câblés.
+            </div>
+          )}
+          {/* Forge mode — job not selected warning */}
+          {flashMode === "forge" && !selectedForgeJob && forgeJobs.length > 0 && (
+            <div className="rounded border border-purple-700/30 bg-purple-900/10 px-3 py-2 text-[10px] text-purple-400 leading-relaxed">
+              Sélectionnez un modèle Forge ci-dessus.
             </div>
           )}
 
@@ -520,22 +682,39 @@ export default function FlashPanel({ preselectedPort }: FlashPanelProps) {
           </label>
 
           {/* Launch */}
-          <button
-            onClick={handleFlash}
-            disabled={flashStatus === "running" || !effectivePort}
-            className={`w-full py-2.5 rounded font-semibold text-sm tracking-wide transition-colors disabled:opacity-50 ${
-              flashStatus === "running" ? "bg-blue-700 text-white cursor-wait"
-              : flashStatus === "ok"    ? "bg-green-700 hover:bg-green-600 text-white"
-              : cleanBuild             ? "bg-orange-600 hover:bg-orange-500 text-white"
-              : "bg-blue-600 hover:bg-blue-500 text-white"
-            }`}
-          >
-            {flashStatus === "running"
+          {(() => {
+            const forgeReady = flashMode === "forge" && !!selectedForgeJob && !!selectedDeviceId;
+            const exampleReady = flashMode === "example";
+            const canFlash = flashStatus !== "running" && !!effectivePort && (forgeReady || exampleReady);
+            const forgeColor = flashMode === "forge"
+              ? "bg-purple-700 hover:bg-purple-600 text-white"
+              : cleanBuild
+              ? "bg-orange-600 hover:bg-orange-500 text-white"
+              : "bg-blue-600 hover:bg-blue-500 text-white";
+            const label = flashStatus === "running"
               ? "⟳ Flash en cours…"
-              : effectivePort
-              ? `${cleanBuild ? "🔄" : "⚡"} Flasher ${example.label} sur ${effectivePort}`
-              : `${cleanBuild ? "🔄" : "⚡"} Compiler & Flasher`}
-          </button>
+              : !effectivePort
+              ? "Branchez l'ESP32 pour flasher"
+              : flashMode === "forge"
+              ? selectedForgeJob
+                ? `🚀 Déployer ${selectedForgeJob.model?.name ?? selectedForgeJob.jobRef} sur ${effectivePort}`
+                : "Sélectionnez un modèle Forge"
+              : `${cleanBuild ? "🔄" : "⚡"} Flasher ${example.label} sur ${effectivePort}`;
+            return (
+              <button
+                onClick={handleFlash}
+                disabled={!canFlash}
+                className={`w-full py-2.5 rounded font-semibold text-sm tracking-wide transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  flashStatus === "running" ? "bg-blue-700 text-white cursor-wait"
+                  : flashStatus === "ok"    ? "bg-green-700 hover:bg-green-600 text-white"
+                  : forgeColor
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })()}
+
         </div>
       </div>
 

@@ -35,6 +35,14 @@ _C_HEADER_TEMPLATE = """\
 
 #include "ardent/drift.h"
 
+/* Defined when this file is present: firmware uses pre-calibrated structs
+ * instead of calling ard_drift_init() with hardcoded defaults. */
+#define ARD_FORGE_DRIFT_CALIBRATED  1
+
+/* Primary channel struct (first feature: {primary_col}).
+ * Use ARD_FORGE_DRIFT_PRIMARY as a drop-in for the ArdentDrift context. */
+#define ARD_FORGE_DRIFT_PRIMARY  ard_drift_{primary_safe_col}
+
 /* One ArdentDrift context per feature channel.
  * Pass the matching struct to ard_drift_update() in your HAL loop. */
 {contexts}
@@ -205,6 +213,9 @@ class EWMADriftDetector(Detector):
                 )
             )
 
+        primary_col      = self._columns[0]
+        primary_safe_col = primary_col.replace(" ", "_").replace("-", "_")
+
         header = _C_HEADER_TEMPLATE.format(
             pipeline_name=stem,
             n_samples=self._n_samples,
@@ -212,6 +223,8 @@ class EWMADriftDetector(Detector):
             columns=", ".join(self._columns),
             threshold=self._threshold,
             threshold_percentile=self.config.threshold_percentile,
+            primary_col=primary_col,
+            primary_safe_col=primary_safe_col,
             contexts="\n\n".join(contexts),
         )
 

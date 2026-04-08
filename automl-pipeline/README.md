@@ -70,7 +70,12 @@ automl-pipeline/
 │   ├── demo_autoencoder.yaml         ← Démo synthétique 2D + AutoEncoder Dense TFLite
 │   ├── demo_lstm_autoencoder.yaml    ← Démo synthétique + LSTM AutoEncoder TFLite
 │   ├── client_vibration.yaml         ← Template client CSV + Z-Score + Isolation Forest
-│   └── benchmark_4detectors.yaml    ← Benchmark comparatif 4 détecteurs (forge benchmark)
+│   ├── benchmark_4detectors.yaml    ← Benchmark comparatif 4 détecteurs (forge benchmark)
+│   ├── kaggle_machine_temp.yaml     ← Dataset réel — 22k pts température machine (NAB/Kaggle)
+│   └── skab_pump_vibration.yaml    ← Dataset réel — 1145 pts pompe industrielle (SKAB — vibration + pression)
+├── data/                       ← Datasets capteurs (gitignored)
+│   ├── machine_temperature.csv ← NAB machine temperature (22 695 lignes, 2 pannes réelles)
+│   └── skab_valve1.csv         ← SKAB valve1 (1 145 lignes, Accelerometer1RMS + Pressure, anomalies valve)
 ├── tests/
 │   ├── test_config.py             ← 13 tests config Pydantic
 │   ├── test_data.py               ← 23 tests Dataset + synthetic + CSV
@@ -81,12 +86,69 @@ automl-pipeline/
 │   ├── test_ewma_drift.py         ← 23 tests EWMADriftDetector + export + registry
 │   ├── test_mad_detector.py       ← 34 tests MADDetector + export + registry
 │   ├── test_fall_detection.py     ← 56 tests FallDetectionDetector (PTI — chute/immobilité)
+│   ├── test_fatigue_hrv.py        ← 27 tests FatigueHRV (H2)
+│   ├── test_thermal_stress.py     ← 40 tests ThermalStress (H3 — WBGT)
 │   ├── test_mqtt_loader.py        ← 9 tests chargement données source MQTT
 │   ├── test_pipeline.py           ← 12 tests Pipeline end-to-end (normalise, split, export)
 │   └── test_preprocessing.py     ← 23 tests Scaler (fit, transform, export JSON + C header)
+│
+│   Total: 528 tests, 0 failing
 ├── models/                     ← Fichiers exportés (gitignored)
 ├── data/                       ← Datasets capteurs (gitignored)
 └── pyproject.toml
+```
+
+## Pipeline end-to-end : Kaggle → ESP32
+
+Forge implémente la boucle complète **dataset Kaggle → modèle calibré → firmware ESP32** :
+
+1. **Télécharger un dataset CSV** (Kaggle, NAB, SKAB, ou capture MQTT depuis Watch)
+2. **Créer un fichier YAML** décrivant la source de données, les détecteurs, et le manifest firmware
+3. **`uv run forge run --config configs/mon_pipeline.yaml`** — calibre les détecteurs + génère les headers C
+4. **Les headers calibrés** sont écrits dans `models/<nom-pipeline>/` :
+   - `ard_zscore_config.h` — struct `ArdentZScore` pré-initialisée (mean, M2, threshold issus des vraies données)
+   - `ard_drift_config.h` — struct `ArdentDrift` pré-initialisée (EWMA + threshold auto-calibré)
+   - `ard_mad_config.h` — struct `ArdentMAD` + ring buffer pré-chargé depuis la fin des données d'entraînement
+   - `ard_model_manifest.h` — métadonnées pour Watch (model_id, sensor, unit, value_min/max, labels)
+5. **Copier dans le firmware** (ou utiliser Ardent Watch → onglet Forge → ⚡ Flash USB) :
+   - Watch appelle `POST /api/forge/jobs/:id/deploy` → copie les headers + lance `pio upload`
+   - Le firmware `zscore_demo` détecte `#ifdef ARD_FORGE_CALIBRATED` et utilise les paramètres Forge
+
+**Exemple concret** (SKAB pump vibration) :
+```bash
+uv run forge run --config configs/skab_pump_vibration.yaml
+# → ard_zscore_config.h : mean=0.0f, stddev=1.0f (après normalisation), threshold=3.5σ
+# → ard_drift_config.h  : threshold=0.985236 (99e percentile sur données réelles)
+# → ard_model_manifest.h : sensor=imu, unit=g, value_min=0.0, value_max=0.5
+```
+
+**Macros générées dans `ard_zscore_config.h`** :
+```c
+#define ARD_FORGE_CALIBRATED      1                         // détecté par le firmware
+#define ARD_FORGE_ZSCORE_PRIMARY  ard_zscore_Accelerometer1RMS  // struct du premier canal
+
+static ArdentZScore ard_zscore_Accelerometer1RMS = {
+    .count           = 802U,
+    .mean            = 0.000001f,
+    .M2              = 800.999999f,
+    .threshold_sigma = 3.500000f,
+    .min_samples     = 0U,      // pré-calibré : détection active dès le premier sample
+    .window_size     = 0U,
+};
+```
+
+**Firmware** (`zscore_demo/src/main.cpp`) :
+```cpp
+#if __has_include("ard_zscore_config.h")
+#  include "ard_zscore_config.h"   // injecté par Ardent Watch lors du déploiement
+#endif
+
+// setup()
+#ifdef ARD_FORGE_CALIBRATED
+    g_zscore = ARD_FORGE_ZSCORE_PRIMARY;  // paramètres Forge — zéro warm-up
+#else
+    ard_zscore_init(&g_zscore, ZSCORE_THRESHOLD, ZSCORE_MIN_SAMPLES);  // démo par défaut
+#endif
 ```
 
 ## Détecteurs disponibles

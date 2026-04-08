@@ -1,0 +1,59 @@
+# Ardent Forge — Pump Vibration Anomaly Detection
+# Dataset: SKAB (Skoltech Anomaly Benchmark) — valve1, 1145 samples @ 1 Hz
+# Source: https://github.com/waico/SKAB — water circulation system with valve anomalies
+# Features: Accelerometer1RMS (vibration), Pressure (hydraulic pressure)
+#
+# Use case: Detect pump failures from vibration + pressure on embedded MCU
+# Maps to ESP32 + MPU-6050 (accelerometer) — direct industrial IoT applicability
+#
+# Run: uv run forge run --config configs/skab_pump_vibration.yaml
+
+name: pump-vibration-anomaly
+description: "Détection d'anomalies de pompe industrielle — vibration + pression — 1145 points SKAB"
+
+data:
+  source: csv
+  path: data/skab_valve1.csv
+  columns: [Accelerometer1RMS, Pressure]
+  timestamp_column: datetime
+  separator: ";"
+
+detectors:
+  - type: zscore
+    threshold_sigma: 3.5
+    min_samples: 30
+
+  - type: ewma_drift
+    alpha_fast: 0.10
+    alpha_slow: 0.01
+    threshold_percentile: 99.0
+
+  - type: mad
+    win_size: 32
+    threshold_percentile: 99.0
+
+split:
+  enabled: true
+  test_ratio: 0.3
+  random_state: 42
+
+preprocessing:
+  normalize: true   # important: Accel (0.02–0.3) and Pressure (−0.3 – 0.4) have very different scales
+
+export:
+  targets: [c_header, json_config]
+  output_dir: models/pump_vibration_anomaly
+  quantization: float32
+
+manifest:
+  sensor: imu
+  unit: g
+  value_min: 0.0
+  value_max: 0.5
+  label_normal: normal
+  label_anomaly: pump_failure
+
+report:
+  enabled: true
+  format: html
+  output_dir: reports

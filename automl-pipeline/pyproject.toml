@@ -12,6 +12,7 @@ dependencies = [
     "rich>=13.0",
     "pandas>=3.0.1",
     "scikit-learn>=1.8.0",
+    "kaggle>=2.0.0",
 ]
 
 [project.scripts]

@@ -326,7 +326,6 @@ class PipelineConfig(BaseModel):
     detectors: list[DetectorConfig] = Field(min_length=1)
     preprocessing: PreprocessingConfig = Field(default_factory=PreprocessingConfig)
     split: TrainTestSplitConfig = Field(default_factory=TrainTestSplitConfig)
-    preprocessing: PreprocessingConfig = Field(default_factory=PreprocessingConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
     report: ReportConfig = Field(default_factory=ReportConfig)
     manifest: ManifestConfig = Field(default_factory=ManifestConfig)

@@ -2,7 +2,7 @@
  * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@ardent-ai.fr
  */
 
 // Single-flight guard: if multiple requests get 401 at the same time, only

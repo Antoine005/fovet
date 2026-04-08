@@ -1,1 +1,8 @@
-{}
+{
+  "zscore_default_threshold": 3,
+  "min_samples_default": 30,
+  "device_inactive_days": 7,
+  "device_purge_days": 30,
+  "alert_webhook_url": "",
+  "alert_webhook_min_level": "DANGER"
+}

@@ -2,7 +2,7 @@
  * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@ardent-ai.fr
  */
 "use client";
 
@@ -1273,8 +1273,10 @@ export default function ForgeTab() {
       {showFlashDeployModal && (
         <Modal title="⚡ Flash USB — déploiement firmware" onClose={() => setShowFlashDeployModal(false)}>
           <p className="text-[11px] text-gray-400 mb-3 leading-relaxed">
-            Génère <code className="text-[10px] bg-gray-800 px-1 rounded">config.h</code> (WiFi + MQTT + deviceId)
-            et flash le firmware via PlatformIO sur le port USB sélectionné.
+            Génère <code className="text-[10px] bg-gray-800 px-1 rounded">config.h</code> (WiFi + MQTT + deviceId),
+            copie les headers Forge calibrés (<code className="text-[10px] bg-gray-800 px-1 rounded">ard_zscore_config.h</code>,
+            <code className="text-[10px] bg-gray-800 px-1 rounded">ard_drift_config.h</code>) dans le firmware,
+            puis compile et flash via PlatformIO sur le port USB sélectionné.
           </p>
 
           <div className="mb-2.5">
