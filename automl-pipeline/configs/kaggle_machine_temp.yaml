@@ -1,0 +1,54 @@
+# Ardent Forge — Machine Temperature Anomaly Detection
+# Dataset: NAB / Kaggle — machine_temperature_system_failure
+# Source: Numenta Anomaly Benchmark (NAB) - 22 695 datapoints, 5-min intervals
+# Known anomalies: 2 system failures + recovery spikes
+#
+# Run: uv run forge run --config configs/kaggle_machine_temp.yaml
+
+name: machine-temp-anomaly
+description: "Détection d'anomalies thermiques sur machine industrielle — 22k points, 2 pannes réelles"
+
+data:
+  source: csv
+  path: data/machine_temperature.csv
+  columns: [value]
+  timestamp_column: timestamp
+  separator: ","
+
+detectors:
+  - type: zscore
+    threshold_sigma: 3.5
+    min_samples: 50
+
+  - type: ewma_drift
+    alpha_fast: 0.05
+    alpha_slow: 0.005
+    threshold_percentile: 99.5
+
+  - type: mad
+    win_size: 64
+    threshold_percentile: 99.0
+
+split:
+  enabled: true
+  test_ratio: 0.2
+  random_state: 42
+
+preprocessing:
+  normalize: false
+
+export:
+  targets: [c_header, json_config]
+  output_dir: models/machine_temp_anomaly
+  quantization: float32
+
+manifest:
+  sensor: temperature
+  unit: "°C"
+  label_normal: normal
+  label_anomaly: machine_failure
+
+report:
+  enabled: true
+  format: html
+  output_dir: reports

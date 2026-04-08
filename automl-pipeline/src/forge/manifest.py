@@ -78,11 +78,19 @@ def export_manifest(
     resolved_min = value_min if value_min is not None else (m.value_min if m.value_min is not None else -10.0)
     resolved_max = value_max if value_max is not None else (m.value_max if m.value_max is not None else  10.0)
 
+    # Sanitise unit for embedding in a C string literal: keep ASCII printable
+    # only (strip degree sign etc.) so the header compiles cleanly on all
+    # embedded toolchains without requiring a --charset compiler flag.
+    # The unit is display-only in Watch, so ASCII approximations are fine.
+    safe_unit = m.unit.encode("ascii", errors="ignore").decode("ascii").strip()
+    if not safe_unit:
+        safe_unit = m.unit  # fall back to original if everything was stripped
+
     content = _MANIFEST_TEMPLATE.format(
         pipeline_name=config.name,
         model_id=config.name,
         sensor=m.sensor,
-        unit=m.unit,
+        unit=safe_unit,
         value_min=resolved_min,
         value_max=resolved_max,
         label_normal=m.label_normal,

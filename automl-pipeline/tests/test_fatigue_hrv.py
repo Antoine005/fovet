@@ -467,23 +467,23 @@ class TestFatigueHRVPipeline:
 
     def test_header_guard(self, exported_dir):
         content = (exported_dir / "fatigue_hrv_thresholds.h").read_text()
-        assert "FOVET_FATIGUE_HRV_THRESHOLDS_H" in content
+        assert "ARD_FATIGUE_HRV_THRESHOLDS_H" in content
 
     def test_header_rmssd_ok_define(self, exported_dir):
         content = (exported_dir / "fatigue_hrv_thresholds.h").read_text()
-        assert "FOVET_FATIGUE_RMSSD_OK" in content
+        assert "ARD_FATIGUE_RMSSD_OK" in content
 
     def test_header_rmssd_alert_define(self, exported_dir):
         content = (exported_dir / "fatigue_hrv_thresholds.h").read_text()
-        assert "FOVET_FATIGUE_RMSSD_ALERT" in content
+        assert "ARD_FATIGUE_RMSSD_ALERT" in content
 
     def test_header_hr_ok_define(self, exported_dir):
         content = (exported_dir / "fatigue_hrv_thresholds.h").read_text()
-        assert "FOVET_FATIGUE_HR_OK" in content
+        assert "ARD_FATIGUE_HR_OK" in content
 
     def test_header_n_features_define(self, exported_dir):
         content = (exported_dir / "fatigue_hrv_thresholds.h").read_text()
-        assert f"FOVET_FATIGUE_N_FEATURES       {N_FEATURES}" in content
+        assert f"ARD_FATIGUE_N_FEATURES       {N_FEATURES}" in content
 
     def test_model_pkl_loadable(self, exported_dir):
         import joblib

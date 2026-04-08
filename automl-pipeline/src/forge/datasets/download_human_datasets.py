@@ -2,7 +2,7 @@
 Fovet SDK — Sentinelle
 Copyright (C) 2026 Antoine Porte. All rights reserved.
 LGPL v3 for non-commercial use.
-Commercial licensing: contact@fovet.eu
+Commercial licensing: contact@ardent-ai.fr
 
 -------------------------------------------------------------------------
 download_human_datasets.py — Biosignal dataset manager for Fovet Forge
