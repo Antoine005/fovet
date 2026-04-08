@@ -18,6 +18,7 @@ import { getMqttStatus } from "@/lib/mqtt-ingestion";
 import { runJanitor, startJanitorScheduler } from "@/lib/device-janitor";
 import { spawn, exec } from "child_process";
 import { promisify } from "util";
+import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { flashJobs } from "@/lib/flash-jobs";
@@ -901,6 +902,9 @@ const execAsync  = promisify(exec);
 const AUTOML_DIR = path.join(REPO_ROOT, "automl-pipeline");
 const EDGE_CORE_DIR = path.join(REPO_ROOT, "edge-core");
 
+// In-memory registry of running Forge processes — used by the cancel endpoint
+const activeForgeProcesses = new Map<string, ReturnType<typeof spawn>>();
+
 const ForgeDeploySchema = z.object({
   modelId:   z.string().min(1),
   deviceIds: z.array(z.string().min(1)).min(1),
@@ -1045,12 +1049,13 @@ app.post("/forge/jobs", async (c) => {
 
   // ── Resolve config path (static YAML or generated from dataSource) ──────────
   let resolvedConfig: string | null = null;
+  let genName: string | null = null;
 
   if (parsed.data.dataSource) {
     // Generate YAML from Forge Studio data source
     ensureDir(CONFIGS_GEN_DIR);
-    const ds       = parsed.data.dataSource;
-    const genName  = `forge_studio_${job.id}`;
+    const ds = parsed.data.dataSource;
+    genName  = `forge_studio_${job.id}`;
     const outputDir = path.join(REPO_ROOT, "automl-pipeline", "outputs", job.id);
     const yaml = generateForgeYaml({
       name:        genName,
@@ -1086,6 +1091,8 @@ app.post("/forge/jobs", async (c) => {
       env: { ...process.env, PYTHONIOENCODING: "utf-8" },
     });
 
+    activeForgeProcesses.set(jobId, proc);
+
     let logBuffer = "";
     let stage = 0; // 0=data 1=training 2=exporting 3=done
 
@@ -1106,6 +1113,9 @@ app.post("/forge/jobs", async (c) => {
       const progress    = progressMap[stage] ?? 0;
 
       try {
+        // Skip update if job was cancelled
+        const cur = await prisma.forgeJob.findUnique({ where: { id: jobId }, select: { status: true } });
+        if (cur?.status === "CANCELLED") return;
         await prisma.forgeJob.update({
           where: { id: jobId },
           data:  { logs: logBuffer, progress, ...(valAccuracy !== null ? { valAccuracy } : {}) },
@@ -1117,11 +1127,16 @@ app.post("/forge/jobs", async (c) => {
     proc.stderr.on("data", (d: Buffer) => { void appendLog(d.toString("utf8")); });
 
     proc.on("close", async (code: number | null) => {
-      const success = code === 0;
+      activeForgeProcesses.delete(jobId);
       const metricMatch = logBuffer.match(/precision=([\d.]+)\s+recall=([\d.]+)\s+f1=([\d.]+)/i);
       const valAccuracy = metricMatch ? parseFloat(metricMatch[3]) : null;
 
       try {
+        // If the job was cancelled, don't overwrite the CANCELLED status
+        const cur = await prisma.forgeJob.findUnique({ where: { id: jobId }, select: { status: true } });
+        if (cur?.status === "CANCELLED") return;
+
+        const success = code === 0;
         await prisma.forgeJob.update({
           where: { id: jobId },
           data: {
@@ -1132,11 +1147,30 @@ app.post("/forge/jobs", async (c) => {
             ...(valAccuracy !== null ? { valAccuracy } : {}),
           },
         });
+
+        // Auto-create a ForgeModel record when a new job succeeds without a base model
+        if (success) {
+          const freshJob = await prisma.forgeJob.findUnique({ where: { id: jobId }, select: { modelId: true } });
+          if (!freshJob?.modelId) {
+            const modelName = (parsed.data.config ?? genName ?? jobRef).replace(/\.yaml$/, "").replace(/^forge_studio_\w+$/, `Ardent Model ${jobRef}`);
+            const newModel = await prisma.forgeModel.create({
+              data: {
+                name:     modelName,
+                type:     "STR",
+                version:  "v1.0",
+                status:   "TRAIN",
+                ...(valAccuracy !== null ? { accuracy: valAccuracy * 100 } : {}),
+              },
+            });
+            await prisma.forgeJob.update({ where: { id: jobId }, data: { modelId: newModel.id } });
+          }
+        }
+
         await prisma.forgeAudit.create({
           data: {
             actor:  "system",
             action: success ? "JOB_DONE" : "JOB_FAILED",
-            label:  `Job ${jobRef} ${success ? "terminé" : "échoué"} (config: ${parsed.data.config})`,
+            label:  `Job ${jobRef} ${success ? "terminé" : "échoué"} (config: ${parsed.data.config ?? genName})`,
             jobRef,
           },
         });
@@ -1144,6 +1178,7 @@ app.post("/forge/jobs", async (c) => {
     });
 
     proc.on("error", async (err: Error) => {
+      activeForgeProcesses.delete(jobId);
       try {
         await prisma.forgeJob.update({
           where: { id: jobId },
@@ -1173,16 +1208,21 @@ app.patch("/forge/jobs/:id/validate", async (c) => {
 
   const { decision, actor } = parsed.data;
 
-  if (decision === "PROMOTE" && job.modelId) {
-    await prisma.forgeModel.update({
-      where: { id: job.modelId },
-      data:  { status: "PROD" },
-    });
-  } else if (decision === "REJECT" && job.modelId) {
-    await prisma.forgeModel.update({
-      where: { id: job.modelId },
-      data:  { status: "ARCH" },
-    });
+  if (decision === "PROMOTE") {
+    if (job.modelId) {
+      await prisma.forgeModel.update({ where: { id: job.modelId }, data: { status: "PROD" } });
+    } else {
+      // No pre-existing model — create one and promote it directly
+      const newModel = await prisma.forgeModel.create({
+        data: { name: `Ardent Model ${job.jobRef}`, type: "STR", version: "v1.0", status: "PROD" },
+      });
+      await prisma.forgeJob.update({ where: { id: job.id }, data: { modelId: newModel.id } });
+    }
+  } else if (decision === "REJECT") {
+    if (job.modelId) {
+      await prisma.forgeModel.update({ where: { id: job.modelId }, data: { status: "ARCH" } });
+    }
+    // If no model linked, rejection is just logged — nothing to archive
   }
 
   await prisma.forgeAudit.create({
@@ -1195,6 +1235,38 @@ app.patch("/forge/jobs/:id/validate", async (c) => {
   });
 
   return c.json({ ok: true, decision });
+});
+
+// -------------------------------------------------------------------------
+// PATCH /api/forge/jobs/:id/cancel — kill running Forge process
+// -------------------------------------------------------------------------
+app.patch("/forge/jobs/:id/cancel", async (c) => {
+  const { id } = c.req.param();
+  const job = await prisma.forgeJob.findUnique({ where: { id }, select: { id: true, jobRef: true, status: true } });
+  if (!job) return c.json({ error: "Job not found" }, 404);
+  if (job.status !== "RUNNING") return c.json({ error: `Job is ${job.status}, only RUNNING jobs can be cancelled` }, 409);
+
+  // Kill the OS process if still registered
+  const proc = activeForgeProcesses.get(id);
+  if (proc) {
+    try { proc.kill("SIGTERM"); } catch { /* already dead */ }
+    activeForgeProcesses.delete(id);
+  }
+
+  await prisma.forgeJob.update({
+    where: { id },
+    data:  { status: "CANCELLED", finishedAt: new Date() },
+  });
+  await prisma.forgeAudit.create({
+    data: {
+      actor:  "system",
+      action: "JOB_CANCEL",
+      label:  `Job ${job.jobRef} annulé`,
+      jobRef: job.jobRef,
+    },
+  });
+
+  return c.json({ ok: true });
 });
 
 // -------------------------------------------------------------------------
@@ -1308,7 +1380,6 @@ app.post("/forge/jobs/:id/deploy", async (c) => {
   if (!pioExe) pioExe = "pio";
 
   // Spawn pio upload via flash-jobs
-  const { randomUUID } = await import("crypto");
   const flashJobId = randomUUID();
   flashJobs.cleanup();
   const fjob = flashJobs.create(flashJobId, pioEnv, project);
@@ -1736,7 +1807,7 @@ app.post("/forge/data/upload", cookieAuth, async (c) => {
   if (!file.name.endsWith(".csv")) return c.json({ error: "Only .csv files accepted" }, 400);
   if (file.size > 50 * 1024 * 1024) return c.json({ error: "File too large (max 50 MB)" }, 400);
 
-  const uploadId  = crypto.randomUUID();
+  const uploadId  = randomUUID();
   const destPath  = path.join(UPLOADS_DIR, `${uploadId}.csv`);
   const buf       = await file.arrayBuffer();
   fs.writeFileSync(destPath, Buffer.from(buf));
@@ -1784,7 +1855,7 @@ app.post("/forge/data/capture", cookieAuth, async (c) => {
   );
   const csv = [header, ...lines].join("\n");
 
-  const uploadId = crypto.randomUUID();
+  const uploadId = randomUUID();
   const destPath = path.join(UPLOADS_DIR, `${uploadId}.csv`);
   fs.writeFileSync(destPath, csv, "utf8");
 
