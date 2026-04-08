@@ -231,6 +231,7 @@ export default function ForgeTab() {
   const [synthAnomalyMag,  setSynthAnomalyMag]  = useState(5.0);
   const [submittingDeploy, setSubmittingDeploy] = useState(false);
   const [validating,     setValidating]     = useState(false);
+  const [cancelling,     setCancelling]     = useState(false);
   const [showLogs,       setShowLogs]       = useState(false);
   const [logsContent,    setLogsContent]    = useState<string | null>(null);
 
@@ -249,6 +250,7 @@ export default function ForgeTab() {
   const [flashDeployLog,       setFlashDeployLog]       = useState("");
   const [flashDeployStatus,    setFlashDeployStatus]    = useState<"idle" | "running" | "ok" | "error">("idle");
   const [flashDeployPort,      setFlashDeployPort]      = useState("COM4");
+  const [flashDeployProject,   setFlashDeployProject]   = useState("zscore_demo");
   const [flashDeployDeviceId,  setFlashDeployDeviceId]  = useState("");
   const flashDeployEs     = useRef<EventSource | null>(null);
   const flashLogRef       = useRef<HTMLDivElement>(null);
@@ -491,6 +493,17 @@ export default function ForgeTab() {
     }
   };
 
+  const handleCancelJob = async () => {
+    if (!activeJob) return;
+    setCancelling(true);
+    try {
+      await apiFetch(`/api/forge/jobs/${activeJob.id}/cancel`, { method: "PATCH" });
+      await fetchAll();
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const handleFlashDeploy = async () => {
     if (!flashDeployDeviceId) return;
     const doneJob = recentJobs.find((j) => j.status === "DONE");
@@ -505,7 +518,7 @@ export default function ForgeTab() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         deviceId: flashDeployDeviceId,
-        project:  "zscore_demo",
+        project:  flashDeployProject,
         port:     flashDeployPort,
       }),
     });
@@ -746,6 +759,13 @@ export default function ForgeTab() {
                   >
                     Logs
                   </button>
+                  <button
+                    onClick={handleCancelJob}
+                    disabled={cancelling}
+                    className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-400 border border-red-700/40 hover:bg-red-900/20 rounded transition-colors disabled:opacity-50"
+                  >
+                    {cancelling ? "…" : "Annuler"}
+                  </button>
                 </div>
               }
             >
@@ -833,12 +853,21 @@ export default function ForgeTab() {
                 Terminé {recentJobs[0].finishedAt ? new Date(recentJobs[0].finishedAt).toLocaleString("fr-FR") : "—"}
               </div>
               {recentJobs[0].status === "DONE" && (
-                <button
-                  onClick={() => { setShowFlashDeployModal(true); setFlashDeployLog(""); setFlashDeployStatus("idle"); }}
-                  className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-blue-900/30 text-blue-400 border border-blue-700/40 hover:bg-blue-900/50 transition-colors"
-                >
-                  ⚡ Flash USB
-                </button>
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  <button
+                    onClick={() => { setShowFlashDeployModal(true); setFlashDeployLog(""); setFlashDeployStatus("idle"); }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-blue-900/30 text-blue-400 border border-blue-700/40 hover:bg-blue-900/50 transition-colors"
+                  >
+                    ⚡ Flash USB
+                  </button>
+                  <a
+                    href={`/api/forge/jobs/${recentJobs[0].id}/download`}
+                    download
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700 transition-colors"
+                  >
+                    ↓ Télécharger modèle
+                  </a>
+                </div>
               )}
             </Panel>
           )}
@@ -933,6 +962,15 @@ export default function ForgeTab() {
                   >
                     ⚡ Flash USB
                   </button>
+                  {recentJobs.find((j) => j.status === "DONE") && (
+                    <a
+                      href={`/api/forge/jobs/${recentJobs.find((j) => j.status === "DONE")!.id}/download`}
+                      download
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wide bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700 transition-colors"
+                    >
+                      ↓ Télécharger modèle
+                    </a>
+                  )}
                 </div>
               </div>
             </div>
@@ -1293,15 +1331,30 @@ export default function ForgeTab() {
             </select>
           </div>
 
-          <div className="mb-3">
-            <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Port série</label>
-            <input
-              type="text"
-              value={flashDeployPort}
-              onChange={(e) => setFlashDeployPort(e.target.value)}
-              placeholder="COM4"
-              className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500"
-            />
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Projet firmware</label>
+              <select
+                value={flashDeployProject}
+                onChange={(e) => setFlashDeployProject(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500"
+              >
+                <option value="zscore_demo">zscore_demo</option>
+                <option value="fire_detection">fire_detection</option>
+                <option value="person_detection">person_detection</option>
+                <option value="smoke_test">smoke_test</option>
+              </select>
+            </div>
+            <div>
+              <label className="font-mono text-[9px] uppercase tracking-wide text-gray-500 block mb-1">Port série</label>
+              <input
+                type="text"
+                value={flashDeployPort}
+                onChange={(e) => setFlashDeployPort(e.target.value)}
+                placeholder="COM4"
+                className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 text-[11px] text-gray-100 outline-none focus:border-blue-500"
+              />
+            </div>
           </div>
 
           {/* Flash log terminal */}
