@@ -65,9 +65,14 @@ new_task.md
 local/
 _tmp/
 
-# Gumroad — dossier local à la racine (packages ZIPs, product sheets, articles prêts à publier)
-# Les sources publiques restent dans docs/gumroad/ et scripts/ (trackés normalement)
+# Gumroad — tout ce qui est relatif à la vente/packaging (jamais pushé)
 /gumroad/
+docs/gumroad/
+docs/quick_start_guide.md
+docs/quick_start_guide.html
+docs/quick_start_guide.pdf
+docs/*.pdf
+scripts/build_gumroad.sh
 
 # Gumroad package source context (new_context/ is local only)
 new_context/

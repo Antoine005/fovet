@@ -3,20 +3,17 @@
 #   export PATH="/c/msys64/usr/bin:/c/msys64/mingw64/bin:$PATH"
 #
 # Targets:
-#   make dev           → lance le stack complet (PowerShell)
-#   make test          → lance les 3 suites de tests
-#   make test-edge     → tests C99 gcc (edge-core)
-#   make test-watch    → tests TypeScript vitest (platform-dashboard)
-#   make test-forge    → tests Python pytest (automl-pipeline)
-#   make gumroad       → génère les 2 packages Gumroad dans dist/gumroad/
-#   make gumroad-pulse → Pulse SDK only (€39)
-#   make gumroad-full  → Full Stack only (€149)
-#   make clean         → supprime les artefacts de compilation
+#   make dev          → lance le stack complet (PowerShell)
+#   make test         → lance les 3 suites de tests
+#   make test-edge    → tests C99 gcc (edge-core)
+#   make test-watch   → tests TypeScript vitest (platform-dashboard)
+#   make test-forge   → tests Python pytest (automl-pipeline)
+#   make clean        → supprime les artefacts de compilation
 
 SHELL := /bin/bash
 MSYS2_PATH := /c/msys64/usr/bin:/c/msys64/mingw64/bin
 
-.PHONY: dev test test-edge test-watch test-forge gumroad gumroad-pulse gumroad-full clean
+.PHONY: dev test test-edge test-watch test-forge clean
 
 # ── Dev ───────────────────────────────────────────────────────────────────────
 dev:
@@ -45,17 +42,6 @@ test-forge:
 	@echo ""
 	@echo "═══ automl-pipeline (pytest) ════════════════"
 	@cd automl-pipeline && uv run pytest -v
-
-# ── Gumroad packages ─────────────────────────────────────────────────────────
-# Génère les ZIPs dans gumroad/packages/ (gitignored — ne pas pusher)
-gumroad:
-	@bash scripts/build_gumroad.sh all
-
-gumroad-pulse:
-	@bash scripts/build_gumroad.sh pulse
-
-gumroad-full:
-	@bash scripts/build_gumroad.sh full
 
 # ── Clean ─────────────────────────────────────────────────────────────────────
 clean:
