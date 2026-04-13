@@ -151,7 +151,7 @@ def _render_html(
   {detector_sections}
 
   <div class="footer">
-    Ardent Forge &nbsp;·&nbsp; ardent.io &nbsp;·&nbsp; contact@ardent.io
+    Ardent Forge &nbsp;·&nbsp; ardent-ai.fr &nbsp;·&nbsp; contact@ardent-ai.fr
   </div>
 </body>
 </html>"""

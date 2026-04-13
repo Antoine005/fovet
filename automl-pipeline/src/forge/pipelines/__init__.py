@@ -1,3 +1,3 @@
 """
-Fovet Forge — Supervised pipelines for specific physiological use-cases.
+Ardent Forge — Supervised pipelines for specific physiological use-cases.
 """

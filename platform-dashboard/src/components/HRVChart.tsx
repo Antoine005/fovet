@@ -1,5 +1,5 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@ardent-ai.fr
@@ -23,7 +23,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
 /* -------------------------------------------------------------------------
- * Thresholds — must match fovet/profiles/fatigue_profile.h
+ * Thresholds — must match ardent/profiles/fatigue_profile.h
  * ------------------------------------------------------------------------- */
 const HR_OK    = 72;
 const HR_ALERT = 82;
@@ -150,7 +150,7 @@ export function HRVChart({ deviceId }: Props) {
         <div>
           <h2 className="text-sm font-semibold text-white">Fréquence cardiaque (BPM)</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            EMA α={EMA_ALPHA} — seuils Sentinelle Fatigue
+            EMA α={EMA_ALPHA} — seuils Ardent Pulse Fatigue
           </p>
         </div>
         <div className="flex items-center gap-4">

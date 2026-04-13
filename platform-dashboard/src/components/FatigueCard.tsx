@@ -1,5 +1,5 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@ardent-ai.fr
@@ -18,7 +18,7 @@ import {
 } from "recharts";
 
 /* -------------------------------------------------------------------------
- * Thresholds — must match fovet/profiles/fatigue_profile.h
+ * Thresholds — must match ardent/profiles/fatigue_profile.h
  * ------------------------------------------------------------------------- */
 const HR_OK    = 72;   /* BPM < this → OK      */
 const HR_ALERT = 82;   /* BPM > this → CRITICAL */

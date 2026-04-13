@@ -47,7 +47,7 @@ def _sine_signal(n: int = 200, amplitude: float = 1.0) -> np.ndarray:
 
 
 def _make_binary_df(n: int = 100) -> pd.DataFrame:
-    """Standard Fovet CSV DataFrame with binary labels."""
+    """Standard Ardent CSV DataFrame with binary labels."""
     ts = np.arange(n, dtype=np.int64) * 10
     vals = np.column_stack([np.ones(n), np.zeros(n), np.zeros(n)])
     labels = np.zeros(n, dtype=np.int32)

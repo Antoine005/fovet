@@ -436,12 +436,12 @@ describe("POST /api/auth/logout", () => {
 // ---------------------------------------------------------------------------
 describe("CORS multi-origin", () => {
   it("reflects allowed origin in Access-Control-Allow-Origin", async () => {
-    // ALLOWED_ORIGIN in vitest.config.ts: 'http://localhost:3000,https://watch.ardent.io'
+    // ALLOWED_ORIGIN in vitest.config.ts: 'http://localhost:3000,https://watch.ardent-ai.fr'
     const res = await app.request("/api/health", {
-      headers: { Origin: "https://watch.ardent.io" },
+      headers: { Origin: "https://watch.ardent-ai.fr" },
     });
     expect(res.status).toBe(200);
-    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://watch.ardent.io");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://watch.ardent-ai.fr");
   });
 
   it("reflects first allowed origin", async () => {

@@ -1,5 +1,5 @@
 """
-Fovet Forge — Human biosignal dataset utilities.
+Ardent Forge — Human biosignal dataset utilities.
 """
 from forge.datasets.download_human_datasets import (
     inject_anomaly,

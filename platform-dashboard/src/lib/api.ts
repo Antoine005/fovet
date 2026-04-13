@@ -38,7 +38,7 @@ export const app = new Hono().basePath("/api");
 // CORS — allow one or more configured origins
 //
 // ALLOWED_ORIGIN supports comma-separated values for multi-origin setups:
-//   ALLOWED_ORIGIN=https://watch.ardent.io,https://watch-staging.ardent.io
+//   ALLOWED_ORIGIN=https://watch.ardent-ai.fr,https://watch-staging.ardent-ai.fr
 // -------------------------------------------------------------------------
 const _allowedOrigins = (process.env.ALLOWED_ORIGIN ?? "http://localhost:3000")
   .split(",")

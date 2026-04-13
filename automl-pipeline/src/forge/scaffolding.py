@@ -233,7 +233,7 @@ def _config_h_example(device_id: str) -> str:
          * Ardent SDK — Pulse
          * Copyright (C) 2026 Antoine Porte. All rights reserved.
          * LGPL v3 for non-commercial use.
-         * Commercial licensing: contact@ardent.io
+         * Commercial licensing: contact@ardent-ai.fr
          *
          * config.h.example — copy to config.h and fill in your credentials.
          * config.h is gitignored and must never be committed.
@@ -372,7 +372,7 @@ def _model_data_h_ml(name: str, slug: str) -> str:
          * Ardent SDK — Pulse
          * Copyright (C) 2026 Antoine Porte. All rights reserved.
          * LGPL v3 for non-commercial use.
-         * Commercial licensing: contact@ardent.io
+         * Commercial licensing: contact@ardent-ai.fr
          *
          * model_data.h — TFLite model extern declarations for use case: {name}
          *
@@ -404,7 +404,7 @@ _MAIN_CPP_HEADER = """\
  * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@ardent-ai.fr
  *
  * Use case : {name}
  * Sensor   : {sensor}

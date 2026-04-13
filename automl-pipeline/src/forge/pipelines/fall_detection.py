@@ -1,5 +1,5 @@
 """
-Fovet SDK — Sentinelle
+Ardent SDK — Pulse
 Copyright (C) 2026 Antoine Porte. All rights reserved.
 LGPL v3 for non-commercial use.
 Commercial licensing: contact@ardent-ai.fr
@@ -130,10 +130,10 @@ def extract_features(
     az_col: str  = "value_3",
     label_col: str | None = "label",
 ) -> tuple[np.ndarray, np.ndarray | None]:
-    """Slide a window over a Fovet IMU DataFrame and extract features.
+    """Slide a window over a Ardent IMU DataFrame and extract features.
 
     Args:
-        df:             Fovet-format DataFrame with columns value_1/2/3 (acc XYZ).
+        df:             Ardent-format DataFrame with columns value_1/2/3 (acc XYZ).
         window_samples: Number of samples per window.
         step_samples:   Stride between windows.
         ax_col, ay_col, az_col: Column names for X/Y/Z acceleration.
@@ -200,7 +200,7 @@ def synthesize_fall_data(
     sample_rate_hz: int  = 25,
     rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
-    """Generate a synthetic Fovet-format IMU DataFrame with fall events.
+    """Generate a synthetic Ardent-format IMU DataFrame with fall events.
 
     Normal activity: low-amplitude random walk + gravity component (az ≈ 1g).
     Fall event: pre-fall random motion → sharp impact spike → stillness.
@@ -419,7 +419,7 @@ class FallDetectionPipeline:
         """Extract features, scale, and train the binary classifier.
 
         Args:
-            df:        Fovet-format IMU DataFrame (value_1/2/3 = ax/ay/az).
+            df:        Ardent-format IMU DataFrame (value_1/2/3 = ax/ay/az).
             label_col: Column with binary labels (1=fall, 0=normal).
             val_split: Fraction of data used for validation.
             verbose:   Keras verbosity (0 = silent).
@@ -480,7 +480,7 @@ class FallDetectionPipeline:
         """Return fall probability scores for each window (0–1).
 
         Args:
-            df: Fovet-format IMU DataFrame.
+            df: Ardent-format IMU DataFrame.
 
         Returns:
             1-D float32 array of probabilities, one per window.
@@ -519,7 +519,7 @@ class FallDetectionPipeline:
         """Evaluate model on a labelled DataFrame.
 
         Args:
-            df:               Fovet-format IMU DataFrame with labels.
+            df:               Ardent-format IMU DataFrame with labels.
             label_col:        Label column name.
             model_size_bytes: If provided, included in the report.
 
