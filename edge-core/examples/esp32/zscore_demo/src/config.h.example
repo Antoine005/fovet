@@ -2,7 +2,7 @@
  * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@ardent.io
+ * Commercial licensing: contact@ardent-ai.fr
  *
  * config.h.example — copy to config.h and fill in your credentials.
  * config.h is gitignored and must never be committed.

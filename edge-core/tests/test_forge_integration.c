@@ -1,14 +1,14 @@
 /*
- * Fovet SDK — Sentinelle
+ * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@ardent-ai.fr
  */
 
 /*
- * Integration test: Forge-exported header → Sentinelle runtime
+ * Integration test: Forge-exported header → Ardent Pulse runtime
  *
- * Verifies that a ArdentZScore struct pre-calibrated by Fovet Forge compiles
+ * Verifies that a ArdentZScore struct pre-calibrated by Ardent Forge compiles
  * and behaves correctly at runtime against the edge-core library.
  *
  * Compile:
@@ -157,7 +157,7 @@ static void test_precalibrated_detects_injected_spike_in_stream(void)
 
 int main(void)
 {
-    printf("=== Fovet Forge → Sentinelle Integration Tests ===\n");
+    printf("=== Ardent Forge → Pulse Integration Tests ===\n");
     printf("    Config: demo_zscore (sine, 1000 samples, 3σ)\n\n");
 
     test_precalibrated_struct_values();
