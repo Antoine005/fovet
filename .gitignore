@@ -28,6 +28,8 @@ venv/
 *.egg-info/
 dist/
 .pytest_cache/
+automl-pipeline/configs/generated/
+automl-pipeline/outputs/
 
 # Node.js
 node_modules/
@@ -61,6 +63,14 @@ docs/session-*.md
 new_task.md
 *.local.md
 local/
+_tmp/
+
+# Gumroad — dossier local à la racine (packages ZIPs, product sheets, articles prêts à publier)
+# Les sources publiques restent dans docs/gumroad/ et scripts/ (trackés normalement)
+/gumroad/
+
+# Gumroad package source context (new_context/ is local only)
+new_context/
 
 # Test coverage
 coverage/

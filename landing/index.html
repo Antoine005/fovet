@@ -654,6 +654,61 @@
     .footer-bottom-links a { color: var(--text-dim); transition: color 0.2s; }
     .footer-bottom-links a:hover { color: var(--text-muted); }
 
+    /* ===== GUMROAD BUY BUTTON ===== */
+    .btn-buy {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 700; padding: 9px 18px; border-radius: 7px;
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: #fff; border: none; cursor: pointer;
+      transition: all 0.2s; text-decoration: none; white-space: nowrap;
+    }
+    .btn-buy:hover { background: linear-gradient(135deg, #047857, #059669); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(16,185,129,0.3); }
+
+    /* ===== TARIFS ===== */
+    #tarifs { background: var(--bg); }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .pricing-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px;
+      display: flex; flex-direction: column; gap: 20px;
+      transition: border-color 0.2s;
+    }
+    .pricing-card:hover { border-color: var(--border2); }
+    .pricing-card.featured {
+      border-color: rgba(16,185,129,0.4);
+      background: linear-gradient(180deg, rgba(16,185,129,0.04) 0%, var(--bg2) 100%);
+    }
+    .pricing-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--green);
+    }
+    .pricing-name { font-size: 20px; font-weight: 700; color: var(--text); }
+    .pricing-price {
+      display: flex; align-items: baseline; gap: 4px;
+    }
+    .pricing-amount {
+      font-size: 36px; font-weight: 800; color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .pricing-period { font-size: 14px; color: var(--text-muted); }
+    .pricing-desc { font-size: 14px; color: var(--text-muted); line-height: 1.65; }
+    .pricing-features { list-style: none; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+    .pricing-features li {
+      font-size: 13px; color: var(--text-muted);
+      display: flex; align-items: flex-start; gap: 8px;
+    }
+    .pricing-features li::before { content: "✓"; color: var(--green); font-weight: 700; flex-shrink: 0; }
+    .pricing-cta { margin-top: auto; }
+    @media (max-width: 900px) { .pricing-grid { grid-template-columns: 1fr; max-width: 440px; } }
+
     /* ===== DIVIDER ===== */
     .section-divider {
       height: 1px;
@@ -709,6 +764,7 @@
     <a href="#" class="nav-logo">A<span>r</span>dent</a>
     <ul class="nav-links">
       <li><a href="#produits">Produits</a></li>
+      <li><a href="#tarifs">Tarifs</a></li>
       <li><a href="#pourquoi">Pourquoi Ardent</a></li>
       <li><a href="#cas-usage">Cas d'usage</a></li>
       <li><a href="#a-propos">À propos</a></li>
@@ -729,6 +785,7 @@
 </nav>
 <div class="mobile-menu" id="mobileMenu">
   <a href="#produits" onclick="toggleMenu()">Produits</a>
+  <a href="#tarifs" onclick="toggleMenu()">Tarifs</a>
   <a href="#pourquoi" onclick="toggleMenu()">Pourquoi Ardent</a>
   <a href="#cas-usage" onclick="toggleMenu()">Cas d'usage</a>
   <a href="#a-propos" onclick="toggleMenu()">À propos</a>
@@ -844,8 +901,8 @@
           <span class="spec-chip">PlatformIO/CMake</span>
         </div>
         <div class="card-actions">
-          <a href="https://github.com/Antoine005/ardent" target="_blank" class="card-link">Documentation →</a>
-          <a href="#contact" class="card-link" style="color:var(--text-muted)">Démo →</a>
+          <a href="#" data-gumroad="pulse" target="_blank" rel="noopener" class="btn-buy">Obtenir — 39€ →</a>
+          <a href="https://github.com/Antoine005/ardent" target="_blank" class="card-link">Docs →</a>
         </div>
       </div>
 
@@ -914,8 +971,95 @@
           <span class="spec-chip">Docker</span>
         </div>
         <div class="card-actions">
-          <a href="https://github.com/Antoine005/ardent" target="_blank" class="card-link">Documentation →</a>
-          <a href="#contact" class="card-link" style="color:var(--text-muted)">Démo →</a>
+          <a href="#tarifs" class="btn-buy" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6)">Full Stack — 149€ →</a>
+          <a href="https://github.com/Antoine005/ardent" target="_blank" class="card-link">Docs →</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ===== TARIFS ===== -->
+<section id="tarifs">
+  <div class="container">
+    <div class="section-header">
+      <p class="section-label">Téléchargement immédiat</p>
+      <h2 class="section-title">Tarifs</h2>
+      <p class="section-sub">Licences one-shot, sans abonnement, sans cloud requis. Utilisable sur autant de projets que vous voulez.</p>
+    </div>
+    <div class="pricing-grid">
+
+      <!-- Pulse SDK -->
+      <div class="pricing-card featured">
+        <div>
+          <div class="pricing-label">Ardent Pulse</div>
+          <div class="pricing-name">SDK Embarqué</div>
+        </div>
+        <div class="pricing-price">
+          <span class="pricing-amount">39€</span>
+          <span class="pricing-period">one-shot</span>
+        </div>
+        <p class="pricing-desc">Le SDK C99 complet pour intégrer la détection d'anomalies dans votre firmware.</p>
+        <ul class="pricing-features">
+          <li>Z-Score · EWMA Drift · MAD (3 détecteurs)</li>
+          <li>391 tests natifs gcc inclus</li>
+          <li>Exemples ESP32 prêts à flasher</li>
+          <li>HAL abstrait (STM32, RISC-V…)</li>
+          <li>Quick Start Guide PDF</li>
+          <li>Licence LGPL v3</li>
+        </ul>
+        <div class="pricing-cta">
+          <a href="#" data-gumroad="pulse" target="_blank" rel="noopener" class="btn-buy" style="width:100%;justify-content:center;">Télécharger — 39€ →</a>
+        </div>
+      </div>
+
+      <!-- Full Stack -->
+      <div class="pricing-card">
+        <div>
+          <div class="pricing-label">Ardent Full Stack</div>
+          <div class="pricing-name">Suite complète</div>
+        </div>
+        <div class="pricing-price">
+          <span class="pricing-amount">149€</span>
+          <span class="pricing-period">one-shot</span>
+        </div>
+        <p class="pricing-desc">Pulse SDK + pipeline AutoML + dashboard de supervision + Docker Compose prêt à déployer.</p>
+        <ul class="pricing-features">
+          <li>Tout Ardent Pulse inclus</li>
+          <li>Ardent Forge — calibration AutoML sur vos données</li>
+          <li>Ardent Watch — dashboard Next.js + MQTT</li>
+          <li>Docker Compose one-command</li>
+          <li>Configs YAML pour 3 capteurs (MPU-6050 · MAX30102 · DHT22)</li>
+          <li>Licence LGPL v3</li>
+        </ul>
+        <div class="pricing-cta">
+          <a href="#" data-gumroad="full" target="_blank" rel="noopener" class="btn-buy" style="width:100%;justify-content:center;background:linear-gradient(135deg,#1d4ed8,#3b82f6);">Télécharger — 149€ →</a>
+        </div>
+      </div>
+
+      <!-- Industrial -->
+      <div class="pricing-card">
+        <div>
+          <div class="pricing-label">Industriel / Défense</div>
+          <div class="pricing-name">Licence commerciale</div>
+        </div>
+        <div class="pricing-price">
+          <span class="pricing-amount" style="font-size:28px;">Sur devis</span>
+        </div>
+        <p class="pricing-desc">Intégration sur votre hardware, calibration sur vos données réelles, NDA disponible.</p>
+        <ul class="pricing-features">
+          <li>Licence commerciale — usage production illimité</li>
+          <li>POC d'intégration 4–6 semaines</li>
+          <li>Portage HAL sur votre MCU cible</li>
+          <li>Rapport de détection livré</li>
+          <li>Compatible contraintes DO-178C niveau D</li>
+          <li>NDA sur demande</li>
+        </ul>
+        <div class="pricing-cta">
+          <a href="#contact" class="btn btn-primary" style="width:100%;justify-content:center;">Demander un devis →</a>
         </div>
       </div>
 
@@ -1190,6 +1334,7 @@
         <ul>
           <li><a href="https://github.com/Antoine005/ardent" target="_blank">Documentation</a></li>
           <li><a href="https://github.com/Antoine005/ardent" target="_blank">GitHub</a></li>
+          <li><a href="#tarifs">Tarifs</a></li>
           <li><a href="#contact">Demander une démo</a></li>
         </ul>
       </div>
@@ -1198,7 +1343,7 @@
         <ul>
           <li><a href="#a-propos">À propos</a></li>
           <li><a href="#cas-usage">Cas d'usage</a></li>
-          <li><a href="mailto:contact@ardent-ai.fr">Contact</a></li>
+          <li><a href="mailto:contact@fovet.eu">Contact</a></li>
         </ul>
       </div>
     </div>
@@ -1215,6 +1360,19 @@
 
 <!-- ===== JS ===== -->
 <script>
+  // ── Gumroad product URLs ── update these when the account is created ──────
+  // Account: gumroad.com (create at gumroad.com/signup)
+  const GUMROAD = {
+    pulse: "https://ardent.gumroad.com/l/pulse",      // €39 — Pulse SDK
+    full:  "https://ardent.gumroad.com/l/fullstack",  // €149 — Full Stack
+  };
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("[data-gumroad]").forEach(function (el) {
+      var key = el.getAttribute("data-gumroad");
+      if (GUMROAD[key]) el.href = GUMROAD[key];
+    });
+  });
+
   // Mobile menu
   function toggleMenu() {
     const menu = document.getElementById('mobileMenu');
