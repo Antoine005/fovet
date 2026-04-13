@@ -103,8 +103,8 @@ AD0      →  GND  (I2C address 0x68)
 ## Support
 
 - GitHub: github.com/Antoine005/ardent
-- Email: contact@fovet.eu
+- Email: contact@ardent-ai.fr
 - Issues: github.com/Antoine005/ardent/issues
 
 **License:** LGPL v3 for non-commercial / open-source use.
-Commercial licensing (production deployments, defense, industrial): contact@fovet.eu
+Commercial licensing (production deployments, defense, industrial): contact@ardent-ai.fr

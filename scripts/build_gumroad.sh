@@ -62,7 +62,7 @@ General Public License for more details.
 Full license text: https://www.gnu.org/licenses/lgpl-3.0.html
 
 Commercial licensing for production deployments, defense, and industrial
-applications: contact@fovet.eu
+applications: contact@ardent-ai.fr
 EOF
   fi
 }

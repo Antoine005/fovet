@@ -2,7 +2,7 @@
  * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent-ai.fr
  *
  * -------------------------------------------------------------------------
  * dht22_hal.h — Driver HAL DHT22 (H3.1)

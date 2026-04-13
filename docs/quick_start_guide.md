@@ -170,5 +170,5 @@ void loop(void) {
 
 ---
 
-*Ardent SDK — contact@fovet.eu — github.com/Antoine005/ardent*
-*LGPL v3 for non-commercial use — Commercial licensing: contact@fovet.eu*
+*Ardent SDK — contact@ardent-ai.fr — github.com/Antoine005/ardent*
+*LGPL v3 for non-commercial use — Commercial licensing: contact@ardent-ai.fr*

@@ -2,7 +2,7 @@
  * Ardent SDK — Pulse
  * Copyright (C) 2026 Antoine Porte. All rights reserved.
  * LGPL v3 for non-commercial use.
- * Commercial licensing: contact@fovet.eu
+ * Commercial licensing: contact@ardent-ai.fr
  *
  * -------------------------------------------------------------------------
  * test_max30102_hal.c — unit tests for max30102_hal (native gcc, no hardware)
