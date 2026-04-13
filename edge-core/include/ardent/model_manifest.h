@@ -7,7 +7,7 @@
  * ardent/model_manifest.h — Documentation du format de manifest de modèle.
  *
  * Ce fichier N'EST PAS inclus directement par les firmwares.
- * Il documente les macros attendues dans fovet_model_manifest.h,
+ * Il documente les macros attendues dans ard_model_manifest.h,
  * généré par Ardent Forge et à copier dans src/ du projet PlatformIO.
  *
  * --- Workflow ---
@@ -16,11 +16,11 @@
  *        uv run forge run --config configs/mon_capteur.yaml
  *
  *   2. Copier le manifest généré dans le projet PlatformIO :
- *        cp models/mon_capteur/fovet_model_manifest.h \
+ *        cp models/mon_capteur/ard_model_manifest.h \
  *           edge-core/examples/esp32/mon_firmware/src/
  *
  *   3. Dans le firmware :
- *        #include "fovet_model_manifest.h"
+ *        #include "ard_model_manifest.h"
  *
  *   4. Utiliser les macros dans le payload MQTT canonique :
  *        "model_id": ARD_MODEL_ID
@@ -30,7 +30,7 @@
  *        "value_max": ARD_MODEL_VALUE_MAX  (float)
  *        "label":    ARD_MODEL_LABEL_NORMAL / ARD_MODEL_LABEL_ANOMALY
  *
- * --- Macros définies dans fovet_model_manifest.h ---
+ * --- Macros définies dans ard_model_manifest.h ---
  *
  *   ARD_MODEL_ID           string literal   "demo-zscore-sine"
  *   ARD_MODEL_SENSOR       string literal   "synthetic"|"imu"|"camera"|"temperature"|"hr"

@@ -4,7 +4,7 @@
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@ardent-ai.fr
  *
- * fovet_mad.h — Streaming Median Absolute Deviation (MAD) anomaly detector
+ * ard_mad.h — Streaming Median Absolute Deviation (MAD) anomaly detector
  *
  * Uses a fixed-size circular ring buffer (ARD_MAD_WINDOW samples).
  * On each update, the window is copied and insertion-sorted to derive

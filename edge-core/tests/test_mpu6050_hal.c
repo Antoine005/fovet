@@ -6,7 +6,7 @@
  */
 
 /*
- * Native unit tests for fovet_hal_mpu6050 — compile with gcc, no hardware needed.
+ * Native unit tests for ard_hal_mpu6050 — compile with gcc, no hardware needed.
  *
  *   make -C edge-core/tests test_mpu6050_hal
  *   ./edge-core/tests/test_mpu6050_hal

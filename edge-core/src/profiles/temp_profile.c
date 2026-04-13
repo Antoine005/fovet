@@ -10,7 +10,7 @@
  */
 
 #include "ardent/profiles/temp_profile.h"
-#include "ardent/hal/dht22_hal.h"   /* FOVET_DHT22_ERR_* */
+#include "ardent/hal/dht22_hal.h"   /* ARD_DHT22_ERR_* */
 
 #include <math.h>
 #include <string.h>

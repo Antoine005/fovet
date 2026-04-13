@@ -12,7 +12,7 @@
  * and auto-registers with the biosignal HAL on successful init.
  *
  * Design:
- *   - I2C is accessed through two injected callbacks (fovet_i2c_*_fn_t),
+ *   - I2C is accessed through two injected callbacks (ard_i2c_*_fn_t),
  *     making the driver testable on PC without Arduino Wire.h.
  *   - On Arduino targets: call ard_mpu6050_set_i2c() with Wire-based
  *     wrappers before ard_hal_imu_init() (see examples/esp32/).
@@ -21,7 +21,7 @@
  *   - Default rate : 25 Hz (DLPF active, SMPLRT_DIV = 39)
  *   - Max rate     : 200 Hz
  *
- * Error codes (in addition to FOVET_HAL_*):
+ * Error codes (in addition to ARD_HAL_*):
  *   ARD_MPU_ERR_I2C   (-1) — I2C communication failure
  *   ARD_MPU_ERR_ID    (-2) — WHO_AM_I returned unexpected value
  * -------------------------------------------------------------------------

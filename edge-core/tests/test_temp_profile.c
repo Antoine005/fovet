@@ -18,7 +18,7 @@
 #include <math.h>
 
 #include "ardent/hal/ard_biosignal_hal.h"
-#include "ardent/hal/dht22_hal.h"         /* FOVET_DHT22_ERR_* */
+#include "ardent/hal/dht22_hal.h"         /* ARD_DHT22_ERR_* */
 #include "ardent/profiles/temp_profile.h"
 
 /* -------------------------------------------------------------------------

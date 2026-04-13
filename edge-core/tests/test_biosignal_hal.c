@@ -6,7 +6,7 @@
  */
 
 /*
- * Native unit tests for fovet_biosignal_hal — compile with gcc, no hardware needed.
+ * Native unit tests for ard_biosignal_hal — compile with gcc, no hardware needed.
  *
  *   make -C edge-core/tests
  *   ./edge-core/tests/test_biosignal_hal

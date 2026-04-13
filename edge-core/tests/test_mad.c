@@ -4,10 +4,10 @@
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@ardent-ai.fr
  *
- * test_mad.c — Unit tests for fovet_mad (MAD anomaly detector)
+ * test_mad.c — Unit tests for ard_mad (MAD anomaly detector)
  *
  * Compile & run:
- *   gcc -std=c99 -Wall -I../include -DFOVET_NATIVE_TEST -o test_mad \
+ *   gcc -std=c99 -Wall -I../include -DARD_NATIVE_TEST -o test_mad \
  *       ../src/mad.c test_mad.c -lm && ./test_mad
  */
 

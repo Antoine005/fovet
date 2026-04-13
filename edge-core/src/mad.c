@@ -4,7 +4,7 @@
  * LGPL v3 for non-commercial use.
  * Commercial licensing: contact@ardent-ai.fr
  *
- * fovet_mad.c — Streaming MAD anomaly detector implementation
+ * ard_mad.c — Streaming MAD anomaly detector implementation
  */
 
 #include "ardent/mad.h"
