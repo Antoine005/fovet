@@ -8,7 +8,7 @@ export default defineConfig({
     env: {
       JWT_SECRET: "vitest-secret-32-chars-long-enough",
       DASHBOARD_PASSWORD: "test-password",
-      ALLOWED_ORIGIN: "http://localhost:3000,https://watch.ardent.io",
+      ALLOWED_ORIGIN: "http://localhost:3000,https://watch.ardent-ai.fr",
     },
   },
   resolve: {
