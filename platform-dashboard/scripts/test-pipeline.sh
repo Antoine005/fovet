@@ -240,7 +240,7 @@ section "6. Simulation MQTT (sans hardware)"
 if command -v mosquitto_pub &>/dev/null; then
   PAYLOAD="{\"ts\":$(date +%s)000,\"device\":\"$TEST_MQTT_ID\",\"channel\":\"test\",\"value\":1.23,\"anomaly\":false,\"zscore\":0.5,\"algo\":\"zscore\",\"model_id\":\"test\"}"
   mosquitto_pub -h 127.0.0.1 -p 1883 \
-    -u ardent-device -P ***REDACTED*** \
+    -u ardent-device -P "${MQTT_DEVICE_PASSWORD:-change_me}" \
     -t "ardent/devices/$TEST_MQTT_ID/readings" \
     -m "$PAYLOAD" 2>/dev/null
 
